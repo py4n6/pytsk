@@ -41,6 +41,12 @@ SOURCES = ['tsk3.c', 'class.c', 'pytsk3.c', 'talloc.c', 'error.c']
 
 setup(name='pytsk3',
       version='0.1',
+      description = "Python bindings for the sluethkit",
+      author = "Michael Cohen",
+      author_email = "scudette@gmail.com",
+      url = "http://code.google.com/p/pytsk/",
+      license = "Apache 2.0",
+      long_description = "Python bindings for the sluethkit (http://www.sleuthkit.org/)",
       ext_modules=[Extension('pytsk3', SOURCES,
                              include_dirs=[CONFIG['TSK3_HEADER_LOCATION']],
                              libraries=['tsk3', 'pthread']

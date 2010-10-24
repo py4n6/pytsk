@@ -1,0 +1,3 @@
+include LICENSE *.h *.py *.c
+recursive-include samples/ *
+exclude pytsk3.c
