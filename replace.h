@@ -42,7 +42,9 @@
 #include <errno.h>
 
 #if defined(_MSC_VER) || defined(__MINGW32__)
-#include "win32_replace.h"
+
+#define BROKEN_STRNDUP 1
+
 #endif
 
 

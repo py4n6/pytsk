@@ -2,14 +2,23 @@
 
 #define BUFF_SIZE 40960
 
-#ifdef WINDOWS
+#ifdef WIN32
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <io.h>
 #include <stdio.h>
 #define MSG_NOSIGNAL 0
 typedef  unsigned long int in_addr_t;
+#include <stdint.h>
+// Windows has no STRNDUP
+#define strndup rep_strndup
+char *rep_strndup(const char *s, size_t n);
+
+#define strnlen rep_strnlen
+size_t rep_strnlen(const char *s, size_t n);
+typedef int bool;
 #else
+
 #include <sys/socket.h>
 #include <netinet/tcp.h>
 #include <netinet/in.h>
@@ -31,14 +40,14 @@ typedef  unsigned long int in_addr_t;
 #define O_BINARY 0
 typedef int bool;
 
+#endif
+
 #ifndef MIN
 #define MIN(a,b) ((a)<(b)?(a):(b))
 #endif
 
 #ifndef MAX
 #define MAX(a,b) ((a)>(b)?(a):(b))
-#endif
-
 #endif
 
 #ifdef HAVE_INTTYPES_H

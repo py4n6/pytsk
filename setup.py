@@ -1,11 +1,82 @@
+#!/usr/bin/python
+
 from distutils.core import setup, Extension
+from distutils import sysconfig
 import class_parser
 import sys
 import os
+import pdb
 
-CONFIG = dict(
-    TSK3_HEADER_LOCATION = "/usr/local/include/tsk3/",
-    )
+# Distutils is retarded - We need to monkey patch it to make it saner.
+from distutils import cygwinccompiler
+
+PYTHON_HOME = "/home/scudette/.wine/drive_c/Python26/"
+
+CONFIG = dict(TSK3_HEADER_LOCATION = "/usr/local/include/tsk3/")
+
+CONFIG['HEADERS'] = [CONFIG['TSK3_HEADER_LOCATION']]
+
+# This is so horrible but less horrible than interfering with
+# distutils
+try:
+    if sys.argv[1] == "mingw-xcompile":
+        sys.argv[1] = "build"
+        sys.argv.extend(("-c", "mingw32"))
+        sysconfig._init_nt()
+        CONFIG['HEADERS'].append(PYTHON_HOME + "/include")
+        os.environ['CC'] = 'i586-mingw32msvc-gcc'
+except IndexError: pass
+
+# Unfortunately distutils hardcodes compilers etc. We need to monkey
+# patch it here to make it work with other compilers.
+class Mingw32CCompiler (cygwinccompiler.CygwinCCompiler):
+
+    compiler_type = 'mingw32'
+
+    def __init__ (self,
+                  verbose=0,
+                  dry_run=0,
+                  force=0):
+
+        cygwinccompiler.CygwinCCompiler.__init__ (self, verbose, dry_run, force)
+
+        # ld_version >= "2.13" support -shared so use it instead of
+        # -mdll -static
+        if self.ld_version >= "2.13":
+            shared_option = "-shared"
+        else:
+            shared_option = "-mdll -static"
+
+        # A real mingw32 doesn't need to specify a different entry point,
+        # but cygwin 2.91.57 in no-cygwin-mode needs it.
+        if self.gcc_version <= "2.91.57":
+            entry_point = '--entry _DllMain@12'
+        else:
+            entry_point = ''
+
+        self.set_executables(
+            compiler=os.environ.get("CC","gcc") + ' -mno-cygwin -O -g -Wall',
+            compiler_so=os.environ.get("CC","gcc") + ' -mno-cygwin -mdll -O -g -Wall',
+            compiler_cxx=os.environ.get("CC","gcc") + ' -mno-cygwin -O -g -Wall',
+            linker_exe=os.environ.get("CC","gcc") + ' -mno-cygwin',
+            linker_so='%s -mno-cygwin -g %s %s' % (os.environ.get('CC', self.linker_dll),
+                                                shared_option, entry_point))
+        # Maybe we should also append -mthreads, but then the finished
+        # dlls need another dll (mingwm10.dll see Mingw32 docs)
+        # (-mthreads: Support thread-safe exception handling on `Mingw32')
+
+        self.dll_libraries=[]
+
+        # Include the appropriate MSVC runtime library if Python was built
+        # with MSVC 7.0 or later.
+        if cygwinccompiler.get_msvcr():
+            self.dll_libraries += cygwinccompiler.get_msvcr()
+
+    # __init__ ()
+
+
+# Monkeypatch this:
+cygwinccompiler.Mingw32CCompiler = Mingw32CCompiler
 
 def build_python_bindings(target, sources, env = None, initialization='',
                           free='talloc_free',
@@ -37,7 +108,7 @@ BOUND_FILES = ("""
 if not os.access("pytsk3.c", os.F_OK):
     build_python_bindings("pytsk3.c", BOUND_FILES, initialization='tsk_init();' )
 
-SOURCES = ['tsk3.c', 'class.c', 'pytsk3.c', 'talloc.c', 'error.c']
+SOURCES = ['tsk3.c', 'class.c', 'pytsk3.c', 'talloc.c', 'error.c', 'replace.c']
 
 setup(name='pytsk3',
       version='0.1',
@@ -48,8 +119,9 @@ setup(name='pytsk3',
       license = "Apache 2.0",
       long_description = "Python bindings for the sluethkit (http://www.sleuthkit.org/)",
       ext_modules=[Extension('pytsk3', SOURCES,
-                             include_dirs=[CONFIG['TSK3_HEADER_LOCATION']],
-                             libraries=['tsk3', 'pthread']
+                             include_dirs=CONFIG['HEADERS'],
+                             libraries=['tsk3', 'python26'],
+                             library_dirs = ['/home/scudette/.wine/drive_c/Python26/libs'],
                              )
                    ],
       )

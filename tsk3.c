@@ -44,6 +44,7 @@ static int Img_Info_dest(void *x) {
 };
 
 static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type) {
+
   if(urn[0]) {
 #ifdef TSK_VERSION_NUM
     self->img = (Extended_TSK_IMG_INFO *)tsk_img_open_utf8(1, (const char **)&urn, type, 0);

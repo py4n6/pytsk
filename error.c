@@ -9,12 +9,59 @@
 */
 
 //#include "misc.h"
-#include <pthread.h>
 #include "class.h"
 #include <string.h>
 #include "aff4_errors.h"
 
 #define ERROR_BUFF_SIZE 10240
+
+// Windows version not truely threadsafe for now
+#ifdef WIN32
+
+static char global_error_buffer[ERROR_BUFF_SIZE];
+static int global_error_type = 0;
+
+static void error_init(void) {
+  memset(global_error_buffer, 0, sizeof(global_error_buffer));
+};
+
+DLL_PUBLIC void *aff4_raise_errors(int t, char *reason, ...) {
+  char *tmp;
+  // This has to succeed:
+  int *type = aff4_get_current_error(&tmp);
+
+  memset(tmp, 0, ERROR_BUFF_SIZE);
+
+  if(reason) {
+    va_list ap;
+    va_start(ap, reason);
+
+    vsnprintf(tmp, ERROR_BUFF_SIZE-1, reason,ap);
+    tmp[ERROR_BUFF_SIZE-1]=0;
+    va_end(ap);
+  };
+
+  if(*type == EZero) {
+    *tmp = 0;
+
+    //update the error type
+    *type = t;
+  };
+
+  return NULL;
+};
+
+
+DLL_PUBLIC int *aff4_get_current_error(char **error_buffer) {
+  if(error_buffer) {
+    *error_buffer = &global_error_buffer;
+  };
+  return &global_error_type;
+};
+
+#else
+
+#include <pthread.h>
 
 /** These slots carry the TLS error keys */
 static pthread_key_t error_str_slot;
@@ -90,3 +137,6 @@ void error_init(void) {
     abort();
   };
 };
+
+
+#endif
