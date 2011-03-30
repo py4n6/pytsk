@@ -398,6 +398,7 @@ VIRTUAL(Attribute, Object) {
 
 
 void tsk_init() {
+  //tsk_verbose++;
   Img_Info_init((Object)&__Img_Info);
   FS_Info_init((Object)&__FS_Info);
   Directory_init((Object)&__Directory);

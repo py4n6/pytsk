@@ -763,7 +763,7 @@ class Integer(Type):
 
     def to_python_object(self, name=None, result='Py_result', **kw):
         name = name or self.name
-        return "PyErr_Clear();\n%s = PyLong_FromLongLong(%s);\n" % (result, name)
+        return "PyErr_Clear();\n%s = PyLong_FromLong(%s);\n" % (result, name)
 
     def from_python_object(self, source, destination, method, **kw):
         return "PyErr_Clear();\n"\
@@ -784,6 +784,16 @@ class Integer32(Integer):
 class Integer64(Integer):
     buildstr = 'K'
     int_type = 'uint64_t '
+
+    def to_python_object(self, name=None, result='Py_result', **kw):
+        name = name or self.name
+        return "PyErr_Clear();\n%s = PyLong_FromLongLong(%s);\n" % (result, name)
+
+    def from_python_object(self, source, destination, method, **kw):
+        return "PyErr_Clear();\n"\
+            "%(destination)s = PyLong_AsUnsignedLongLong(%(source)s);\n" % dict(
+            source = source, destination= destination)
+
 
 class Char(Integer):
     buildstr = "s"
@@ -2260,7 +2270,7 @@ static int
     def numeric_protocol(self, out):
         args = {'class':self.class_name}
         for type, func in [ ('nonzero', self.numeric_protocol_nonzero),
-                            ('int', self.numeric_protocol_int) ]:
+                            ('int', self.numeric_protocol_int)]:
             definition = func()
             if definition:
                 out.write(definition)
@@ -2318,6 +2328,7 @@ static PyNumberMethods %(class)s_as_number = {
                 'iterator': 0,
                 'iternext': 0,
                 'tp_str': 0,
+                'tp_eq': 0,
                 'getattr_func': 0,
                 'docstring': "%s: %s" % (self.class_name,
                                          escape_for_string(self.docstring))}
@@ -2335,6 +2346,9 @@ static PyNumberMethods %(class)s_as_number = {
 
         if "TP_STR" in self.modifier:
             args['tp_str'] = 'py%s___str__' % self.class_name
+
+        if "TP_EQUAL" in self.modifier:
+            args['tp_eq'] = '%s_eq' % self.class_name
 
         out.write("""
 static PyTypeObject %(class)s_Type = {
@@ -2362,7 +2376,7 @@ static PyTypeObject %(class)s_Type = {
     "%(docstring)s",     /* tp_doc */
     0,	                       /* tp_traverse */
     0,                         /* tp_clear */
-    0,                         /* tp_richcompare */
+    %(tp_eq)s,                         /* tp_richcompare */
     0,                         /* tp_weaklistoffset */
     (getiterfunc)%(iterator)s,              /* tp_iter */
     (iternextfunc)%(iternext)s,/* tp_iternext */
@@ -2437,6 +2451,7 @@ class EnumConstructor(ConstructorMethod):
 """ % dict(class_name = self.class_name))
     def write_definition(self, out):
         self.myclass.modifier.add("TP_STR")
+        self.myclass.modifier.add("TP_EQUAL")
         self._prototype(out)
         out.write("""{
 static char *kwlist[] = {"value", NULL};
@@ -2459,6 +2474,27 @@ static PyObject *py%(class_name)s___str__(py%(class_name)s *self) {
  } else {
      result = PyObject_Str(self->value);
  };
+
+ return result;
+};
+
+static PyObject * %(class_name)s_eq(PyObject *me, PyObject *other, int op) {
+    py%(class_name)s *self = (py%(class_name)s *)me;
+    int other_int = PyLong_AsLong(other);
+    int my_int;
+    PyObject *result = Py_False;
+
+    if(CheckError(EZero)) {
+       my_int = PyLong_AsLong(self->value);
+       switch(op) {
+         case Py_EQ: result = my_int == other_int? Py_True: Py_False; break;
+         case Py_NE: result = my_int != other_int? Py_True: Py_False; break;
+         default:
+            return Py_NotImplemented;
+       };
+    } else return NULL;
+
+  ClearError();
 
  return result;
 };
@@ -2640,8 +2676,9 @@ class HeaderParser(lexer.SelfFeederMixIn):
 
         ]
 
-    def __init__(self, name, verbose = 1):
+    def __init__(self, name, verbose = 1, base=""):
         self.module = Module(name)
+        self.base = base
         lexer.SelfFeederMixIn.__init__(self, verbose = 0)
 
         io = StringIO.StringIO("""
@@ -2855,6 +2892,9 @@ END_CLASS
         fd.close()
 
         if filename not in self.module.files:
+              if filename.startswith(self.base):
+                filename = filename[len(self.base):]
+
               self.module.headers += '#include "%s"\n' % filename
               self.module.files.append(filename)
 
@@ -2889,4 +2929,3 @@ if __name__ == '__main__':
 #        p.parse(arg)
 
 #    p.write(sys.stdout)
-
