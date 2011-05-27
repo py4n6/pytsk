@@ -12,7 +12,9 @@ from distutils import cygwinccompiler
 
 PYTHON_HOME = "/home/scudette/.wine/drive_c/Python26/"
 
-CONFIG = dict(TSK3_HEADER_LOCATION = "/usr/local/include/tsk3/")
+CONFIG = dict(TSK3_HEADER_LOCATION = "/usr/local/include/tsk3/",
+              LIBRARY_DIRS = [],
+              LIBRARIES = ['tsk3'])
 
 CONFIG['HEADERS'] = [CONFIG['TSK3_HEADER_LOCATION']]
 
@@ -24,6 +26,8 @@ try:
         sys.argv.extend(("-c", "mingw32"))
         sysconfig._init_nt()
         CONFIG['HEADERS'].append(PYTHON_HOME + "/include")
+        CONFIG['LIBRARY_DIRS'].append(PYTHON_HOME + "libs")
+        CONFIG['LIBRARIES'].append('python26')
         os.environ['CC'] = 'i586-mingw32msvc-gcc'
 except IndexError: pass
 
@@ -110,6 +114,8 @@ if not os.access("pytsk3.c", os.F_OK):
 
 SOURCES = ['tsk3.c', 'class.c', 'pytsk3.c', 'talloc.c', 'error.c', 'replace.c']
 
+
+
 setup(name='pytsk3',
       version='0.1',
       description = "Python bindings for the sluethkit",
@@ -118,10 +124,11 @@ setup(name='pytsk3',
       url = "http://code.google.com/p/pytsk/",
       license = "Apache 2.0",
       long_description = "Python bindings for the sluethkit (http://www.sleuthkit.org/)",
-      ext_modules=[Extension('pytsk3', SOURCES,
+      py_modules=['pytsk3.__init__'],
+      ext_modules=[Extension('pytsk3.pytsk3', SOURCES,
                              include_dirs=CONFIG['HEADERS'],
-                             libraries=['tsk3', 'python26'],
-                             library_dirs = ['/home/scudette/.wine/drive_c/Python26/libs'],
+                             libraries=CONFIG['LIBRARIES'],
+                             library_dirs = CONFIG['LIBRARY_DIRS'],
                              )
                    ],
       )

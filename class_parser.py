@@ -2270,7 +2270,7 @@ static int
     def numeric_protocol(self, out):
         args = {'class':self.class_name}
         for type, func in [ ('nonzero', self.numeric_protocol_nonzero),
-                            ('int', self.numeric_protocol_int)]:
+                            ('int', self.numeric_protocol_int) ]:
             definition = func()
             if definition:
                 out.write(definition)
