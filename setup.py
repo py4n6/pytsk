@@ -114,9 +114,6 @@ if not os.access("pytsk3.c", os.F_OK):
 
 SOURCES = ['tsk3.c', 'class.c', 'pytsk3.c', 'talloc.c', 'error.c', 'replace.c']
 
-
-import pdb; pdb.set_trace()
-
 setup(name='pytsk3',
       version='0.1',
       description = "Python bindings for the sluethkit",
