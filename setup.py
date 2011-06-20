@@ -115,6 +115,7 @@ if not os.access("pytsk3.c", os.F_OK):
 SOURCES = ['tsk3.c', 'class.c', 'pytsk3.c', 'talloc.c', 'error.c', 'replace.c']
 
 
+import pdb; pdb.set_trace()
 
 setup(name='pytsk3',
       version='0.1',
@@ -124,8 +125,7 @@ setup(name='pytsk3',
       url = "http://code.google.com/p/pytsk/",
       license = "Apache 2.0",
       long_description = "Python bindings for the sluethkit (http://www.sleuthkit.org/)",
-      py_modules=['pytsk3.__init__'],
-      ext_modules=[Extension('pytsk3.pytsk3', SOURCES,
+      ext_modules=[Extension('pytsk3', SOURCES,
                              include_dirs=CONFIG['HEADERS'],
                              libraries=CONFIG['LIBRARIES'],
                              library_dirs = CONFIG['LIBRARY_DIRS'],
