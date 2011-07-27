@@ -396,6 +396,31 @@ VIRTUAL(Attribute, Object) {
   VMETHOD(__iter__) = Attribute_iter;
 } END_VIRTUAL
 
+/* The following implement the volume system. */
+static Volume_Info Volume_Info_Con(Volume_Info self, Img_Info img,
+                                   TSK_VS_TYPE_ENUM type,
+                                   TSK_OFF_T offset) {
+  self->info = tsk_vs_open((TSK_IMG_INFO *)img->img, offset, type);
+
+  if(self->info) return self;
+
+  return NULL;
+};
+
+static void Volume_Info_iter(Volume_Info self) {
+  self->current = 0;
+};
+
+static TSK_VS_PART_INFO *Volume_Info_iternext(Volume_Info self) {
+  return tsk_vs_part_get(self->info, self->current++);
+};
+
+VIRTUAL(Volume_Info, Object) {
+  VMETHOD(Con) = Volume_Info_Con;
+  VMETHOD(__iter__) = Volume_Info_iter;
+  VMETHOD(iternext) = Volume_Info_iternext;
+} END_VIRTUAL
+
 
 void tsk_init() {
   //tsk_verbose++;
@@ -404,4 +429,5 @@ void tsk_init() {
   Directory_init((Object)&__Directory);
   File_init((Object)&__File);
   Attribute_init((Object)&__Attribute);
+  Volume_Info_init((Object)&__Volume_Info);
 };

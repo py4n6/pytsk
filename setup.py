@@ -104,6 +104,7 @@ def build_python_bindings(target, sources, env = None, initialization='',
 BOUND_FILES = ("""
     %(TSK3_HEADER_LOCATION)s/libtsk.h
     %(TSK3_HEADER_LOCATION)s/fs/tsk_fs.h
+    %(TSK3_HEADER_LOCATION)s/vs/tsk_vs.h
     %(TSK3_HEADER_LOCATION)s/base/tsk_base.h
     %(TSK3_HEADER_LOCATION)s/img/tsk_img.h
     tsk3.h

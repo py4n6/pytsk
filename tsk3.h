@@ -30,6 +30,7 @@ BIND_STRUCT(TSK_FS_FILE);
 BIND_STRUCT(TSK_FS_BLOCK);
 BIND_STRUCT(TSK_FS_ATTR);
 BIND_STRUCT(TSK_FS_ATTR_RUN);
+BIND_STRUCT(TSK_VS_PART_INFO);
 
 /** This is a normal IMG_INFO which takes a filename and passes it
     to TSK. It just uses the standard TSK image handling code to
@@ -71,6 +72,23 @@ CLASS(Img_Info, Object)
         our object.
      */
      PRIVATE Extended_TSK_IMG_INFO *METHOD(Img_Info, get_img_info);
+END_CLASS
+
+/** This object handles volumes.
+ */
+CLASS(Volume_Info, Object)
+  FOREIGN TSK_VS_INFO *info;
+  int current;
+
+  /** Open a volume using the Sleuthkit.
+
+      DEFAULT(offset) = 0;
+      DEFAULT(type) = TSK_FS_TYPE_DETECT;
+  */
+  Volume_Info METHOD(Volume_Info, Con, Img_Info img,
+                     TSK_VS_TYPE_ENUM type, TSK_OFF_T offset);
+  void METHOD(Volume_Info, __iter__);
+  TSK_VS_PART_INFO *METHOD(Volume_Info, iternext);
 END_CLASS
 
 // Forward declerations
