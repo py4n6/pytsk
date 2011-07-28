@@ -31,6 +31,7 @@ BIND_STRUCT(TSK_FS_BLOCK);
 BIND_STRUCT(TSK_FS_ATTR);
 BIND_STRUCT(TSK_FS_ATTR_RUN);
 BIND_STRUCT(TSK_VS_PART_INFO);
+BIND_STRUCT(TSK_VS_INFO);
 
 /** This is a normal IMG_INFO which takes a filename and passes it
     to TSK. It just uses the standard TSK image handling code to
