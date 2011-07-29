@@ -2496,7 +2496,8 @@ static PyObject * %(class_name)s_eq(PyObject *me, PyObject *other, int op) {
 
   ClearError();
 
- return result;
+  Py_INCREF(result);
+  return result;
 };
 
 """ % self.__dict__)
