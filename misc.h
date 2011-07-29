@@ -10,12 +10,6 @@
 #define MSG_NOSIGNAL 0
 typedef  unsigned long int in_addr_t;
 #include <stdint.h>
-// Windows has no STRNDUP
-#define strndup rep_strndup
-char *rep_strndup(const char *s, size_t n);
-
-#define strnlen rep_strnlen
-size_t rep_strnlen(const char *s, size_t n);
 typedef int bool;
 #else
 
@@ -42,6 +36,14 @@ typedef int bool;
 
 #endif
 
+
+#define strndup rep_strndup
+char *rep_strndup(const char *s, size_t n);
+
+#define strnlen rep_strnlen
+size_t rep_strnlen(const char *s, size_t n);
+
+
 #ifndef MIN
 #define MIN(a,b) ((a)<(b)?(a):(b))
 #endif
@@ -61,4 +63,3 @@ typedef int bool;
 uint64_t htonll(uint64_t n);
 #define ntohll(x) htonll(x)
 #endif
-
