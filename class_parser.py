@@ -682,8 +682,13 @@ class String(Type):
         name = name or self.name
 
         result = """PyErr_Clear();
-   if(!%(name)s) { PyErr_Format(PyExc_RuntimeError, "%(name)s is NULL"); goto error; };
-   %(result)s = PyString_FromStringAndSize((char *)%(name)s, %(length)s);\nif(!%(result)s) goto error;
+    if(!%(name)s) {
+      Py_INCREF(Py_None);
+      %(result)s = Py_None;
+    } else {
+      %(result)s = PyString_FromStringAndSize((char *)%(name)s, %(length)s);
+      if(!%(result)s) goto error;
+    };
 """ % dict(name=name, result=result,length=self.length)
 
         if "BORROWED" not in self.attributes and 'BORROWED' not in kw:
