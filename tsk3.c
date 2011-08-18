@@ -412,7 +412,7 @@ static void Volume_Info_iter(Volume_Info self) {
 };
 
 static TSK_VS_PART_INFO *Volume_Info_iternext(Volume_Info self) {
-  return tsk_vs_part_get(self->info, self->current++);
+  return (TSK_VS_PART_INFO *)tsk_vs_part_get(self->info, self->current++);
 };
 
 VIRTUAL(Volume_Info, Object) {

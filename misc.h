@@ -22,7 +22,6 @@ typedef int bool;
 #include <unistd.h>
 #include <stdlib.h>
 #include <time.h>
-#include <uuid/uuid.h>
 #include <libgen.h>
 #include <sys/stat.h>
 #include <sys/types.h>

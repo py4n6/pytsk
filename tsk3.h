@@ -84,7 +84,7 @@ CLASS(Volume_Info, Object)
   /** Open a volume using the Sleuthkit.
 
       DEFAULT(offset) = 0;
-      DEFAULT(type) = TSK_FS_TYPE_DETECT;
+      DEFAULT(type) = TSK_VS_TYPE_DETECT;
   */
   Volume_Info METHOD(Volume_Info, Con, Img_Info img,
                      TSK_VS_TYPE_ENUM type, TSK_OFF_T offset);

@@ -10,7 +10,9 @@ import pdb
 # Distutils is retarded - We need to monkey patch it to make it saner.
 from distutils import cygwinccompiler
 
-PYTHON_HOME = "/home/scudette/.wine/drive_c/Python26/"
+PYTHON_VERSION = "26"
+PYTHON_HOME = "%s/.wine/drive_c/Python%s/" % (
+    os.environ.get("HOME",""), PYTHON_VERSION)
 
 CONFIG = dict(TSK3_HEADER_LOCATION = "/usr/local/include/tsk3/",
               LIBRARY_DIRS = [],
@@ -27,7 +29,7 @@ try:
         sysconfig._init_nt()
         CONFIG['HEADERS'].append(PYTHON_HOME + "/include")
         CONFIG['LIBRARY_DIRS'].append(PYTHON_HOME + "libs")
-        CONFIG['LIBRARIES'].append('python26')
+        CONFIG['LIBRARIES'].append('python%s' % PYTHON_VERSION)
         os.environ['CC'] = 'i586-mingw32msvc-gcc'
 except IndexError: pass
 
