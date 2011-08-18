@@ -14,7 +14,7 @@ PYTHON_HOME = "/home/scudette/.wine/drive_c/Python26/"
 
 CONFIG = dict(TSK3_HEADER_LOCATION = "/usr/local/include/tsk3/",
               LIBRARY_DIRS = [],
-              LIBRARIES = ['tsk3'])
+              LIBRARIES = ['tsk3', 'stdc++'])
 
 CONFIG['HEADERS'] = [CONFIG['TSK3_HEADER_LOCATION']]
 

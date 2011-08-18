@@ -67,7 +67,7 @@ static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type) {
   };
 
   if(!self->img) {
-    RaiseError(ERuntimeError, "Unable to open image: %s", tsk_error_get());
+    RaiseError(EIOError, "Unable to open image: %s", tsk_error_get());
     goto error;
   };
 
@@ -154,7 +154,7 @@ static FS_Info FS_Info_Con(FS_Info self, Img_Info img, TSK_OFF_T offset,
   // Now try to open the filesystem
   self->info = tsk_fs_open_img((TSK_IMG_INFO *)img_info, offset, type);
   if(!self->info) {
-    RaiseError(ERuntimeError, "Unable to open the image as a filesystem: %s",
+    RaiseError(EIOError, "Unable to open the image as a filesystem: %s",
                tsk_error_get());
     goto error;
   };
@@ -179,7 +179,7 @@ static File FS_Info_open(FS_Info self, ZString path) {
   File result;
 
   if(!handle) {
-    RaiseError(ERuntimeError, "Cant open file: %s", tsk_error_get());
+    RaiseError(EIOError, "Cant open file: %s", tsk_error_get());
     return NULL;
   };
 
@@ -193,7 +193,7 @@ static File FS_Info_open_meta(FS_Info self, TSK_INUM_T inode) {
   File result;
 
   if(!handle) {
-    RaiseError(ERuntimeError, "Cant open file: %s", tsk_error_get());
+    RaiseError(EIOError, "Cant open file: %s", tsk_error_get());
     return NULL;
   };
 
@@ -231,7 +231,7 @@ static Directory Directory_Con(Directory self, FS_Info fs,
   };
 
   if(!self->info) {
-    RaiseError(ERuntimeError, "Unable to open directory: %s", tsk_error_get());
+    RaiseError(EIOError, "Unable to open directory: %s", tsk_error_get());
     goto error;
   };
 
@@ -260,7 +260,7 @@ static File Directory_next(Directory self) {
 
   info = tsk_fs_dir_get(self->info, self->current);
   if(!info) {
-    RaiseError(ERuntimeError, "Error opening File: %s", tsk_error_get());
+    RaiseError(EIOError, "Error opening File: %s", tsk_error_get());
     return NULL;
   };
 
@@ -313,7 +313,7 @@ static uint64_t File_read_random(File self, TSK_OFF_T offset,
   };
 
   if(result < 0) {
-    RaiseError(ERuntimeError, "Read error: %s", tsk_error_get());
+    RaiseError(EIOError, "Read error: %s", tsk_error_get());
     return 0;
   };
 
@@ -329,7 +329,7 @@ static Directory File_as_directory(File self) {
     if(result) return result;
   };
 
-  RaiseError(ERuntimeError, "Not a directory");
+  RaiseError(EIOError, "Not a directory");
   return NULL;
 };
 
@@ -343,7 +343,7 @@ static Attribute File_iternext(File self) {
 
   attribute = (TSK_FS_ATTR *)tsk_fs_file_attr_get_idx(self->info, self->current_attr);
   if(!attribute)  {
-    RaiseError(ERuntimeError, "Error opening File: %s", tsk_error_get());
+    RaiseError(EIOError, "Error opening File: %s", tsk_error_get());
     return NULL;
   };
 

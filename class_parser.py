@@ -388,6 +388,8 @@ case ERuntimeError:
     return PyExc_RuntimeError;
 case EWarning:
     return PyExc_AssertionError;
+case EIOError:
+    return PyExc_IOError;
 default:
     return PyExc_RuntimeError;
 };
