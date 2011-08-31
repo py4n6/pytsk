@@ -1,5 +1,6 @@
 #!/usr/bin/python
 
+import images
 import pytsk3
 from optparse import OptionParser
 import sys
@@ -18,33 +19,21 @@ parser.add_option('-o', '--offset', default=0, type='int',
 parser.add_option("-l", "--long", action='store_true', default=False,
                   help="Display long version (like ls -l)")
 
+parser.add_option("-p", "--path", default="/",
+                  help="Path to list (Default /)")
+
+parser.add_option("-i", "--inode", default=None, type="int",
+                  help="The inode to list")
+
 parser.add_option("-r", "--recursive", action='store_true', default=False,
                   help="Display a recursive file listing.")
 
+parser.add_option("-t", "--type", default="raw",
+                  help="Type of image. Currently supported options 'raw', "
+                  "'ewf'")
+
 (options, args) = parser.parse_args()
 
-def error(string):
-    print string
-    sys.exit(1)
-
-try:
-    url = args[0]
-except IndexError:
-    error("You must specify an image (try '%s -h' for help)" % sys.argv[0])
-
-if len(args)==1:
-    inode = 0
-    path = '/'
-elif len(args)==2:
-    try:
-        inode = int(args[1])
-        path = None
-    except:
-        inode = 0
-        path = args[1]
-
-else:
-    error("Too many arguements provided")
 
 FILE_TYPE_LOOKUP = {
     TSK_FS_NAME_TYPE_UNDEF : '-',
@@ -79,6 +68,7 @@ NTFS_TYPES_TO_PRINT = [
     TSK_FS_ATTR_TYPE_DEFAULT,
 ]
 
+
 def print_inode(f, prefix=''):
     meta = f.info.meta
     name = f.info.name
@@ -110,74 +100,43 @@ def print_inode(f, prefix=''):
                 print "%s%s %s:\t%s" % (prefix, type, inode, filename)
 
 ## Now list the actual files (any of these can raise for any reason)
+img = images.SelectImage(options.type, args)
 
-
-## Try to use AFF4 if its present
-try:
-    import pyaff4
-
-    oracle = pyaff4.Resolver()
-
-    class AFF4ImgInfo(pytsk3.Img_Info):
-        def __init__(self, url):
-            self.fd = oracle.open(
-                pyaff4.RDFURN(url), 'r')
-            if not self.fd:
-                raise IOError("Unable to open %s" % url)
-            pytsk3.Img_Info.__init__(self, '')
-
-        def get_size(self):
-            return self.fd.size.value
-
-        def read(self, off, length):
-            self.fd.seek(off)
-            return self.fd.read(length)
-
-        def close(self):
-            self.fd.close()
-
-    ## Step 1: get an IMG_INFO object (url can be any URL that AFF4 can
-    ## handle)
-    img = AFF4ImgInfo(url)
-except ImportError:
-    img = pytsk3.Img_Info(url)
 
 ## Step 2: Open the filesystem
 fs = pytsk3.FS_Info(img, offset=options.offset)
 
 ## Step 3: Open the directory node
-if path:
-    directory = fs.open_dir(path=path)
+if options.inode is not None:
+  directory = fs.open_dir(inode=options.inode)
 else:
-    directory = fs.open_dir(inode=inode)
+  directory = fs.open_dir(path=options.path)
+
 
 ## Step 4: Iterate over all files in the directory and print their
 ## name. What you get in each iteration is a proxy object for the
 ## TSK_FS_FILE struct - you can further dereference this struct into a
 ## TSK_FS_NAME and TSK_FS_META structs.
-count = 0
 def list_directory(directory, stack=None):
-    stack.append(directory.info.fs_file.meta.addr)
+  stack.append(directory.info.fs_file.meta.addr)
 
-    for f in directory:
-        prefix = '+' * (len(stack) -1)
-        if prefix: prefix += ' '
-        print_inode(f, prefix)
+  for f in directory:
+    prefix = '+' * (len(stack) -1)
+    if prefix: prefix += ' '
+    print_inode(f, prefix)
 
-        if options.recursive:
-            try:
-                dir = f.as_directory()
+    if options.recursive:
+      try:
+        dir = f.as_directory()
 
-                inode = f.info.meta.addr
-                ## This ensures that we dont recurse into a directory
-                ## above the current level to avoid circular loops:
-                if inode not in stack:
-                    list_directory(dir, stack)
+        inode = f.info.meta.addr
+        ## This ensures that we dont recurse into a directory
+        ## above the current level to avoid circular loops:
+        if inode not in stack:
+          list_directory(dir, stack)
 
-            except RuntimeError: pass
+      except RuntimeError: pass
 
-    stack.pop(-1)
+      stack.pop(-1)
 
 list_directory(directory, [])
-
-del fs
