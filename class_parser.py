@@ -1786,31 +1786,46 @@ self->initialise = (void *)py%(class_name)s_initialize_proxies;
             out.write(type.pre_call(self))
 
         ## Now call the wrapped function
-        out.write("\n ClearError();\nPy_BEGIN_ALLOW_THREADS\nself->base = CONSTRUCT(%s, %s, %s" % (
-                self.class_name,
-                self.definition_class_name,
-                self.name))
+        out.write("""
+ClearError();
+
+// Allocate a new instance
+self->base = (%(class_name)s)alloc_%(class_name)s();
+
+// Update the target by replacing its methods with proxies to call back into python
+py%(class_name)s_initialize_proxies(self, self->base);
+
+Py_BEGIN_ALLOW_THREADS
+
+// Now call the constructor
+if( !(%(class_name)s)((%(definition_class_name)s)&__%(class_name)s)->Con(
+  self->base""" % (dict(
+      class_name=self.class_name,
+      definition_class_name=self.definition_class_name)))
+
         tmp = ''
         for type in self.args:
             tmp += ", " + type.call_arg()
 
         self.error_set = True
-        out.write(tmp + """);\nPy_END_ALLOW_THREADS\n
-       if(!CheckError(EZero)) {
-         char *buffer;
-         PyObject *exception = resolve_exception(&buffer);
+        out.write(tmp + """)) {
+ self->base = NULL;
+};
 
-         PyErr_Format(exception,
-                    "%%s", buffer);
-         ClearError();
-         goto error;
+Py_END_ALLOW_THREADS
+
+  if(!CheckError(EZero)) {
+    char *buffer;
+    PyObject *exception = resolve_exception(&buffer);
+
+    PyErr_Format(exception, "%%s", buffer);
+    ClearError();
+    goto error;
+
   } else if(!self->base) {
     PyErr_Format(PyExc_IOError, "Unable to construct class %(class_name)s");
     goto error;
   };
-
-  // Update the target by replacing its methods with proxies to call back into python
-  py%(class_name)s_initialize_proxies(self, self->base);
 
 """ % self.__dict__)
 
