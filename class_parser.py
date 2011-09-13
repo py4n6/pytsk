@@ -774,7 +774,7 @@ class Integer(Type):
 
     def from_python_object(self, source, destination, method, **kw):
         return "PyErr_Clear();\n"\
-            "%(destination)s = PyLong_AsUnsignedLong(%(source)s);\n" % dict(
+            "%(destination)s = PyInt_AsUnsignedLongMask(%(source)s);\n" % dict(
             source = source, destination= destination)
 
     def comment(self):
@@ -798,7 +798,7 @@ class Integer64(Integer):
 
     def from_python_object(self, source, destination, method, **kw):
         return "PyErr_Clear();\n"\
-            "%(destination)s = PyLong_AsUnsignedLongLong(%(source)s);\n" % dict(
+            "%(destination)s = PyInt_AsUnsignedLongLongMask(%(source)s);\n" % dict(
             source = source, destination= destination)
 
 

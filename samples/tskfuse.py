@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 
+import images
 import pytsk3
 import stat
 from errno import *
@@ -22,9 +23,9 @@ fuse.fuse_python_api = (0, 2)
 
 fuse.feature_assert('stateful_files', 'has_init')
 
-VOLUMES =[]
-
 int_re = re.compile("^(\d+)([kKmMgGs]?)$")
+
+
 def parse_int(string):
     """ Parses an integer from a string. Supports suffixes """
     try:
@@ -94,24 +95,20 @@ class TSKFuse(Fuse):
 
     def __init__(self, *args, **kw):
         Fuse.__init__(self, *args, **kw)
-        self.root = '/'
 
     def main(self):
-        self.offset = parse_int(self.offset)
-        args = self.cmdline[1]
-        if len(args) != 1:
-            raise RuntimeError( "You must specify a single image name to load - try -h for help ")
+      options, args = self.parser.parse_args()
+      self.img = images.SelectImage(options.type, args)
+      self.offset = parse_int(options.offset)
 
-        print "Opening filesystem in %s" % args[0]
-        self.img = Img_Info(args[0])
-        self.fs = pytsk3.FS_Info(self.img, offset = self.offset)
+      self.fs = pytsk3.FS_Info(self.img, offset = self.offset)
 
-        ## Prepare the file class - this will be used to read specific
-        ## files:
-        self.file_class = self.TSKFuseFile
-        self.file_class.fs = self.fs
+      ## Prepare the file class - this will be used to read specific
+      ## files:
+      self.file_class = self.TSKFuseFile
+      self.file_class.fs = self.fs
 
-        return Fuse.main(self)
+      return Fuse.main(self)
 
     def getattr(self, path):
         try:
@@ -264,14 +261,12 @@ Userspace tsk-fuse: mount a filesystem through fuse.
     # XmlFile class with locks, in order to prevent race conditions
     server.multithreaded = False
 
-    server.parser.add_option(mountopt="root", metavar="PATH", default='/',
-                             help="mirror filesystem from under PATH [default: %default]")
-
-    server.parser.add_option(mountopt="offset", metavar="INT", default=0,
+    server.parser.add_option("-O", "--offset", default="0",
                              help="Offset of filesystem [default: %default]")
 
-    server.parser.add_option(mountopt="load", metavar="FILE,FILE,FILE", default=[],
-                             help="Load these AFF4 volumes to populate the filesystem")
+    server.parser.add_option("-t", "--type", default="raw",
+                             help="Type of image. Currently supported options 'raw', "
+                             "'ewf'")
 
     server.parse(values = server, errex=1)
 
@@ -279,14 +274,6 @@ Userspace tsk-fuse: mount a filesystem through fuse.
     ## CWD
     if server.fuse_args.mountpoint and not os.access(os.path.join("/",server.fuse_args.mountpoint), os.W_OK):
         server.fuse_args.mountpoint = os.path.join(os.getcwd(), server.fuse_args.mountpoint)
-
-    ## Load the filesystem
-    try:
-        if server.fuse_args.mount_expected():
-            os.chdir(server.root)
-    except OSError:
-        print >> sys.stderr, "can't enter root of underlying filesystem"
-        sys.exit(1)
 
     server.main()
 

@@ -102,7 +102,6 @@ def print_inode(f, prefix=''):
 ## Now list the actual files (any of these can raise for any reason)
 img = images.SelectImage(options.type, args)
 
-
 ## Step 2: Open the filesystem
 fs = pytsk3.FS_Info(img, offset=options.offset)
 
