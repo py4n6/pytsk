@@ -104,13 +104,13 @@ struct Directory_t;
 
 */
 CLASS(Attribute, Object)
-   FOREIGN TSK_FS_ATTR *info;
-   FOREIGN TSK_FS_ATTR_RUN *current;
+    FOREIGN TSK_FS_ATTR *info;
+    FOREIGN TSK_FS_ATTR_RUN *current;
 
-   Attribute METHOD(Attribute, Con, TSK_FS_ATTR *info);
+    Attribute METHOD(Attribute, Con, TSK_FS_ATTR *info);
 
-   void METHOD(Attribute, __iter__);
-   TSK_FS_ATTR_RUN *METHOD(Attribute, iternext);
+    void METHOD(Attribute, __iter__);
+    TSK_FS_ATTR_RUN *METHOD(Attribute, iternext);
 END_CLASS
 
 
@@ -179,7 +179,8 @@ CLASS(Directory, Object)
         DEFAULT(path) = NULL;
         DEFAULT(inode) = 0;
       */
-     Directory METHOD(Directory, Con, struct FS_Info_t *fs, ZString path, TSK_INUM_T inode);
+     Directory METHOD(Directory, Con, struct FS_Info_t *fs, \
+                      ZString path, TSK_INUM_T inode);
 
      /** An iterator of all files in the present directory. */
      void METHOD(Directory, __iter__);
@@ -223,4 +224,4 @@ END_CLASS
 
 void tsk_init(void);
 
-#endif 	    /* !TSK3_H_ */
+#endif      /* !TSK3_H_ */

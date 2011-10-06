@@ -164,7 +164,7 @@ static FS_Info FS_Info_Con(FS_Info self, Img_Info img, TSK_OFF_T offset,
   return self;
 
  reason:
-  RaiseError(ERuntimeError, "img object invalid");
+  RaiseError(EInvalidParameter, "Img_info object is invalid");
  error:
   talloc_free(self);
   return NULL;
@@ -224,6 +224,11 @@ static int Directory_dest(void *self) {
 
 static Directory Directory_Con(Directory self, FS_Info fs,
                                ZString path, TSK_INUM_T inode) {
+  if(!fs) {
+    RaiseError(EInvalidParameter, "FS_Info parameter is invalid.");
+    goto error;
+  };
+
   if(!path) {
     self->info = tsk_fs_dir_open_meta(fs->info, inode);
   } else {
@@ -293,11 +298,20 @@ static File File_Con(File self, FS_Info fs, TSK_FS_FILE *info) {
   self->info = info;
   self->fs = fs;
 
+  if(!fs) {
+    RaiseError(EInvalidParameter, "FS_Info parameter is invalid.");
+    goto error;
+  };
+
   // Get the total number of attributes:
   self->max_attr = tsk_fs_file_attr_getsize(info);
 
   talloc_set_destructor((void *)self, File_dest);
   return self;
+
+error:
+  talloc_free(self);
+  return NULL;
 };
 
 static uint64_t File_read_random(File self, TSK_OFF_T offset,
@@ -400,10 +414,17 @@ VIRTUAL(Attribute, Object) {
 static Volume_Info Volume_Info_Con(Volume_Info self, Img_Info img,
                                    TSK_VS_TYPE_ENUM type,
                                    TSK_OFF_T offset) {
+  if(!img) {
+    RaiseError(EInvalidParameter, "Image object is not valid.");
+    goto error;
+  };
+
   self->info = tsk_vs_open((TSK_IMG_INFO *)img->img, offset, type);
+  if(self->info)
+    return self;
 
-  if(self->info) return self;
-
+error:
+  talloc_free(self);
   return NULL;
 };
 

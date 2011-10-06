@@ -386,6 +386,8 @@ case EKeyError:
     return PyExc_KeyError;
 case ERuntimeError:
     return PyExc_RuntimeError;
+case EInvalidParameter:
+    return PyExc_TypeError;
 case EWarning:
     return PyExc_AssertionError;
 case EIOError:
@@ -1479,12 +1481,14 @@ class Method:
             if type.buildstr and python_name not in self.defaults:
                 parse_line += type.buildstr
 
-        parse_line += '|'
+        optional_args = ''
         for type in self.args:
             python_name = type.python_name()
             if type.buildstr and python_name in self.defaults:
-                parse_line += type.buildstr
+                optional_args += type.buildstr
 
+        if optional_args:
+            parse_line += "|" + optional_args
 
         ## Iterators have a different prototype and do not need to
         ## unpack any args
@@ -1773,7 +1777,6 @@ if(check_method_override((PyObject *)self, &%(class_name)s_Type, "%(name)s"))
         out.write("""{\n""")
         #pdb.set_trace()
         self.write_local_vars(out)
-
 
         ## Assign the initialise_proxies handler
         out.write("""

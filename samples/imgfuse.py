@@ -38,7 +38,7 @@ class Xmp(Fuse):
       s.st_nlink = 1
       s.st_uid = 0
       s.st_gid = 0
-      s.st_size = self.fd.size
+      s.st_size = self.fd.get_size()
       s.st_atime = 0
       s.st_mtime = 0
       s.st_ctime = 0
