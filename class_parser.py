@@ -762,7 +762,7 @@ class Char_and_Length(Type):
 
 class Integer(Type):
     interface = 'integer'
-    buildstr = 'K'
+    buildstr = 'i'
     int_type = 'int'
 
     def __init__(self, name,type):
@@ -1101,6 +1101,12 @@ if(!type_check(%(source)s, &%(type)s_Type)) {
 };
 
 %(destination)s = ((Gen_wrapper)%(source)s)->base;
+
+if(!%(destination)s) {
+  PyErr_Format(PyExc_RuntimeError, "%(type)s instance is no longer valid (was it gc'ed?)");
+  goto error;
+};
+
 """ % dict(source = source, destination = destination, type = self.type)
 
     def to_python_object(self, **kw):
@@ -1129,13 +1135,20 @@ if(!type_check(%(source)s, &%(type)s_Type)) {
 
         return """
 if(!wrapped_%(name)s || (PyObject *)wrapped_%(name)s==Py_None) {
-   %(name)s = NULL;
+    %(name)s = NULL;
 } else if(!type_check((PyObject *)wrapped_%(name)s,&%(original_type)s_Type)) {
-     PyErr_Format(PyExc_RuntimeError, "%(name)s must be derived from type %(original_type)s");
-     goto error;
+    PyErr_Format(PyExc_RuntimeError, "%(name)s must be derived from type %(original_type)s");
+    goto error;
+} else if(!wrapped_%(name)s->base) {
+    PyErr_Format(PyExc_RuntimeError, "%(original_type)s instance is no longer valid (was it gc'ed?)");
+    goto error;
 } else {
-   %(name)s = wrapped_%(name)s->base;
-};\n""" % self.__dict__
+    %(name)s = wrapped_%(name)s->base;
+};
+
+
+
+""" % self.__dict__
 
     def assign(self, call, method, target=None):
         method.error_set = True;
@@ -2600,6 +2613,14 @@ class EnumType(Integer):
     def __init__(self, name, type):
         Integer.__init__(self, name, type)
         self.type = type
+
+    def definition(self, default=None, **kw):
+        # Force the enum to be an int just in case the compiler chooses a random
+        # size.
+        if default:
+            return "int %s=%s;\n" % (self.name, default)
+        else:
+            return "int __attribute__((unused)) %s;\n" % (self.name)
 
     def to_python_object(self, name=None, result='Py_result', **kw):
         name = name or self.name

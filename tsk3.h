@@ -104,13 +104,13 @@ struct Directory_t;
 
 */
 CLASS(Attribute, Object)
-    FOREIGN TSK_FS_ATTR *info;
-    FOREIGN TSK_FS_ATTR_RUN *current;
+   FOREIGN TSK_FS_ATTR *info;
+   FOREIGN TSK_FS_ATTR_RUN *current;
 
-    Attribute METHOD(Attribute, Con, TSK_FS_ATTR *info);
+   Attribute METHOD(Attribute, Con, TSK_FS_ATTR *info);
 
-    void METHOD(Attribute, __iter__);
-    TSK_FS_ATTR_RUN *METHOD(Attribute, iternext);
+   void METHOD(Attribute, __iter__);
+   TSK_FS_ATTR_RUN *METHOD(Attribute, iternext);
 END_CLASS
 
 
