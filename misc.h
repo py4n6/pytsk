@@ -1,6 +1,41 @@
 #include <assert.h>
 
-#define BUFF_SIZE 40960
+
+  // Visual Studio defines.
+#ifdef _MSC_VER
+
+#define inline __inline
+#define DLL_PUBLIC __declspec(dllexport)
+#define UNUSED
+
+#ifdef MS_WIN64
+typedef __int64 ssize_t;
+#else
+typedef _W64 int ssize_t;
+#endif
+
+#else
+
+#ifdef min
+#undef min
+#endif
+#define min(X, Y)  ((X) < (Y) ? (X) : (Y))
+
+#ifdef max
+#undef max
+#endif
+#define max(X, Y)  ((X) > (Y) ? (X) : (Y))
+
+#define UNUSED __attribute__((unused))
+
+
+#ifndef HEADERS_ONLY
+#define DLL_PUBLIC __attribute__ ((visibility("default")))
+#else
+#define DLL_PUBLIC
+#endif
+
+#endif     // ifdef _MSC_VER
 
 #ifdef WIN32
 #include <winsock2.h>
@@ -11,6 +46,8 @@
 typedef  unsigned long int in_addr_t;
 #include <stdint.h>
 typedef int bool;
+
+#define inline
 #else
 
 #include <sys/socket.h>
@@ -34,14 +71,6 @@ typedef int bool;
 typedef int bool;
 
 #endif
-
-
-#define strndup rep_strndup
-char *rep_strndup(const char *s, size_t n);
-
-#define strnlen rep_strnlen
-size_t rep_strnlen(const char *s, size_t n);
-
 
 #ifndef MIN
 #define MIN(a,b) ((a)<(b)?(a):(b))

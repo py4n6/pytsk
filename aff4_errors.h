@@ -1,9 +1,9 @@
 /*
 ** aff4_errors.h
-** 
+**
 ** Made by mic
 ** Login   <mic@laptop>
-** 
+**
 ** Started on  Sat Mar  6 20:54:25 2010 mic
 ** Last update Sat Mar  6 20:54:25 2010 mic
 */
@@ -32,7 +32,7 @@
   // Reserved for impossible conditions
 #define  EProgrammingError 10
 
-void *aff4_raise_errors(int t, char *string,  ...);
+DLL_PUBLIC void *aff4_raise_errors(int t, char *string,  ...);
 
 /** We only set the error state if its not already set */
 #define RaiseError(t, message, ...)                                     \
@@ -57,7 +57,7 @@ void *aff4_raise_errors(int t, char *string,  ...);
 
     This is done in a thread safe manner.
  */
-int *aff4_get_current_error(char **error_str);
+DLL_PUBLIC int *aff4_get_current_error(char **error_str);
 
 
 // These macros are used when we need to do something which might

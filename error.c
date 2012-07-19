@@ -1,9 +1,9 @@
 /*
 ** error.c
-** 
+**
 ** Made by (mic)
 ** Login   <mic@laptop>
-** 
+**
 ** Started on  Mon Mar 15 20:45:09 2010 mic
 ** Last update Sun May 12 01:17:25 2002 Speed Blue
 */
@@ -54,7 +54,7 @@ DLL_PUBLIC void *aff4_raise_errors(int t, char *reason, ...) {
 
 DLL_PUBLIC int *aff4_get_current_error(char **error_buffer) {
   if(error_buffer) {
-    *error_buffer = &global_error_buffer;
+    *error_buffer = global_error_buffer;
   };
   return &global_error_type;
 };

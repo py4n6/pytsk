@@ -552,18 +552,18 @@ static PyMethodDef %(module)s_methods[] = {
      {NULL}  /* Sentinel */
 };
 
-DLL_PUBLIC PyMODINIT_FUNC init%(module)s(void) {
+PyMODINIT_FUNC init%(module)s(void) {
    PyGILState_STATE gstate;
-
-   /* Make sure threads are enabled */
-   PyEval_InitThreads();
-   gstate = PyGILState_Ensure();
 
    /* create module */
    PyObject *m = Py_InitModule3("%(module)s", %(module)s_methods,
                                    "%(module)s module.");
    PyObject *d = PyModule_GetDict(m);
    PyObject *tmp;
+
+   /* Make sure threads are enabled */
+   PyEval_InitThreads();
+   gstate = PyGILState_Ensure();
 
    g_module = m;
 """ % {'module': self.name})
@@ -624,7 +624,7 @@ class Type:
         if default:
             return "%s %s=%s;\n" % (self.type, self.name, default)
         else:
-            return "%s __attribute__((unused)) %s;\n" % (self.type, self.name)
+            return "%s UNUSED %s;\n" % (self.type, self.name)
 
     def local_definition(self, default = None, **kw):
         return ''
@@ -819,7 +819,7 @@ if(!%(result)s) goto error;
 
     def definition(self, default = '"\\x0"', **kw):
         ## Shut up unused warnings
-        return "char %s __attribute__((unused))=0;\nchar *str_%s __attribute__((unused)) = %s;\n" % (
+        return "char %s UNUSED=0;\nchar *str_%s UNUSED = %s;\n" % (
             self.name,self.name, default)
 
     def byref(self):
@@ -1119,9 +1119,9 @@ if(!%(destination)s) {
         return "&wrapped_%s" % self.name
 
     def definition(self, default = 'NULL', sense='in', **kw):
-        result = "Gen_wrapper wrapped_%s __attribute__((unused)) = %s;\n" % (self.name, default)
+        result = "Gen_wrapper wrapped_%s UNUSED = %s;\n" % (self.name, default)
         if sense == 'in' and not 'OUT' in self.attributes:
-            result += " %s __attribute__((unused)) %s;\n" % (self.type, self.name)
+            result += " %s UNUSED %s;\n" % (self.type, self.name)
 
         return result
 
@@ -1401,8 +1401,8 @@ class ResultException:
                 self.check, self.exception, self.message))
 
 class Method:
-    default_re = re.compile("DEFAULT\(([A-Z_a-z0-9]+)\) =(.+)")
-    exception_re = re.compile("RAISES\(([^,]+),\s*([^\)]+)\) =(.+)")
+    default_re = re.compile("DEFAULT\(([A-Z_a-z0-9]+)\) =(.+);")
+    exception_re = re.compile("RAISES\(([^,]+),\s*([^\)]+)\) =(.+);")
     typedefed_re = re.compile(r"struct (.+)_t \*")
 
     def __init__(self, class_name, base_class_name, method_name, args, return_type,
@@ -2621,7 +2621,7 @@ class EnumType(Integer):
         if default:
             return "int %s=%s;\n" % (self.name, default)
         else:
-            return "int __attribute__((unused)) %s;\n" % (self.name)
+            return "int UNUSED %s;\n" % (self.name)
 
     def to_python_object(self, name=None, result='Py_result', **kw):
         name = name or self.name
@@ -2959,7 +2959,7 @@ END_CLASS
 
 
 if __name__ == '__main__':
-    p = HeaderParser('pyaff4', verbose = 1)
+    p = HeaderParser('pytsk3', verbose = 1)
     for arg in sys.argv[1:]:
         p.parse_fd(open(arg))
 

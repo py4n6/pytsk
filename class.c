@@ -32,16 +32,18 @@
 // Noone should instantiate Object directly. this should be already
 // allocated therefore:
 
-inline void Object_init(Object this) {
+DLL_PUBLIC inline void Object_init(Object this) {
   this->__class__ = &__Object;
   this->__super__ = NULL;
 };
 
 struct Object_t __Object = {
-  .__class__ = &__Object,
-  .__super__ = &__Object,
-  .__size = sizeof(struct Object_t),
-  .__name__ = "Object"
+  &__Object,                 //.__class__
+  &__Object,                 //.__super__
+  "Object",                  //.__name__
+  "",                        //.__doc__
+  sizeof(struct Object_t),   //.__size
+  NULL   //.__extension
 };
 
 int issubclass(Object obj, Object class) {
@@ -52,7 +54,7 @@ int issubclass(Object obj, Object class) {
 
     obj=obj->__super__;
 
-    if(obj == &__Object || obj==NULL) 
+    if(obj == &__Object || obj==NULL)
       return 0;
   };
 };

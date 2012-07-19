@@ -120,7 +120,7 @@ properly.
 
 This difference can be used for good and bad. It is possible in C to
 call the base class's version of the method at any time (despite the
-fact it was over ridden). 
+fact it was over ridden).
 
 For example:
 
@@ -176,31 +176,13 @@ super.add as well.
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-
-#ifdef min
-#undef min
-#endif
-#define min(X, Y)  ((X) < (Y) ? (X) : (Y))
-
-#ifdef max
-#undef max
-#endif
-#define max(X, Y)  ((X) > (Y) ? (X) : (Y))
-
-
+#include "misc.h"
 #include "talloc.h"
-
-#ifndef HEADERS_ONLY
-#define DLL_PUBLIC __attribute__ ((visibility("default")))
-#else
-#define DLL_PUBLIC
-#endif
 
 #define CLASS(class,super_class)                                        \
   typedef struct class ## _t *class;                                    \
-  class alloc_ ## class(void);          /* Allocates object memory */       \
-  int class ## _init(Object self);   /* Class initializer */            \
+  DLL_PUBLIC class alloc_ ## class(void); /* Allocates object memory */ \
+  DLL_PUBLIC int class ## _init(Object self); /* Class initializer */   \
   DLL_PUBLIC extern struct class ## _t __ ## class; /* Public class template */ \
   struct class ## _t {                                                  \
   struct super_class ## _t super;  /* Superclass Fields we inherit */   \
@@ -391,7 +373,7 @@ struct Object_t {
 #define CLASSOF(obj)				\
   ((Object)obj)->__class__
 
-inline void Object_init(Object);
+DLL_PUBLIC inline void Object_init(Object);
 
 DLL_PUBLIC extern struct Object_t __Object;
 
@@ -462,7 +444,7 @@ DLL_PUBLIC extern void unimplemented(Object self);
 
   // This explicitely denote that the type is a null terminated char
   // ptr as opposed to a pointer to char and length.
-#define ZString char *
+typedef char * ZString;
 
   /* The following is a direction for the autogenerator to proxy the
      given class. This is done in the following way:

@@ -1,9 +1,9 @@
 /*
 ** tsk3.h
-** 
+**
 ** Made by mic
 ** Login   <mic@laptop>
-** 
+**
 ** Started on  Fri Apr 16 10:01:14 2010 mic
 ** Last update Fri Apr 16 10:01:14 2010 mic
 */
@@ -203,7 +203,7 @@ CLASS(FS_Info, Object)
      FS_Info METHOD(FS_Info, Con, Img_Info img, TSK_OFF_T offset,
                     TSK_FS_TYPE_ENUM type);
 
-     /** A convenience function to open a directory in this image. 
+     /** A convenience function to open a directory in this image.
 
          DEFAULT(path) = NULL;
          DEFAULT(inode) = 2;
