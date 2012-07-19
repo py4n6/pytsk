@@ -354,7 +354,7 @@ Gen_wrapper new_class_wrapper(Object item) {
 
    // Return None for a NULL pointer
    if(!item) {
-     Py_INCREF(Py_None);
+     Py_IncRef(Py_None);
      return (Gen_wrapper)Py_None;
    };
 
@@ -449,7 +449,7 @@ static int check_method_override(PyObject *self, PyTypeObject *type, char *metho
 
         // Ok - we got to the base class - finish up
         if(x == (PyObject *)type) {
-            Py_DECREF(x);
+            Py_DecRef(x);
             break;
         };
 
@@ -461,11 +461,11 @@ static int check_method_override(PyObject *self, PyTypeObject *type, char *metho
         if(dict && PySequence_Contains(dict, py_method)) {
              found = 1;
         };
-        Py_DECREF(dict);
-        Py_DECREF(x);
+        Py_DecRef(dict);
+        Py_DecRef(x);
    };
 
-   Py_DECREF(py_method);
+   Py_DecRef(py_method);
    PyErr_Clear();
 
    return found;
@@ -498,7 +498,7 @@ static int check_method_override(PyObject *self, PyTypeObject *type, char *metho
  if (PyType_Ready(&%(name)s_Type) < 0)
      return;
 
- Py_INCREF((PyObject *)&%(name)s_Type);
+ Py_IncRef((PyObject *)&%(name)s_Type);
  PyModule_AddObject(m, "%(name)s", (PyObject *)&%(name)s_Type);
 """ % {'name': cls.class_name})
 
@@ -587,7 +587,7 @@ DLL_PUBLIC PyMODINIT_FUNC init%(module)s(void) {
 
             out.write("""
  PyDict_SetItemString(d, "%s", tmp);
- Py_DECREF(tmp);\n""" % (constant))
+ Py_DecRef(tmp);\n""" % (constant))
 
         out.write(self.initialization())
         out.write("""
@@ -687,7 +687,7 @@ class String(Type):
 
         result = """PyErr_Clear();
     if(!%(name)s) {
-      Py_INCREF(Py_None);
+      Py_IncRef(Py_None);
       %(result)s = Py_None;
     } else {
       %(result)s = PyString_FromStringAndSize((char *)%(name)s, %(length)s);
@@ -927,7 +927,7 @@ if(func_return > %(length)s) {
     if(-1==PyString_AsStringAndSize(%(result)s, &tmp_buff, &tmp_len)) goto error;
 
     memcpy(%(name)s,tmp_buff, tmp_len);
-    Py_DECREF(%(result)s);
+    Py_DecRef(%(result)s);
     %(result)s = PyLong_FromLong(tmp_len);
 };
 """ % dict(result = result, name=self.name)
@@ -973,7 +973,7 @@ class TDB_DATA_P(Char_and_Length_OUT):
   %(destination)s->dsize = tmp;
 }
 // We no longer need the python object
-Py_DECREF(%(source)s);
+Py_DecRef(%(source)s);
 """ % dict(source = source, destination = destination,
            bare_type = self.bare_type)
 
@@ -995,7 +995,7 @@ class TDB_DATA(TDB_DATA_P):
   %(destination)s.dsize = tmp;
 }
 // We no longer need the python object
-Py_DECREF(%(source)s);
+Py_DecRef(%(source)s);
 """ % dict(source = source, destination = destination,
            bare_type = self.bare_type)
 
@@ -1022,7 +1022,7 @@ class Void(Type):
         return ''
 
     def to_python_object(self, name=None, result = 'Py_result', **kw):
-        return "Py_INCREF(Py_None); Py_result = Py_None;\n"
+        return "Py_IncRef(Py_None); Py_result = Py_None;\n"
 
     def call_arg(self):
         return "NULL"
@@ -1073,10 +1073,10 @@ for(i=0; i<size;i++) {
  if(!tmp) goto error;
  %(destination)s[i] = PyString_AsString(tmp);
  if(!%(destination)s[i]) {
-   Py_DECREF(tmp);
+   Py_DecRef(tmp);
    goto error;
  };
- Py_DECREF(tmp);
+ Py_DecRef(tmp);
 };
 
 };""" % dict(source = source, destination = destination, context = context)
@@ -1177,7 +1177,7 @@ if(!wrapped_%(name)s || (PyObject *)wrapped_%(name)s==Py_None) {
        // A NULL return without errors means we return None
        if(!returned_object) {
          wrapped_%(name)s = (Gen_wrapper)Py_None;
-         Py_INCREF(Py_None);
+         Py_IncRef(Py_None);
 """ % args
 
         result += """
@@ -1189,7 +1189,7 @@ if(!wrapped_%(name)s || (PyObject *)wrapped_%(name)s==Py_None) {
         if "BORROWED" in self.attributes:
             result += """  %(incref)s(wrapped_%(name)s->base);
 if(((Object)wrapped_%(name)s->base)->extension) {
-   Py_INCREF((PyObject *)((Object)wrapped_%(name)s->base)->extension);
+   Py_IncRef((PyObject *)((Object)wrapped_%(name)s->base)->extension);
 };
 """ % args
 
@@ -1260,13 +1260,13 @@ wrapped_%(name)s->base = %(call)s;
 """ % args
 
         if "NULL_OK" in self.attributes:
-            result += "if(!wrapped_%(name)s->base) { Py_DECREF(wrapped_%(name)s); return NULL; };" % args
+            result += "if(!wrapped_%(name)s->base) { Py_DecRef((PyObject *)wrapped_%(name)s); return NULL; };" % args
 
         result += """
 // A NULL object gets translated to a None
  if(!wrapped_%(name)s->base) {
-   Py_DECREF(wrapped_%(name)s);
-   Py_INCREF(Py_None);
+   Py_DecRef((PyObject *)wrapped_%(name)s);
+   Py_IncRef(Py_None);
    wrapped_%(name)s = (Gen_wrapper)Py_None;
  } else {
 """ % args
@@ -1601,7 +1601,7 @@ if(!self->base) return PyErr_Format(PyExc_RuntimeError, "%(class_name)s object n
             out.write("returned_result = PyList_New(0);\n")
             for result in results:
                 out.write(result)
-                out.write("PyList_Append(returned_result, Py_result); Py_DECREF(Py_result);\n");
+                out.write("PyList_Append(returned_result, Py_result); Py_DecRef(Py_result);\n");
             out.write("return returned_result;\n")
         else:
             out.write(results[0])
@@ -1920,7 +1920,7 @@ class GetattrMethod(Method):
         ## Add attributes
         for class_name, attr in self.get_attributes():
             out.write(""" tmp = PyString_FromString("%(name)s");
-    PyList_Append(result, tmp); Py_DECREF(tmp);
+    PyList_Append(result, tmp); Py_DecRef(tmp);
 """ % dict(name = attr.name))
 
         ## Add methods
@@ -1928,7 +1928,7 @@ class GetattrMethod(Method):
 
     for(i=%s_methods; i->ml_name; i++) {
      tmp = PyString_FromString(i->ml_name);
-    PyList_Append(result, tmp); Py_DECREF(tmp);
+    PyList_Append(result, tmp); Py_DecRef(tmp);
     }; """ % self.class_name)
 
         out.write("""
@@ -2085,7 +2085,8 @@ if(PyErr_Occurred()) {
       error_str[BUFF_SIZE-1]=0;
       *error_type = ERuntimeError;
    };
-   Py_DECREF(str);
+   PyErr_Restore(exception_t, exception, tb);
+   Py_DecRef(str);
    goto error;
 };
 
@@ -2097,21 +2098,21 @@ if(PyErr_Occurred()) {
         ## Now convert the python value back to a value
         out.write(self.return_type.from_python_object('Py_result',self.return_type.name, self, context = "self"))
 
-        out.write("if(Py_result) { Py_DECREF(Py_result);};\nPy_DECREF(method_name);\n\n");
+        out.write("if(Py_result) { Py_DecRef(Py_result);};\nPy_DecRef(method_name);\n\n");
 
         ## Decref all our python objects:
         for arg in self.args:
-            out.write("if(py_%s) { Py_DECREF(py_%s);};\n" %( arg.name, arg.name))
+            out.write("if(py_%s) { Py_DecRef(py_%s);};\n" %( arg.name, arg.name))
 
         out.write("PyGILState_Release(gstate);\n")
 
         out.write(self.return_type.return_value('func_return'))
         if self.error_set:
             out.write("\nerror:\n")
-            out.write("if(Py_result) { Py_DECREF(Py_result);};\nPy_DECREF(method_name);\n\n");
+            out.write("if(Py_result) { Py_DecRef(Py_result);};\nPy_DecRef(method_name);\n\n");
             ## Decref all our python objects:
             for arg in self.args:
-                out.write("if(py_%s) { Py_DECREF(py_%s);};\n" % (arg.name, arg.name))
+                out.write("if(py_%s) { Py_DecRef(py_%s);};\n" % (arg.name, arg.name))
 
             out.write("PyGILState_Release(gstate);\n %s;\n" % self.error_condition())
 
@@ -2483,7 +2484,7 @@ class EnumConstructor(ConstructorMethod):
     def write_destructor(self, out):
         out.write("""static void
 %(class_name)s_dealloc(py%(class_name)s *self) {
- Py_DECREF(self->value);
+ Py_DecRef(self->value);
  PyObject_Del(self);
 };\n
 """ % dict(class_name = self.class_name))
@@ -2497,7 +2498,7 @@ static char *kwlist[] = {"value", NULL};
 if(!PyArg_ParseTupleAndKeywords(args, kwds, "O", kwlist, &self->value))
  goto error;
 
-Py_INCREF(self->value);
+Py_IncRef(self->value);
 
   return 0;
 error:
@@ -2508,7 +2509,7 @@ static PyObject *py%(class_name)s___str__(py%(class_name)s *self) {
   PyObject *result = PyDict_GetItem(%(class_name)s_rev_lookup, self->value);
 
   if(result) {
-     Py_INCREF(result);
+     Py_IncRef(result);
  } else {
      result = PyObject_Str(self->value);
  };
@@ -2534,7 +2535,7 @@ static PyObject * %(class_name)s_eq(PyObject *me, PyObject *other, int op) {
 
   ClearError();
 
-  Py_INCREF(result);
+  Py_IncRef(result);
   return result;
 };
 
@@ -2581,7 +2582,7 @@ static PyObject *%(class_name)s_rev_lookup;
     def numeric_protocol_int(self):
         return """
 static PyObject *%(class_name)s_int(py%(class_name)s *self) {
-    Py_INCREF(self->value);
+    Py_IncRef(self->value);
     return self->value;
 };
 """ % self.__dict__
@@ -2599,8 +2600,8 @@ static PyObject *%(class_name)s_int(py%(class_name)s *self) {
   tmp2 = PyString_FromString("%(value)s");
   PyDict_SetItem(%(class_name)s_Dict_lookup, tmp2, tmp);
   PyDict_SetItem(%(class_name)s_rev_lookup, tmp, tmp2);
-  Py_DECREF(tmp);
-  Py_DECREF(tmp2);
+  Py_DecRef(tmp);
+  Py_DecRef(tmp2);
 
 ''' % dict(value = attr, class_name=self.class_name)
             result += "};\n"
@@ -2636,7 +2637,7 @@ class EnumType(Integer):
 if(%(name)s) { PyObject *py_%(name)s = PyLong_FromLong(%(name)s);
   PyObject *tmp = PyDict_GetItem(%(type)s_rev_lookup, py_%(name)s);
 
-  Py_DECREF(py_%(name)s);
+  Py_DecRef(py_%(name)s);
   if(!tmp) {
     PyErr_Format(PyExc_RuntimeError, "value %%lu is not valid for Enum %(type)s of arg '%(name)s'", (unsigned long)%(name)s);
     goto error;
