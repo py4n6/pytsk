@@ -1,14 +1,19 @@
+#ifndef _PYTSK_MISC_H
+#define _PYTSK_MISC_H
+
 #include <assert.h>
+
+#if defined( HAVE_INTTYPES_H )
+#include <inttypes.h>
+#elif !defined( _MSC_VER )
+#include <stdint.h>
+#endif
 
 #if defined( WIN32 )
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <io.h>
 #include <stdio.h>
-
-#if !defined( _MSC_VER )
-#include <stdint.h>
-#endif
 
 #else
 #include <sys/socket.h>
@@ -30,15 +35,16 @@
 
 #endif /* defined( WIN32 ) */
 
-#ifdef HAVE_INTTYPES_H
-#include <inttypes.h>
+#ifdef __cplusplus
+extern "C" {
 #endif
 
-/* Visual Studio defines. */
 #if defined( _MSC_VER )
-#define inline __inline
-#elif defined( WIN32 )
-#define inline /* inline */
+#define PYTSK_INLINE __inline
+#elif defined( __BORLANDC__ ) || defined( __clang__ )
+#define PYTSK_INLINE /* inline */
+#else
+#define PYTSK_INLINE inline
 #endif
 
 #if defined( _MSC_VER )
@@ -102,3 +108,10 @@ typedef int bool;
 uint64_t htonll(uint64_t n);
 #define ntohll(x) htonll(x)
 #endif
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
+

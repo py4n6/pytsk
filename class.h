@@ -373,7 +373,7 @@ struct Object_t {
 #define CLASSOF(obj)				\
   ((Object)obj)->__class__
 
-DLL_PUBLIC inline void Object_init(Object);
+DLL_PUBLIC PYTSK_INLINE void Object_init(Object);
 
 DLL_PUBLIC extern struct Object_t __Object;
 

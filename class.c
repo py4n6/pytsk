@@ -25,6 +25,7 @@
 # * along with this program; if not, write to the Free Software
 # * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 # ******************************************************/
+#include "misc.h"
 #include "class.h"
 
 #define BUFF_SIZE 1024
@@ -32,7 +33,7 @@
 // Noone should instantiate Object directly. this should be already
 // allocated therefore:
 
-DLL_PUBLIC inline void Object_init(Object this) {
+DLL_PUBLIC PYTSK_INLINE void Object_init(Object this) {
   this->__class__ = &__Object;
   this->__super__ = NULL;
 };
