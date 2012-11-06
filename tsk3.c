@@ -25,6 +25,15 @@ Copyright 2010 Michael Cohen
 
 #include "tsk3.h"
 
+/* TODO: sdd version check, e.g. " && ( TSK_VERSION_NUM <= 0x04000001 )"
+ * when this gets fixed in sleuthkit
+ */
+#if defined( TSK_MULTITHREAD_LIB )
+#warning HAVE_LOCK
+extern void tsk_init_lock(tsk_lock_t * lock);
+extern void tsk_deinit_lock(tsk_lock_t * lock);
+#endif
+
 /** Prototypes for IMG_INFO hooks */
 ssize_t IMG_INFO_read(TSK_IMG_INFO *self, TSK_OFF_T off, char *buf, size_t len);
 void IMG_INFO_close(TSK_IMG_INFO *self);
