@@ -18,9 +18,14 @@ PYTHON_VERSION = "26"
 PYTHON_HOME = "%s/.wine/drive_c/Python%s/" % (
     os.environ.get("HOME",""), PYTHON_VERSION)
 
-CONFIG = dict(TSK3_HEADER_LOCATION = "/usr/local/include/tsk3/",
+CONFIG = dict(TSK3_HEADER_LOCATION = "/usr/include/tsk3/",
               LIBRARY_DIRS = [],
               LIBRARIES = ['tsk3', 'stdc++'])
+
+if not os.path.exists(CONFIG['TSK3_HEADER_LOCATION']):
+    CONFIG['TSK3_HEADER_LOCATION'] = "/usr/local/include/tsk3/"
+    if not os.path.exists(CONFIG['TSK3_HEADER_LOCATION']):
+        raise EnvironmentError("Unable to find sleuthkit headers in: /usr/include and /usr/local/include.")
 
 CONFIG['HEADERS'] = [CONFIG['TSK3_HEADER_LOCATION']]
 
