@@ -29,7 +29,6 @@ Copyright 2010 Michael Cohen
  * when this gets fixed in sleuthkit
  */
 #if defined( TSK_MULTITHREAD_LIB )
-#warning HAVE_LOCK
 extern void tsk_init_lock(tsk_lock_t * lock);
 extern void tsk_deinit_lock(tsk_lock_t * lock);
 #endif
