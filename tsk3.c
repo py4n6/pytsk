@@ -38,6 +38,10 @@ void IMG_INFO_close(TSK_IMG_INFO *self);
 static int Img_Info_dest(void *x) {
   Img_Info self = (Img_Info)x;
 
+#if defined( TSK_MULTITHREAD_LIB )
+  tsk_deinit_lock(&self->img->base.cache_lock);
+#endif
+
   tsk_img_close((TSK_IMG_INFO *)self->img);
 
   return 0;
@@ -93,6 +97,10 @@ Extended_TSK_IMG_INFO *Img_Info_get_img_info(Img_Info self) {
 
   img = talloc_zero(self, Extended_TSK_IMG_INFO);
   img->container = self;
+
+#if defined( TSK_MULTITHREAD_LIB )
+  tsk_init_lock(&img->base.cache_lock);
+#endif
 
   img->base.read = IMG_INFO_read;
   img->base.close = IMG_INFO_close;
