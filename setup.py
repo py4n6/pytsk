@@ -7,7 +7,7 @@ from distutils.core import setup, Extension
 from distutils import sysconfig
 
 import class_parser
-import generate_bindings
+from generate_bindings import *
 
 import pdb
 
