@@ -6,6 +6,10 @@
 #include <io.h>
 #include <stdio.h>
 
+#if !defined( _MSC_VER )
+#include <stdint.h>
+#endif
+
 #else
 #include <sys/socket.h>
 #include <netinet/tcp.h>
@@ -83,7 +87,6 @@ typedef _W64 int ssize_t;
 #if defined( WIN32 )
 #define MSG_NOSIGNAL 0
 typedef  unsigned long int in_addr_t;
-#include <stdint.h>
 typedef int bool;
 
 #else
