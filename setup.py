@@ -119,7 +119,7 @@ SOURCES = ['tsk3.c', 'class.c', 'pytsk3.c', 'talloc.c', 'error.c', 'replace.c']
 
 setup(name='pytsk3',
       version='0.1',
-      description = "Python bindings for the sluethkit",
+      description = "Python bindings for the sleuthkit",
       author = "Michael Cohen",
       author_email = "scudette@gmail.com",
       url = "http://code.google.com/p/pytsk/",
