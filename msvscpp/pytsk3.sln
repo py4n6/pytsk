@@ -1,0 +1,20 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 10.00
+# Visual C++ Express 2008
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "pytsk3", "pytsk3\pytsk3.vcproj", "{E221DB4C-B254-47CB-993D-DC7FED580DA1}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Release|Win32 = Release|Win32
+		VSDebug|Win32 = VSDebug|Win32
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{E221DB4C-B254-47CB-993D-DC7FED580DA1}.Release|Win32.ActiveCfg = Release|Win32
+		{E221DB4C-B254-47CB-993D-DC7FED580DA1}.Release|Win32.Build.0 = Release|Win32
+		{E221DB4C-B254-47CB-993D-DC7FED580DA1}.VSDebug|Win32.ActiveCfg = VSDebug|Win32
+		{E221DB4C-B254-47CB-993D-DC7FED580DA1}.VSDebug|Win32.Build.0 = VSDebug|Win32
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
