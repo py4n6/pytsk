@@ -224,7 +224,7 @@ static void talloc_abort_unknown_value(void)
 }
 
 /* panic if we get a bad magic value */
-static inline struct talloc_chunk *talloc_chunk_from_ptr(const void *ptr)
+static PYTSK_INLINE struct talloc_chunk *talloc_chunk_from_ptr(const void *ptr)
 {
 	const char *pp = (const char *)ptr;
 	struct talloc_chunk *tc = discard_const_p(struct talloc_chunk, pp - TC_HDR_SIZE);
@@ -277,7 +277,7 @@ do { \
 /*
   return the parent chunk of a pointer
 */
-static inline struct talloc_chunk *talloc_parent_chunk(const void *ptr)
+static PYTSK_INLINE struct talloc_chunk *talloc_parent_chunk(const void *ptr)
 {
 	struct talloc_chunk *tc;
 
@@ -384,7 +384,7 @@ static struct talloc_chunk *talloc_alloc_pool(struct talloc_chunk *parent,
 /*
    Allocate a bit of memory as a child of an existing pointer
 */
-static inline void *__talloc(const void *context, size_t size)
+static PYTSK_INLINE void *__talloc(const void *context, size_t size)
 {
 	struct talloc_chunk *tc = NULL;
 
@@ -501,7 +501,7 @@ static int talloc_reference_destructor(struct talloc_reference_handle *handle)
    more efficient way to add a name to a pointer - the name must point to a
    true string constant
 */
-static inline void _talloc_set_name_const(const void *ptr, const char *name)
+static PYTSK_INLINE void _talloc_set_name_const(const void *ptr, const char *name)
 {
 	struct talloc_chunk *tc = talloc_chunk_from_ptr(ptr);
 	tc->name = name;
@@ -510,7 +510,7 @@ static inline void _talloc_set_name_const(const void *ptr, const char *name)
 /*
   internal talloc_named_const()
 */
-static inline void *_talloc_named_const(const void *context, size_t size, const char *name)
+static PYTSK_INLINE void *_talloc_named_const(const void *context, size_t size, const char *name)
 {
 	void *ptr;
 
@@ -564,7 +564,7 @@ static void *_talloc_steal_internal(const void *new_ctx, const void *ptr);
 /*
    internal talloc_free call
 */
-static inline int _talloc_free_internal(void *ptr, const char *location)
+static PYTSK_INLINE int _talloc_free_internal(void *ptr, const char *location)
 {
 	struct talloc_chunk *tc;
 
@@ -806,7 +806,7 @@ void *talloc_reparent(const void *old_parent, const void *new_parent, const void
   talloc_reference() has done. The context and pointer arguments
   must match those given to a talloc_reference()
 */
-static inline int talloc_unreference(const void *context, const void *ptr)
+static PYTSK_INLINE int talloc_unreference(const void *context, const void *ptr)
 {
 	struct talloc_chunk *tc = talloc_chunk_from_ptr(ptr);
 	struct talloc_reference_handle *h;
@@ -886,9 +886,9 @@ int talloc_unlink(const void *context, void *ptr)
 /*
   add a name to an existing pointer - va_list version
 */
-static inline const char *talloc_set_name_v(const void *ptr, const char *fmt, va_list ap) PRINTF_ATTRIBUTE(2,0);
+static PYTSK_INLINE const char *talloc_set_name_v(const void *ptr, const char *fmt, va_list ap) PRINTF_ATTRIBUTE(2,0);
 
-static inline const char *talloc_set_name_v(const void *ptr, const char *fmt, va_list ap)
+static PYTSK_INLINE const char *talloc_set_name_v(const void *ptr, const char *fmt, va_list ap)
 {
 	struct talloc_chunk *tc = talloc_chunk_from_ptr(ptr);
 	tc->name = talloc_vasprintf(ptr, fmt, ap);
@@ -1569,7 +1569,7 @@ void *_talloc_memdup(const void *t, const void *p, size_t size, const char *name
 	return newp;
 }
 
-static inline char *__talloc_strlendup(const void *t, const char *p, size_t len)
+static PYTSK_INLINE char *__talloc_strlendup(const void *t, const char *p, size_t len)
 {
 	char *ret;
 
@@ -1601,8 +1601,8 @@ char *talloc_strndup(const void *t, const char *p, size_t n)
 	return __talloc_strlendup(t, p, strnlen(p, n));
 }
 
-static inline char *__talloc_strlendup_append(char *s, size_t slen,
-					      const char *a, size_t alen)
+static PYTSK_INLINE char *__talloc_strlendup_append(char *s, size_t slen,
+                                                    const char *a, size_t alen)
 {
 	char *ret;
 
@@ -1733,12 +1733,12 @@ char *talloc_asprintf(const void *t, const char *fmt, ...)
 	return ret;
 }
 
-static inline char *__talloc_vaslenprintf_append(char *s, size_t slen,
-						 const char *fmt, va_list ap)
-						 PRINTF_ATTRIBUTE(3,0);
+static PYTSK_INLINE char *__talloc_vaslenprintf_append(char *s, size_t slen,
+                                                       const char *fmt, va_list ap)
+                                                       PRINTF_ATTRIBUTE(3,0);
 
-static inline char *__talloc_vaslenprintf_append(char *s, size_t slen,
-						 const char *fmt, va_list ap)
+static PYTSK_INLINE char *__talloc_vaslenprintf_append(char *s, size_t slen,
+                                                       const char *fmt, va_list ap)
 {
 	ssize_t alen;
 	char c;
