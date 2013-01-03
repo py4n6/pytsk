@@ -233,10 +233,6 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\replace.h"
-				>
-			</File>
-			<File
 				RelativePath="..\..\talloc.h"
 				>
 			</File>

@@ -33,6 +33,22 @@
 #include "misc.h"
 #include "talloc.h"
 
+/* Have these defines here otherwise some compilers/linkers
+ * get confused to build/link the compiled version of the replacement
+ * function
+ */
+#if (defined(BROKEN_STRNLEN) || !defined(HAVE_STRNLEN))
+#undef HAVE_STRNLEN
+#define strnlen rep_strnlen
+size_t rep_strnlen(const char *s, size_t n);
+#endif
+
+#if (defined(BROKEN_STRNDUP) || !defined(HAVE_STRNDUP))
+#undef HAVE_STRNDUP
+#define strndup rep_strndup
+char *rep_strndup(const char *s, size_t n);
+#endif
+
 #ifdef TALLOC_BUILD_VERSION_MAJOR
 #if (TALLOC_VERSION_MAJOR != TALLOC_BUILD_VERSION_MAJOR)
 #error "TALLOC_VERSION_MAJOR != TALLOC_BUILD_VERSION_MAJOR"

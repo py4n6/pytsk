@@ -8,7 +8,7 @@ error.c
 lexer.py
 misc.h
 pytsk3.h
-replace.h
+replace.c
 setup.py
 talloc.c
 talloc.h

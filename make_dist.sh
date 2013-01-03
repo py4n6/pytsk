@@ -11,7 +11,7 @@ SOURCE_FILES="\
     ../pytsk/error.c \
     ../pytsk/misc.h \
     ../pytsk/pytsk3.h \
-    ../pytsk/replace.c ../pytsk/replace.h \
+    ../pytsk/replace.c \
     ../pytsk/talloc.c ../pytsk/talloc.h \
     ../pytsk/tsk3.c ../pytsk/tsk3.h"
 
