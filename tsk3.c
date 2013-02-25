@@ -91,7 +91,13 @@ static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type) {
 };
 
 uint64_t Img_Info_read(Img_Info self, TSK_OFF_T off, OUT char *buf, size_t len) {
-  return CALL((TSK_IMG_INFO *)self->img, read, off, buf, len);
+  ssize_t result = CALL((TSK_IMG_INFO *)self->img, read, off, buf, len);
+  if (result < 0) {
+    RaiseError(EIOError, "Unable to read image: %s", tsk_error_get());
+    return 0;
+  };
+
+  return result;
 };
 
 // Dont really do anything here

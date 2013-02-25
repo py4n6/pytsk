@@ -14,7 +14,7 @@ import pdb
 # Distutils is retarded - We need to monkey patch it to make it saner.
 from distutils import cygwinccompiler
 
-PYTHON_VERSION = "26"
+PYTHON_VERSION = "27"
 PYTHON_HOME = "%s/.wine/drive_c/Python%s/" % (
     os.environ.get("HOME",""), PYTHON_VERSION)
 
