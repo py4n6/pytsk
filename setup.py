@@ -18,16 +18,30 @@ PYTHON_VERSION = "27"
 PYTHON_HOME = "%s/.wine/drive_c/Python%s/" % (
     os.environ.get("HOME",""), PYTHON_VERSION)
 
-CONFIG = dict(TSK3_HEADER_LOCATION = "/usr/include/tsk3/",
-              LIBRARY_DIRS = [],
-              LIBRARIES = ['tsk3', 'stdc++'])
+CONFIG = dict(
+    TSK_HEADERS_LOCATION = "/usr/include/tsk3/",
+    LIBRARY_DIRS = [],
+    LIBRARIES = ['tsk3', 'stdc++'],
+    DEFINES = [("HAVE_TSK3_LIBTSK_H", None)])
 
-if not os.path.exists(CONFIG['TSK3_HEADER_LOCATION']):
-    CONFIG['TSK3_HEADER_LOCATION'] = "/usr/local/include/tsk3/"
-    if not os.path.exists(CONFIG['TSK3_HEADER_LOCATION']):
-        raise EnvironmentError("Unable to find sleuthkit headers in: /usr/include and /usr/local/include.")
+if not os.path.exists(CONFIG['TSK_HEADERS_LOCATION']):
+    CONFIG['TSK_HEADERS_LOCATION'] = "/usr/local/include/tsk3/"
 
-CONFIG['HEADERS'] = [CONFIG['TSK3_HEADER_LOCATION']]
+# sleuthkit 4.1 changed the names of the include headers and the library.
+if not os.path.exists(CONFIG['TSK_HEADERS_LOCATION']):
+    CONFIG['TSK_HEADERS_LOCATION'] = "/usr/include/tsk/"
+    CONFIG['LIBRARIES'] = ['tsk', 'stdc++']
+    CONFIG['DEFINES'] = [("HAVE_TSK_LIBTSK_H", None)]
+
+if not os.path.exists(CONFIG['TSK_HEADERS_LOCATION']):
+    CONFIG['TSK_HEADERS_LOCATION'] = "/usr/local/include/tsk/"
+    CONFIG['LIBRARIES'] = ['tsk', 'stdc++']
+    CONFIG['DEFINES'] = [("HAVE_TSK_LIBTSK_H", None)]
+
+if not os.path.exists(CONFIG['TSK_HEADERS_LOCATION']):
+    raise EnvironmentError("Unable to find sleuthkit headers in: /usr/include and /usr/local/include.")
+
+CONFIG['HEADERS'] = [CONFIG['TSK_HEADERS_LOCATION']]
 
 # This is so horrible but less horrible than interfering with
 # distutils
@@ -94,11 +108,11 @@ class Mingw32CCompiler (cygwinccompiler.CygwinCCompiler):
 cygwinccompiler.Mingw32CCompiler = Mingw32CCompiler
 
 BOUND_FILES = ("""
-    %(TSK3_HEADER_LOCATION)s/libtsk.h
-    %(TSK3_HEADER_LOCATION)s/fs/tsk_fs.h
-    %(TSK3_HEADER_LOCATION)s/vs/tsk_vs.h
-    %(TSK3_HEADER_LOCATION)s/base/tsk_base.h
-    %(TSK3_HEADER_LOCATION)s/img/tsk_img.h
+    %(TSK_HEADERS_LOCATION)s/libtsk.h
+    %(TSK_HEADERS_LOCATION)s/fs/tsk_fs.h
+    %(TSK_HEADERS_LOCATION)s/vs/tsk_vs.h
+    %(TSK_HEADERS_LOCATION)s/base/tsk_base.h
+    %(TSK_HEADERS_LOCATION)s/img/tsk_img.h
     tsk3.h
     """ % CONFIG).split()
 
@@ -119,6 +133,7 @@ setup(name='pytsk3',
                              include_dirs=CONFIG['HEADERS'],
                              libraries=CONFIG['LIBRARIES'],
                              library_dirs = CONFIG['LIBRARY_DIRS'],
+                             define_macros = CONFIG['DEFINES'],
                              )
                    ],
       )

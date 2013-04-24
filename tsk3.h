@@ -12,7 +12,14 @@
 # define   	TSK3_H_
 #include "class.h"
 #include "aff4_errors.h"
+
+#if defined( HAVE_TSK3_LIBTSK_H )
 #include <tsk3/libtsk.h>
+#elif defined( HAVE_TSK_LIBTSK_H )
+#include <tsk/libtsk.h>
+#else
+#error Missing libtsk header
+#endif
 
 typedef struct {
   TSK_IMG_INFO base;

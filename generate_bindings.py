@@ -28,17 +28,26 @@ def generate_bindings(target, sources, env = None, initialization='',
 if __name__ == '__main__':
 
     if len(sys.argv) != 2:
-        print "Usage: ./generate_pytsk3.py path_to_source";
+        print "Usage: ./generate_pytsk3.py path_to_source"
         sys.exit(1)
 
-    tsk3_source_path = sys.argv[1]
+    tsk_source_path = sys.argv[1]
+    include_base = "tsk3"
+
+    if not os.path.exists(os.path.join(tsk_source_path, include_base)):
+      # sleuthkit 4.1 changed the names of the include headers.
+      include_base = "tsk"
+
+    if not os.path.exists(os.path.join(tsk_source_path, include_base)):
+        print "Unable to find sleuthkit include headers."
+        sys.exit(1)
 
     sources = [
-      os.path.join(tsk3_source_path, "tsk3", "libtsk.h"),
-      os.path.join(tsk3_source_path, "tsk3", "base", "tsk_base.h"),
-      os.path.join(tsk3_source_path, "tsk3", "fs", "tsk_fs.h"),
-      os.path.join(tsk3_source_path, "tsk3", "img", "tsk_img.h"),
-      os.path.join(tsk3_source_path, "tsk3", "vs", "tsk_vs.h"),
+      os.path.join(tsk_source_path, include_base, "libtsk.h"),
+      os.path.join(tsk_source_path, include_base, "base", "tsk_base.h"),
+      os.path.join(tsk_source_path, include_base, "fs", "tsk_fs.h"),
+      os.path.join(tsk_source_path, include_base, "img", "tsk_img.h"),
+      os.path.join(tsk_source_path, include_base, "vs", "tsk_vs.h"),
       "tsk3.h",
     ]
 
