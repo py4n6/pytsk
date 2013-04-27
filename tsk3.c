@@ -282,7 +282,7 @@ static File Directory_next(Directory self) {
   File result;
   TSK_FS_FILE *info;
 
-  if((self->current < 0) && ((uint64_t)self->current >= (uint64_t)self->size)) {
+  if((self->current < 0) || ((uint64_t)self->current >= (uint64_t)self->size)) {
     return NULL;
   };
 
