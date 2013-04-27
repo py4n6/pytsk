@@ -343,7 +343,7 @@ static uint64_t File_read_random(File self, TSK_OFF_T offset,
                                 TSK_FS_FILE_READ_FLAG_ENUM flags) {
   ssize_t result;
 
-  if(id > 0x7fff) {
+  if(id > 0xffff) {
     RaiseError(EInvalidParameter, "id parameter is invalid.");
     return 0;
   };
