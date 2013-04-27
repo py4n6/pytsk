@@ -55,10 +55,27 @@ extern "C" {
 #define DLL_PUBLIC
 #endif
 
+/* Used by class parser */
 #if defined( _MSC_VER )
 #define UNUSED
 #else
 #define UNUSED __attribute__((unused))
+#endif
+
+#if !defined( PYTSK3_ATTRIBUTE_UNUSED )
+#if defined( __GNUC__ ) && __GNUC__ >= 3
+#define PYTSK3_ATTRIBUTE_UNUSED  __attribute__ ((__unused__))
+#else
+#define PYTSK3_ATTRIBUTE_UNUSED
+#endif
+#endif
+
+#if defined( _MSC_VER )
+#define PYTSK3_UNREFERENCED_PARAMETER( parameter ) \
+	UNREFERENCED_PARAMETER( parameter );
+#else
+#define PYTSK3_UNREFERENCED_PARAMETER( parameter ) \
+	/* parameter */
 #endif
 
 #if !defined( _MSC_VER )

@@ -101,8 +101,8 @@ uint64_t Img_Info_read(Img_Info self, TSK_OFF_T off, OUT char *buf, size_t len) 
 };
 
 // Dont really do anything here
-void Img_Info_close(Img_Info self) {
-
+void Img_Info_close(Img_Info self PYTSK3_ATTRIBUTE_UNUSED) {
+  PYTSK3_UNREFERENCED_PARAMETER(self)
 };
 
 Extended_TSK_IMG_INFO *Img_Info_get_img_info(Img_Info self) {
@@ -132,7 +132,7 @@ uint64_t Img_Info_get_size(Img_Info self) {
   if(self->img)
     return ((TSK_IMG_INFO *)self->img)->size;
 
-  return -1;
+  return (uint64_t)-1;
 };
 
 VIRTUAL(Img_Info, Object) {
@@ -224,7 +224,8 @@ static File FS_Info_open_meta(FS_Info self, TSK_INUM_T inode) {
   return result;
 };
 
-static void FS_Info_exit(FS_Info self) {
+static void FS_Info_exit(FS_Info self PYTSK3_ATTRIBUTE_UNUSED) {
+  PYTSK3_UNREFERENCED_PARAMETER(self)
   exit(0);
 };
 
@@ -281,7 +282,7 @@ static File Directory_next(Directory self) {
   File result;
   TSK_FS_FILE *info;
 
-  if(self->current >= self->size) {
+  if((self->current < 0) && ((uint64_t)self->current >= (uint64_t)self->size)) {
     return NULL;
   };
 
