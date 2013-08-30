@@ -21,7 +21,7 @@ PYTHON_HOME = "%s/.wine/drive_c/Python%s/" % (
 CONFIG = dict(
     TSK_HEADERS_LOCATION = "/usr/include/tsk3/",
     LIBRARY_DIRS = [],
-    LIBRARIES = ['tsk3', 'stdc++'],
+    LIBRARIES = ['tsk3'],
     DEFINES = [("HAVE_TSK3_LIBTSK_H", None)])
 
 if not os.path.exists(CONFIG['TSK_HEADERS_LOCATION']):
@@ -30,18 +30,19 @@ if not os.path.exists(CONFIG['TSK_HEADERS_LOCATION']):
 # sleuthkit 4.1 changed the names of the include headers and the library.
 if not os.path.exists(CONFIG['TSK_HEADERS_LOCATION']):
     CONFIG['TSK_HEADERS_LOCATION'] = "/usr/include/tsk/"
-    CONFIG['LIBRARIES'] = ['tsk', 'stdc++']
+    CONFIG['LIBRARIES'] = ['tsk']
     CONFIG['DEFINES'] = [("HAVE_TSK_LIBTSK_H", None)]
 
 if not os.path.exists(CONFIG['TSK_HEADERS_LOCATION']):
     CONFIG['TSK_HEADERS_LOCATION'] = "/usr/local/include/tsk/"
-    CONFIG['LIBRARIES'] = ['tsk', 'stdc++']
+    CONFIG['LIBRARIES'] = ['tsk']
     CONFIG['DEFINES'] = [("HAVE_TSK_LIBTSK_H", None)]
 
 if not os.path.exists(CONFIG['TSK_HEADERS_LOCATION']):
     raise EnvironmentError("Unable to find sleuthkit headers in: /usr/include and /usr/local/include.")
 
 CONFIG['HEADERS'] = [CONFIG['TSK_HEADERS_LOCATION']]
+CONFIG['LIBRARIES'].append('stdc++')
 
 # This is so horrible but less horrible than interfering with
 # distutils
