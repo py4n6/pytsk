@@ -199,11 +199,11 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\replace.c"
+				RelativePath="..\..\talloc\replace.c"
 				>
 			</File>
 			<File
-				RelativePath="..\..\talloc.c"
+				RelativePath="..\..\talloc\talloc.c"
 				>
 			</File>
 			<File
@@ -233,7 +233,7 @@
 				>
 			</File>
 			<File
-				RelativePath="..\..\talloc.h"
+				RelativePath="..\..\talloc\talloc.h"
 				>
 			</File>
 			<File
