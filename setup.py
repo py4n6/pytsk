@@ -141,6 +141,7 @@ TALLOC_SOURCES = ['talloc/replace.c', 'talloc/talloc.c']
 
 if not have_libtalloc:
     PYTSK_SOURCES += TALLOC_SOURCES
+    CONFIG['HEADERS'].append('talloc/')
 
 setup(name='pytsk3',
       version='0.1',

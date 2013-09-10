@@ -165,7 +165,8 @@ super.add as well.
 extern "C" {
 #endif
 #include "misc.h"
-#include "talloc.h"
+
+#include <talloc.h>
 
 #define CLASS(class,super_class)                                        \
   typedef struct class ## _t *class;                                    \
