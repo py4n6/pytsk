@@ -2,6 +2,11 @@
 Microsoft Visual Studio Solution File, Format Version 10.00
 # Visual C++ Express 2008
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "pytsk3", "pytsk3\pytsk3.vcproj", "{E221DB4C-B254-47CB-993D-DC7FED580DA1}"
+	ProjectSection(ProjectDependencies) = postProject
+		{BD3A95FA-A3DE-4B79-A889-A7E5ECA4B69C} = {BD3A95FA-A3DE-4B79-A889-A7E5ECA4B69C}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "libtalloc", "libtalloc\libtalloc.vcproj", "{BD3A95FA-A3DE-4B79-A889-A7E5ECA4B69C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -13,6 +18,10 @@ Global
 		{E221DB4C-B254-47CB-993D-DC7FED580DA1}.Release|Win32.Build.0 = Release|Win32
 		{E221DB4C-B254-47CB-993D-DC7FED580DA1}.VSDebug|Win32.ActiveCfg = VSDebug|Win32
 		{E221DB4C-B254-47CB-993D-DC7FED580DA1}.VSDebug|Win32.Build.0 = VSDebug|Win32
+		{BD3A95FA-A3DE-4B79-A889-A7E5ECA4B69C}.Release|Win32.ActiveCfg = Release|Win32
+		{BD3A95FA-A3DE-4B79-A889-A7E5ECA4B69C}.Release|Win32.Build.0 = Release|Win32
+		{BD3A95FA-A3DE-4B79-A889-A7E5ECA4B69C}.VSDebug|Win32.ActiveCfg = VSDebug|Win32
+		{BD3A95FA-A3DE-4B79-A889-A7E5ECA4B69C}.VSDebug|Win32.Build.0 = VSDebug|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

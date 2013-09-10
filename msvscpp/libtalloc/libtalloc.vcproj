@@ -2,10 +2,9 @@
 <VisualStudioProject
 	ProjectType="Visual C++"
 	Version="9,00"
-	Name="pytsk3"
-	ProjectGUID="{E221DB4C-B254-47CB-993D-DC7FED580DA1}"
-	RootNamespace="pytsk3"
-	Keyword="Win32Proj"
+	Name="libtalloc"
+	ProjectGUID="{BD3A95FA-A3DE-4B79-A889-A7E5ECA4B69C}"
+	RootNamespace="libtalloc"
 	TargetFrameworkVersion="131072"
 	>
 	<Platforms>
@@ -20,9 +19,8 @@
 			Name="Release|Win32"
 			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
 			IntermediateDirectory="$(ConfigurationName)"
-			ConfigurationType="2"
+			ConfigurationType="4"
 			CharacterSet="1"
-			WholeProgramOptimization="1"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
@@ -41,13 +39,12 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
-				AdditionalIncludeDirectories="..\..\talloc;..\..\..\sleuthkit-3.2.3;C:\Python27\include"
-				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_DEPRECATE;HAVE_TSK3_LIBTSK_H"
+				AdditionalIncludeDirectories="..\..\"
+				PreprocessorDefinitions="_CRT_SECURE_NO_DEPRECATE;WIN32"
+				SmallerTypeCheck="false"
 				RuntimeLibrary="2"
-				UsePrecompiledHeader="0"
 				WarningLevel="4"
-				Detect64BitPortabilityProblems="false"
-				DebugInformationFormat="3"
+				WarnAsError="false"
 				CompileAs="1"
 			/>
 			<Tool
@@ -60,24 +57,13 @@
 				Name="VCPreLinkEventTool"
 			/>
 			<Tool
-				Name="VCLinkerTool"
-				AdditionalDependencies="libauxtools.lib libfstools.lib libimgtools.lib libmmtools.lib"
-				OutputFile="$(OutDir)\$(ProjectName).pyd"
-				LinkIncremental="1"
-				AdditionalLibraryDirectories="&quot;$(OutDir)&quot;;&quot;..\..\..\sleuthkit-3.2.3\win32\Release&quot;;C:\Python27\libs"
-				GenerateDebugInformation="false"
-				SubSystem="1"
-				OptimizeReferences="2"
-				EnableCOMDATFolding="2"
-				RandomizedBaseAddress="1"
-				DataExecutionPrevention="0"
-				TargetMachine="1"
+				Name="VCLibrarianTool"
+				OutputFile="$(OutDir)\libtalloc.lib"
+				ModuleDefinitionFile=""
+				IgnoreAllDefaultLibraries="false"
 			/>
 			<Tool
 				Name="VCALinkTool"
-			/>
-			<Tool
-				Name="VCManifestTool"
 			/>
 			<Tool
 				Name="VCXDCMakeTool"
@@ -89,9 +75,6 @@
 				Name="VCFxCopTool"
 			/>
 			<Tool
-				Name="VCAppVerifierTool"
-			/>
-			<Tool
 				Name="VCPostBuildEventTool"
 			/>
 		</Configuration>
@@ -99,9 +82,8 @@
 			Name="VSDebug|Win32"
 			OutputDirectory="$(SolutionDir)$(ConfigurationName)"
 			IntermediateDirectory="$(ConfigurationName)"
-			ConfigurationType="1"
+			ConfigurationType="4"
 			CharacterSet="1"
-			WholeProgramOptimization="1"
 			>
 			<Tool
 				Name="VCPreBuildEventTool"
@@ -121,14 +103,13 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="..\..\talloc;..\..\..\sleuthkit-3.2.3;C:\Python27\include"
-				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_DEPRECATE;HAVE_TSK3_LIBTSK_H"
+				AdditionalIncludeDirectories="..\..\"
+				PreprocessorDefinitions="_CRT_SECURE_NO_DEPRECATE;WIN32"
 				BasicRuntimeChecks="3"
 				SmallerTypeCheck="true"
 				RuntimeLibrary="3"
-				UsePrecompiledHeader="0"
 				WarningLevel="4"
-				Detect64BitPortabilityProblems="false"
+				WarnAsError="false"
 				DebugInformationFormat="3"
 				CompileAs="1"
 			/>
@@ -142,24 +123,13 @@
 				Name="VCPreLinkEventTool"
 			/>
 			<Tool
-				Name="VCLinkerTool"
-				AdditionalDependencies="libauxtools.lib libfstools.lib libimgtools.lib libmmtools.lib"
-				OutputFile="$(OutDir)\$(ProjectName).pyd"
-				LinkIncremental="1"
-				AdditionalLibraryDirectories="&quot;$(OutDir)&quot;;&quot;..\..\..\sleuthkit-3.2.3\win32\Debug&quot;;C:\Python27\libs"
-				GenerateDebugInformation="true"
-				SubSystem="1"
-				OptimizeReferences="2"
-				EnableCOMDATFolding="2"
-				RandomizedBaseAddress="1"
-				DataExecutionPrevention="0"
-				TargetMachine="1"
+				Name="VCLibrarianTool"
+				OutputFile="$(OutDir)\libtalloc.lib"
+				ModuleDefinitionFile=""
+				IgnoreAllDefaultLibraries="false"
 			/>
 			<Tool
 				Name="VCALinkTool"
-			/>
-			<Tool
-				Name="VCManifestTool"
 			/>
 			<Tool
 				Name="VCXDCMakeTool"
@@ -169,9 +139,6 @@
 			/>
 			<Tool
 				Name="VCFxCopTool"
-			/>
-			<Tool
-				Name="VCAppVerifierTool"
 			/>
 			<Tool
 				Name="VCPostBuildEventTool"
@@ -187,19 +154,11 @@
 			UniqueIdentifier="{4FC737F1-C7A5-4376-A066-2A32D752A2FF}"
 			>
 			<File
-				RelativePath="..\..\class.c"
+				RelativePath="..\..\talloc\replace.c"
 				>
 			</File>
 			<File
-				RelativePath="..\..\error.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\pytsk3.c"
-				>
-			</File>
-			<File
-				RelativePath="..\..\tsk3.c"
+				RelativePath="..\..\talloc\talloc.c"
 				>
 			</File>
 		</Filter>
@@ -209,23 +168,7 @@
 			UniqueIdentifier="{93995380-89BD-4b04-88EB-625FBE52EBFB}"
 			>
 			<File
-				RelativePath="..\..\aff4_errors.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\class.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\misc.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\pytsk3.h"
-				>
-			</File>
-			<File
-				RelativePath="..\..\tsk3.h"
+				RelativePath="..\..\talloc\talloc.h"
 				>
 			</File>
 		</Filter>
