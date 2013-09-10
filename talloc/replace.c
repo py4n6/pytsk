@@ -22,7 +22,7 @@
    License along with this library; if not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "misc.h"
+#include "../misc.h"
 
 /* Have these defines here otherwise some compilers/linkers
  * get confused to build/link the compiled version of the replacement

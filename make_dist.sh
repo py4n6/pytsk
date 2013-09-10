@@ -5,15 +5,17 @@ DATE=`date +"%Y-%m-%d"`;
 
 rm -f pytsk-*.tgz
 
-SOURCE_FILES="\
+PYTSK_SOURCE_FILES="\
     ../pytsk/aff4_errors.h \
     ../pytsk/class.c ../pytsk/class.h \
     ../pytsk/error.c \
     ../pytsk/misc.h \
     ../pytsk/pytsk3.h \
-    ../pytsk/replace.c \
-    ../pytsk/talloc.c ../pytsk/talloc.h \
     ../pytsk/tsk3.c ../pytsk/tsk3.h"
+
+TALLOC_SOURCE_FILES="\
+    ../pytsk/talloc/replace.c \
+    ../pytsk/talloc/talloc.c ../pytsk/talloc/talloc.h"
 
 SCRIPTS="\
     ../pytsk/class_parser.py \
@@ -32,7 +34,8 @@ DATA_FILES="\
     ../pytsk/samples"
 
 FILES="\
-    ${SOURCE_FILES} \
+    ${PYTSK_SOURCE_FILES} \
+    ${TALLOC_SOURCE_FILES} \
     ${SCRIPTS} \
     ${DATA_FILES}"
 

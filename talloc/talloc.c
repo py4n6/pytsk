@@ -30,7 +30,7 @@
   inspired by http://swapped.cc/halloc/
 */
 
-#include "misc.h"
+#include "../misc.h"
 #include "talloc.h"
 
 /* Have these defines here otherwise some compilers/linkers

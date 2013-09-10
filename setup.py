@@ -137,7 +137,7 @@ if not os.access("pytsk3.c", os.F_OK):
 
 # Set up the python extension.
 PYTSK_SOURCES = ['class.c', 'error.c', 'pytsk3.c', 'tsk3.c']
-TALLOC_SOURCES = ['replace.c', 'talloc.c']
+TALLOC_SOURCES = ['talloc/replace.c', 'talloc/talloc.c']
 
 if not have_libtalloc:
     PYTSK_SOURCES += TALLOC_SOURCES
