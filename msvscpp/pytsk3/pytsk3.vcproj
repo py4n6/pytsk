@@ -41,8 +41,8 @@
 			/>
 			<Tool
 				Name="VCCLCompilerTool"
-				AdditionalIncludeDirectories="..\..\talloc;..\..\..\sleuthkit-3.2.3;C:\Python27\include"
-				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_DEPRECATE;HAVE_TSK3_LIBTSK_H"
+				AdditionalIncludeDirectories="..\..\talloc;..\..\..\sleuthkit-4.1.2;C:\Python27\include"
+				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_DEPRECATE;HAVE_TSK_LIBTSK_H"
 				RuntimeLibrary="2"
 				UsePrecompiledHeader="0"
 				WarningLevel="4"
@@ -61,10 +61,10 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="libauxtools.lib libfstools.lib libimgtools.lib libmmtools.lib"
+				AdditionalDependencies="libtsk.lib"
 				OutputFile="$(OutDir)\$(ProjectName).pyd"
 				LinkIncremental="1"
-				AdditionalLibraryDirectories="&quot;$(OutDir)&quot;;&quot;..\..\..\sleuthkit-3.2.3\win32\Release&quot;;C:\Python27\libs"
+				AdditionalLibraryDirectories="&quot;$(OutDir)&quot;;&quot;..\..\..\sleuthkit-4.1.2\vs2008\Release&quot;;C:\Python27\libs"
 				GenerateDebugInformation="false"
 				SubSystem="1"
 				OptimizeReferences="2"
@@ -121,8 +121,8 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="..\..\talloc;..\..\..\sleuthkit-3.2.3;C:\Python27\include"
-				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_DEPRECATE;HAVE_TSK3_LIBTSK_H"
+				AdditionalIncludeDirectories="..\..\talloc;..\..\..\sleuthkit-4.1.2;C:\Python27\include"
+				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE;_CRT_SECURE_NO_DEPRECATE;HAVE_TSK_LIBTSK_H"
 				BasicRuntimeChecks="3"
 				SmallerTypeCheck="true"
 				RuntimeLibrary="3"
@@ -143,10 +143,10 @@
 			/>
 			<Tool
 				Name="VCLinkerTool"
-				AdditionalDependencies="libauxtools.lib libfstools.lib libimgtools.lib libmmtools.lib"
+				AdditionalDependencies="libtsk.lib"
 				OutputFile="$(OutDir)\$(ProjectName).pyd"
 				LinkIncremental="1"
-				AdditionalLibraryDirectories="&quot;$(OutDir)&quot;;&quot;..\..\..\sleuthkit-3.2.3\win32\Debug&quot;;C:\Python27\libs"
+				AdditionalLibraryDirectories="&quot;$(OutDir)&quot;;&quot;..\..\..\sleuthkit-4.1.2\vs2008\Release&quot;;C:\Python27\libs"
 				GenerateDebugInformation="true"
 				SubSystem="1"
 				OptimizeReferences="2"

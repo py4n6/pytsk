@@ -1,0 +1,11 @@
+Talloc is part of the Samba project and can be found at:
+http://talloc.samba.org/talloc/doc/html/index.html
+
+It is licensed under the: GNU Lesser General Public License.
+See the corresponding LICENSE file or http://www.gnu.org/licenses/
+
+The files talloc.c and talloc.h are unaltered copies taken from:
+http://www.samba.org/ftp/talloc/talloc-2.1.0.tar.gz
+
+replace.h was added to force talloc.c to compile on various systems.
+

@@ -7,15 +7,20 @@ rm -f pytsk-*.tgz
 
 PYTSK_SOURCE_FILES="\
     ../pytsk/aff4_errors.h \
-    ../pytsk/class.c ../pytsk/class.h \
+    ../pytsk/class.c \
+    ../pytsk/class.h \
     ../pytsk/error.c \
     ../pytsk/misc.h \
     ../pytsk/pytsk3.h \
-    ../pytsk/tsk3.c ../pytsk/tsk3.h"
+    ../pytsk/tsk3.c \
+    ../pytsk/tsk3.h"
 
 TALLOC_SOURCE_FILES="\
-    ../pytsk/talloc/replace.c \
-    ../pytsk/talloc/talloc.c ../pytsk/talloc/talloc.h"
+    ../pytsk/talloc/LICENSE \
+    ../pytsk/talloc/README \
+    ../pytsk/talloc/replace.h \
+    ../pytsk/talloc/talloc.c \
+    ../pytsk/talloc/talloc.h"
 
 SCRIPTS="\
     ../pytsk/class_parser.py \
