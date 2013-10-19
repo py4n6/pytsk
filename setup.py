@@ -39,7 +39,7 @@ if len(results) == 1:
     elif results[0].endswith('tsk'):
         TSK_HEADERS_PATH = results[0]
 
-if not os.path.exists(TSK_HEADERS_PATH):
+if not TSK_HEADERS_PATH or not os.path.exists(TSK_HEADERS_PATH):
     raise EnvironmentError('Unable to locate SleuthKit header files.')
 
 print 'Sleuthkit headers found in: %s' % TSK_HEADERS_PATH
