@@ -106,7 +106,7 @@ if platform.system() == 'Windows':
     if len(results) == 1:
         TSK_LIBRARIES_PATH = os.path.dirname(results[0])
 
-    if not os.path.exists(TSK_LIBRARIES_PATH):
+    if not TSK_LIBRARIES_PATH or not os.path.exists(TSK_LIBRARIES_PATH):
         raise EnvironmentError('Unable to locate SleuthKit libraries path.')
 
     CONFIG['LIBRARY_DIRS'].append(TSK_LIBRARIES_PATH)
