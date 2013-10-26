@@ -99,13 +99,18 @@ extern "C" {
 #define MAX(a,b) ((a)>(b)?(a):(b))
 #endif
 
-#if defined( _MSC_VER ) 
+#if defined( _MSC_VER )
+#if !defined( HAVE_SSIZE_T )
+#define HAVE_SSIZE_T
+
 #if defined( MS_WIN64 )
 typedef __int64 ssize_t;
 #else
 typedef _W64 int ssize_t;
 #endif
-#endif
+
+#endif /* !defined( HAVE_SSIZE_T ) */
+#endif /* defined( _MSC_VER ) */
 
 #if defined( WIN32 )
 #define MSG_NOSIGNAL 0
