@@ -101,6 +101,10 @@ if platform.system() == 'Windows':
 
     if len(results) == 0:
         results = glob.glob(os.path.join(
+            TSK_PATH, 'win32', 'x64', 'Release', '%s.lib' % CONFIG['LIBRARIES'][0]))
+
+    if len(results) == 0:
+        results = glob.glob(os.path.join(
             TSK_PATH, 'vs2008', 'Release', '%s.lib' % CONFIG['LIBRARIES'][0]))
 
     if len(results) == 1:
