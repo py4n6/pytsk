@@ -34,13 +34,18 @@ if len(results) == 0:
 if len(results) == 1:
     if results[0].endswith('tsk3'):
         TSK_HEADERS_PATH = results[0]
+        TSK_HEADERS_SUBDIR = 'tsk3'
 
     # SleuthKit 4.1 changed the names of the include headers and the library.
     elif results[0].endswith('tsk'):
         TSK_HEADERS_PATH = results[0]
+        TSK_HEADERS_SUBDIR = 'tsk'
 
 if not TSK_HEADERS_PATH or not os.path.exists(TSK_HEADERS_PATH):
     raise EnvironmentError('Unable to locate SleuthKit header files.')
+
+# Remove the headers sub directory from the headers path.
+TSK_HEADERS_PATH = os.path.dirname(TSK_HEADERS_PATH)
 
 print 'Sleuthkit headers found in: %s' % TSK_HEADERS_PATH
 
@@ -49,7 +54,7 @@ print 'Sleuthkit headers found in: %s' % TSK_HEADERS_PATH
 TSK_VERSION = None
 
 file_object = open(os.path.join(
-    TSK_HEADERS_PATH, 'base', 'tsk_base.h'))
+    TSK_HEADERS_PATH, TSK_HEADERS_SUBDIR, 'base', 'tsk_base.h'))
 
 for line in file_object.readlines():
     if line.startswith('#define TSK_VERSION_STR "'):
@@ -71,15 +76,8 @@ CONFIG = dict(
 
 CONFIG['HEADERS'] = [TSK_HEADERS_PATH]
 
-# For a relative SleuthKit header files location we need to include
-# its parent directory.
-TSK_PATH = os.path.dirname(TSK_HEADERS_PATH)
-
-if relative_path:
-    CONFIG['HEADERS'].append(TSK_PATH)
-
 if platform.system() == 'Windows':
-    if TSK_HEADERS_PATH.endswith('tsk3'):
+    if TSK_HEADERS_SUBDIR == 'tsk3':
         CONFIG['LIBRARIES'].append('libauxtools')
         CONFIG['LIBRARIES'].append('libfstools')
         CONFIG['LIBRARIES'].append('libimgtools')
@@ -87,7 +85,7 @@ if platform.system() == 'Windows':
         CONFIG['DEFINES'].append(('HAVE_TSK3_LIBTSK_H', None))
 
     # SleuthKit 4.1 changed the names of the include headers and the library.
-    elif TSK_HEADERS_PATH.endswith('tsk'):
+    elif TSK_HEADERS_SUBDIR == 'tsk':
         CONFIG['LIBRARIES'].append('libtsk')
         CONFIG['DEFINES'].append(('HAVE_TSK_LIBTSK_H', None))
 
@@ -97,15 +95,15 @@ if platform.system() == 'Windows':
 
     # Find the SleuthKit libraries path.
     results = glob.glob(os.path.join(
-        TSK_PATH, 'win32', 'Release', '%s.lib' % CONFIG['LIBRARIES'][0]))
+        TSK_HEADERS_PATH, 'win32', 'Release', '%s.lib' % CONFIG['LIBRARIES'][0]))
 
     if len(results) == 0:
         results = glob.glob(os.path.join(
-            TSK_PATH, 'win32', 'x64', 'Release', '%s.lib' % CONFIG['LIBRARIES'][0]))
+            TSK_HEADERS_PATH, 'win32', 'x64', 'Release', '%s.lib' % CONFIG['LIBRARIES'][0]))
 
     if len(results) == 0:
         results = glob.glob(os.path.join(
-            TSK_PATH, 'vs2008', 'Release', '%s.lib' % CONFIG['LIBRARIES'][0]))
+            TSK_HEADERS_PATH, 'vs2008', 'Release', '%s.lib' % CONFIG['LIBRARIES'][0]))
 
     if len(results) == 1:
         TSK_LIBRARIES_PATH = os.path.dirname(results[0])
@@ -118,14 +116,19 @@ if platform.system() == 'Windows':
     CONFIG['LIBRARY_DIRS'].append(TSK_LIBRARIES_PATH)
 
 else:
-    if TSK_HEADERS_PATH.endswith('tsk3'):
+    if TSK_HEADERS_SUBDIR == 'tsk3':
         CONFIG['LIBRARIES'] = ['tsk3']
         CONFIG['DEFINES'] = [('HAVE_TSK3_LIBTSK_H', None)]
 
     # SleuthKit 4.1 changed the names of the include headers and the library.
-    elif TSK_HEADERS_PATH.endswith('tsk'):
+    elif TSK_HEADERS_SUBDIR == 'tsk':
         CONFIG['LIBRARIES'] = ['tsk']
         CONFIG['DEFINES'] = [('HAVE_TSK_LIBTSK_H', None)]
+
+    if relative_path:
+        TSK_LIBRARIES_PATH = os.path.join(TSK_HEADERS_PATH, TSK_HEADERS_SUBDIR, '.libs')
+
+        CONFIG['LIBRARY_DIRS'].append(TSK_LIBRARIES_PATH)
 
     # On non-Windows platforms the inclusion of libstdc++ needs to forced,
     # because some builds of the SleuthKit forget to explicitly link against it.
@@ -210,11 +213,11 @@ else:
 
 # Generate the pytsk3.c code.
 BOUND_FILES = [
-   '%s/libtsk.h' % TSK_HEADERS_PATH,
-   '%s/fs/tsk_fs.h' % TSK_HEADERS_PATH,
-   '%s/vs/tsk_vs.h' % TSK_HEADERS_PATH,
-   '%s/base/tsk_base.h' % TSK_HEADERS_PATH,
-   '%s/img/tsk_img.h' % TSK_HEADERS_PATH,
+   os.path.join(TSK_HEADERS_PATH, TSK_HEADERS_SUBDIR, 'libtsk.h'),
+   os.path.join(TSK_HEADERS_PATH, TSK_HEADERS_SUBDIR, 'base', 'tsk_base.h'),
+   os.path.join(TSK_HEADERS_PATH, TSK_HEADERS_SUBDIR, 'fs', 'tsk_fs.h'),
+   os.path.join(TSK_HEADERS_PATH, TSK_HEADERS_SUBDIR, 'img', 'tsk_img.h'),
+   os.path.join(TSK_HEADERS_PATH, TSK_HEADERS_SUBDIR, 'vs', 'tsk_vs.h'),
    'tsk3.h']
 
 if not os.access('pytsk3.c', os.F_OK):
