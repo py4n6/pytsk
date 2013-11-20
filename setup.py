@@ -128,7 +128,16 @@ else:
     if relative_path:
         TSK_LIBRARIES_PATH = os.path.join(TSK_HEADERS_PATH, TSK_HEADERS_SUBDIR, '.libs')
 
-        CONFIG['LIBRARY_DIRS'].append(TSK_LIBRARIES_PATH)
+    else:
+        TSK_LIBRARIES_PATH = os.path.join(TSK_HEADERS_PATH, 'lib')
+
+        if not os.path.exists(TSK_LIBRARIES_PATH):
+            TSK_LIBRARIES_PATH = os.path.join(TSK_HEADERS_PATH, 'lib64')
+
+    if not os.path.exists(TSK_LIBRARIES_PATH):
+        raise EnvironmentError('Unable to locate SleuthKit libraries path.')
+
+    CONFIG['LIBRARY_DIRS'].append(TSK_LIBRARIES_PATH)
 
     # On non-Windows platforms the inclusion of libstdc++ needs to forced,
     # because some builds of the SleuthKit forget to explicitly link against it.
