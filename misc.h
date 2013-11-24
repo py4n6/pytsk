@@ -16,6 +16,11 @@
 #include <stdio.h>
 
 #else
+/* sys/types.h needs to be included before sys/socket.h on
+ * some platforms like FreeBSD.
+ */
+#include <sys/types.h>
+
 #include <sys/socket.h>
 #include <netinet/tcp.h>
 #include <netinet/in.h>
@@ -27,7 +32,6 @@
 #include <time.h>
 #include <libgen.h>
 #include <sys/stat.h>
-#include <sys/types.h>
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>

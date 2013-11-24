@@ -129,10 +129,12 @@ else:
         TSK_LIBRARIES_PATH = os.path.join(TSK_HEADERS_PATH, TSK_HEADERS_SUBDIR, '.libs')
 
     else:
-        TSK_LIBRARIES_PATH = os.path.join(TSK_HEADERS_PATH, 'lib')
+        tsk_library_base_path = os.path.dirname(TSK_HEADERS_PATH)
+
+        TSK_LIBRARIES_PATH = os.path.join(tsk_library_base_path, 'lib')
 
         if not os.path.exists(TSK_LIBRARIES_PATH):
-            TSK_LIBRARIES_PATH = os.path.join(TSK_HEADERS_PATH, 'lib64')
+            TSK_LIBRARIES_PATH = os.path.join(tsk_library_base_path, 'lib64')
 
     if not os.path.exists(TSK_LIBRARIES_PATH):
         raise EnvironmentError('Unable to locate SleuthKit libraries path.')
@@ -239,6 +241,7 @@ TALLOC_SOURCES = ['talloc/talloc.c']
 if not have_libtalloc:
     PYTSK_SOURCES += TALLOC_SOURCES
     CONFIG['HEADERS'].append('talloc')
+    CONFIG['LIBRARY_DIRS'].append('talloc')
 
 setup(name='pytsk3',
       version=TSK_VERSION,
