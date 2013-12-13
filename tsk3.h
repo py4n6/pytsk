@@ -1,17 +1,21 @@
-/*
-** tsk3.h
-**
-** Made by mic
-** Login   <mic@laptop>
-**
-** Started on  Fri Apr 16 10:01:14 2010 mic
-** Last update Fri Apr 16 10:01:14 2010 mic
-*/
-
-#ifndef   	TSK3_H_
-# define   	TSK3_H_
-#include "class.h"
-#include "aff4_errors.h"
+/* SleuthKit functions.
+ *
+ * Copyright 2010, Michael Cohen <sucdette@gmail.com>.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#if !defined( TSK3_H_ )
+#define TSK3_H_
 
 #if defined( HAVE_TSK3_LIBTSK_H )
 #include <tsk3/libtsk.h>
@@ -20,6 +24,9 @@
 #else
 #error Missing libtsk header
 #endif
+
+#include "class.h"
+#include "aff4_errors.h"
 
 typedef struct {
   TSK_IMG_INFO base;
@@ -231,4 +238,4 @@ END_CLASS
 
 void tsk_init(void);
 
-#endif      /* !TSK3_H_ */
+#endif /* !TSK3_H_ */

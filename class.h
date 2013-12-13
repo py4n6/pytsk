@@ -1,4 +1,23 @@
-/***************************************************
+/* C class and object types functions.
+ *
+ * Copyright 2013, Michael Cohen <sucdette@gmail.com>.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#ifndef __CLASS_H__
+#define __CLASS_H__
+
+/*
   Classes and objects in C
 
   This file makes it easy to implement classes and objects in C. To
@@ -143,27 +162,10 @@ methods as well, in this case the VIRTUAL section should over ride
 super.add as well.
 
 */
-/*******************************************************************
-   Copyright 2013 Michael Cohen
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-   http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
-********************************************************************/
-#ifndef __CLASS_H__
-#define __CLASS_H__
-
 #ifdef __cplusplus
 extern "C" {
 #endif
+
 #include "misc.h"
 
 #include <talloc.h>
@@ -187,29 +189,24 @@ extern "C" {
 #define CLASS_METHOD(name, ... )                \
   (*name)(__VA_ARGS__)
 
-/***************************************************
-   This is a convenience macro which may be used if x if really large
-
-***************************************************/
+/* This is a convenience macro which may be used if x if really large */
 #define CALL(x, method, ... )			\
   (x)->method((x), ## __VA_ARGS__)
 
 #define END_CLASS };
 
-/***************************************************
-   This is used to set the classes up for use:
-
-   class_init = checks the class template (__class) to see if it has
-   been allocated. otherwise allocates it in the global context.
-
-   class_Alloc = Allocates new memory for an instance of the
-   class. This is a recursive function calling each super class in
-   turn and setting the currently over ridden defaults. So for eample
-   suppose this class (foo) derives from bar, we first fill the
-   template with bars methods, and attributes. Then we over write
-   those with foos methods and attributes.
-
-**********************************************************/
+/* This is used to set the classes up for use:
+ *
+ * class_init = checks the class template (__class) to see if it has
+ * been allocated. otherwise allocates it in the global context.
+ *
+ * class_Alloc = Allocates new memory for an instance of the
+ * class. This is a recursive function calling each super class in
+ * turn and setting the currently over ridden defaults. So for eample
+ * suppose this class (foo) derives from bar, we first fill the
+ * template with bars methods, and attributes. Then we over write
+ * those with foos methods and attributes.
+ */
 #define VIRTUAL(class,superclass)                                       \
   struct class ## _t __ ## class;                                       \
                                                                         \
@@ -258,31 +255,29 @@ extern "C" {
 #define INIT_CLASS(class)                       \
   class ## _init((Object)&__ ## class)
 
-/*************************************************************
-   This MACRO is used to construct a new Class using a constructor.
-
-    This is done to try and hide the bare (unbound) method names in
-    order to prevent name space pollution. (Bare methods may be
-    defined as static within the implementation file). This macro
-    ensures that class structures are initialised properly before
-    calling their constructors.
-
-   We require the following args:
-    class - the type of class to make
-    virt_class - The class where the method was defined
-    constructors - The constructor method to use
-    context - a talloc context to use.
-
-
-    Note that the class and virt_class do not have to be the same if
-    the method was not defined in the current class. For example
-    suppose Foo extends Bar, but method is defined in Bar but
-    inherited in Foo:
-
-    CONSTRUCT(Foo, Bar, super.method, context)
-
-    virt_class is Bar because thats where method was defined.
-*************************************************************/
+/* This MACRO is used to construct a new Class using a constructor.
+ *
+ * This is done to try and hide the bare (unbound) method names in
+ * order to prevent name space pollution. (Bare methods may be
+ * defined as static within the implementation file). This macro
+ * ensures that class structures are initialised properly before
+ * calling their constructors.
+ *
+ * We require the following args:
+ *  class - the type of class to make
+ *  virt_class - The class where the method was defined
+ *  constructors - The constructor method to use
+ *  context - a talloc context to use.
+ *
+ *  Note that the class and virt_class do not have to be the same if
+ *  the method was not defined in the current class. For example
+ *  suppose Foo extends Bar, but method is defined in Bar but
+ *  inherited in Foo:
+ *
+ *  CONSTRUCT(Foo, Bar, super.method, context)
+ *
+ *  virt_class is Bar because thats where method was defined.
+ */
 
 // The following only initialises the class if the __super__ element
 // is NULL. This is fast as it wont call the initaliser unnecessaily
@@ -304,15 +299,15 @@ extern "C" {
       (virt_class)_talloc_memdup(context, &__ ## class, sizeof(struct class ## _t),  __location__ "(" #class ")"), \
 				   ## __VA_ARGS__) )
 
-/** This variant is useful when all we have is a class reference
-    (GETCLASS(Foo)) or &__Foo
-*/
+/* This variant is useful when all we have is a class reference
+ *   (GETCLASS(Foo)) or &__Foo
+ */
 #define CONSTRUCT_FROM_REFERENCE(class, constructor, context, ... )	\
   ( (class)->constructor(						\
                        (void *)_talloc_memdup(context, ((Object)class), ((Object)class)->__size,  __location__ "(" #class "." #constructor ")"), \
 		      ## __VA_ARGS__) )
 
-/** Finds the size of the class in x */
+/* Finds the size of the class in x */
 #define CLASS_SIZE(class)			\
   ((Object)class)->__size
 

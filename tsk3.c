@@ -1,28 +1,19 @@
-/*
-** tsk3.c
-**
-** Made by (mic)
-** Login   <mic@laptop>
-**
-** Started on  Fri Apr 16 10:01:04 2010 mic
-** Last update Sun May 12 01:17:25 2002 Speed Blue
-
-Copyright 2010 Michael Cohen
-
-   Licensed under the Apache License, Version 2.0 (the "License");
-   you may not use this file except in compliance with the License.
-   You may obtain a copy of the License at
-
-       http://www.apache.org/licenses/LICENSE-2.0
-
-   Unless required by applicable law or agreed to in writing, software
-   distributed under the License is distributed on an "AS IS" BASIS,
-   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-   See the License for the specific language governing permissions and
-   limitations under the License.
-
-*/
-
+/* SleuthKit functions.
+ *
+ * Copyright 2010, Michael Cohen <sucdette@gmail.com>.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 #include "tsk3.h"
 
 /* TODO: sdd version check, e.g. " && ( TSK_VERSION_NUM <= 0x04000001 )"
@@ -33,13 +24,15 @@ extern void tsk_init_lock(tsk_lock_t * lock);
 extern void tsk_deinit_lock(tsk_lock_t * lock);
 #endif
 
-/** Prototypes for IMG_INFO hooks */
+/* Prototypes for IMG_INFO hooks
+ * Note that IMG_INFO_read is called by the SleuthKit the Img_Info_read
+ * is its equivalent called by the pytsk3 when no proxy object is defined.
+ */
 ssize_t IMG_INFO_read(TSK_IMG_INFO *self, TSK_OFF_T off, char *buf, size_t len);
 void IMG_INFO_close(TSK_IMG_INFO *self);
 
-/** This macro is used to receive the object reference from a
-    member of the type.
-*/
+/* This macro is used to receive the object reference from a member of the type.
+ */
 #define GET_Object_from_member(type, object, member)                    \
   (type)(((char *)object) - (unsigned long)(&((type)0)->member))
 
@@ -92,14 +85,21 @@ static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type) {
 };
 
 uint64_t Img_Info_read(Img_Info self, TSK_OFF_T off, OUT char *buf, size_t len) {
-  ssize_t result = CALL((TSK_IMG_INFO *)self->img, read, off, buf, len);
-  if (result < 0) {
+  ssize_t read_count = 0;
+
+  if (off < 0) {
+    RaiseError(EIOError, "Invalid offset value out of bounds.");
+    return 0;
+  };
+
+  read_count = CALL((TSK_IMG_INFO *)self->img, read, off, buf, len);
+  if (read_count < 0) {
     RaiseError(EIOError, "Unable to read image: %s", tsk_error_get());
     tsk_error_reset();
     return 0;
   };
 
-  return result;
+  return read_count;
 };
 
 // Dont really do anything here

@@ -1,20 +1,18 @@
-import sys, os, re, pdb, StringIO
-
-# Copyright 2010 Michael Cohen
+#!/usr/bin/python
 #
-#    Licensed under the Apache License, Version 2.0 (the "License");
-#    you may not use this file except in compliance with the License.
-#    You may obtain a copy of the License at
+# Copyright 2010, Michael Cohen <scudette@gmail.com>.
 #
-#        http://www.apache.org/licenses/LICENSE-2.0
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
 #
-#    Unless required by applicable law or agreed to in writing, software
-#    distributed under the License is distributed on an "AS IS" BASIS,
-#    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-#    See the License for the specific language governing permissions and
-#    limitations under the License.
-
-
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """
 Documentation regarding the python bounded code.
 
@@ -224,12 +222,21 @@ get freed until we are finished with it.
              (e.g. if C1 is freed). We therefore increase C2's
              reference count using aff4_incref();
 """
+
+import os
+import pdb
+import re
+import StringIO
+import sys
+
+
 DEBUG = 0
 
 ## These functions are used to manage library memory
 FREE = "aff4_free"
 INCREF = "aff4_incref"
 CURRENT_ERROR_FUNCTION = "aff4_get_current_error"
+CONSTANTS_BLACKLIST = ["TSK3_H_"]
 
 def log(msg):
     if DEBUG>0:
@@ -249,6 +256,7 @@ class Module:
     def __init__(self, name):
         self.name = name
         self.constants = set()
+        self.constants_blacklist = CONSTANTS_BLACKLIST
         self.classes = {}
         self.headers = '#include <Python.h>\n'
         self.files = []
@@ -2778,7 +2786,8 @@ END_CLASS
             type = 'integer'
 
         name = m.group(1).strip()
-        if len(name)>3 and name[0]!='_' and name==name.upper():
+        if (len(name) > 3 and name[0] != '_' and name == name.upper() and
+            name not in self.module.constants_blacklist):
             self.module.add_constant(name, type)
 
     current_class = None

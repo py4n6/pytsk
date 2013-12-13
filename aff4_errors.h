@@ -1,15 +1,21 @@
-/*
-** aff4_errors.h
-**
-** Made by mic
-** Login   <mic@laptop>
-**
-** Started on  Sat Mar  6 20:54:25 2010 mic
-** Last update Sat Mar  6 20:54:25 2010 mic
-*/
-
-#ifndef   	AFF4_ERRORS_H_
-# define   	AFF4_ERRORS_H_
+/* AFF4 error functions.
+ *
+ * Copyright 2010, Michael Cohen <sucdette@gmail.com>.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+#ifndef AFF4_ERRORS_H_
+# define AFF4_ERRORS_H_
 
 #include "class.h"
 
@@ -66,4 +72,4 @@ DLL_PUBLIC int *aff4_get_current_error(char **error_str);
 
 #define POP_ERROR_STATE *tmp_error_p = tmp_error;};
 
-#endif 	    /* !AFF4_ERRORS_H_ */
+#endif /* !AFF4_ERRORS_H_ */

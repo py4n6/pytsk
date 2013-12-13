@@ -1,21 +1,27 @@
-/*
-** error.c
-**
-** Made by (mic)
-** Login   <mic@laptop>
-**
-** Started on  Mon Mar 15 20:45:09 2010 mic
-** Last update Sun May 12 01:17:25 2002 Speed Blue
-*/
-
-//#include "misc.h"
-#include "class.h"
+/* Error functions.
+ *
+ * Copyright 2010, Michael Cohen <sucdette@gmail.com>.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 #include <string.h>
-#include "aff4_errors.h"
 
 #if !defined( WIN32 )
 #include <pthread.h>
 #endif
+
+#include "aff4_errors.h"
+#include "class.h"
 
 #define ERROR_BUFF_SIZE 10240
 
