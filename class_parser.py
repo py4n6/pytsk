@@ -960,7 +960,7 @@ class TDB_DATA_P(Char_and_Length_OUT):
     def from_python_object(self, source, destination, method, **kw):
         method.error_set = True
         return """
-%(destination)s = talloc(self, %(bare_type)s);
+%(destination)s = talloc_zero(self, %(bare_type)s);
 { Py_ssize_t tmp; char *buf;
 
   PyErr_Clear();
@@ -1553,7 +1553,6 @@ if(!self->base) return PyErr_Format(PyExc_RuntimeError, "%(class_name)s object n
 
         out.write("""// Check the function is implemented
 {
-  %(class_name)s cbase = (%(class_name)s)((Object)self->base)->__class__;
   void *method = ((%(def_class_name)s)self->base)->%(method)s;
 
   if(!method || (void *)unimplemented == (void *)method) {
@@ -1564,7 +1563,7 @@ if(!self->base) return PyErr_Format(PyExc_RuntimeError, "%(class_name)s object n
            class_name = self.class_name))
 
         out.write("\n// Make the call\n ClearError();")
-        call = "((%s)cbase)->%s(((%s)self->base)" % (self.definition_class_name, self.name, self.definition_class_name)
+        call = "((%s)self->base)->%s(((%s)self->base)" % (self.definition_class_name, self.name, self.definition_class_name)
         tmp = ''
         for type in self.args:
             tmp += ", " + type.call_arg()
@@ -1744,11 +1743,19 @@ static void py%(class_name)s_initialize_proxies(py%(class_name)s *self, void *it
 
         out.write("""static void
 %(class_name)s_dealloc(py%(class_name)s *self) {
- if(self->base) {
-   %(free)s(self->base);
-   self->base = NULL;
- };
-// PyObject_Del(self);
+  if(self != NULL) {
+    if(self->base != NULL) {
+      if(self->base_is_proxied == 0) {
+        %(free)s(self->base);
+      } else {
+        Py_DecRef((PyObject*)self->base);
+      }
+      self->base = NULL;
+    }
+    if(self->ob_type != NULL && self->ob_type->tp_free != NULL) {
+      self->ob_type->tp_free((PyObject*)self);
+    }
+  }
 };\n
 """ % dict(class_name = self.class_name, free=free))
 
@@ -1766,6 +1773,8 @@ static void py%(class_name)s_initialize_proxies(py%(class_name)s *self, void *it
      ((Object)item)->extension = self;
 
      self->base = target;
+     Py_IncRef((PyObject *)self->base);
+     self->base_is_proxied = 1;
 """ % self.__dict__)
 
         ## Install proxies for all the method in the current class
@@ -2140,13 +2149,12 @@ class StructConstructor(ConstructorMethod):
  if(self->base) {
    self->base = NULL;
  };
- PyObject_Del(self);
 };\n
 """ % dict(class_name = self.class_name))
 
     def write_definition(self, out):
         out.write("""static int py%(class_name)s_init(py%(class_name)s *self, PyObject *args, PyObject *kwds) {\n""" % dict(method = self.name, class_name = self.class_name))
-        out.write("\nself->base = talloc(NULL, %s);\n" % self.class_name)
+        out.write("\nself->base = talloc_zero(NULL, %s);\n" % self.class_name)
         out.write("  return 0;\n};\n\n")
 
 class EmptyConstructor(ConstructorMethod):
@@ -2244,6 +2252,7 @@ class ClassGenerator:
         out.write("""\ntypedef struct {
   PyObject_HEAD
   %(class_name)s base;
+  int base_is_proxied;
 
   void (*initialise)(Gen_wrapper self, void *item);
 } py%(class_name)s;\n
@@ -2485,7 +2494,6 @@ class EnumConstructor(ConstructorMethod):
         out.write("""static void
 %(class_name)s_dealloc(py%(class_name)s *self) {
  Py_DecRef(self->value);
- PyObject_Del(self);
 };\n
 """ % dict(class_name = self.class_name))
     def write_definition(self, out):

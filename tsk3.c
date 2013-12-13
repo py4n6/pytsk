@@ -80,6 +80,7 @@ static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type) {
 
   if(!self->img) {
     RaiseError(EIOError, "Unable to open image: %s", tsk_error_get());
+    tsk_error_reset();
     goto error;
   };
 
@@ -94,6 +95,7 @@ uint64_t Img_Info_read(Img_Info self, TSK_OFF_T off, OUT char *buf, size_t len) 
   ssize_t result = CALL((TSK_IMG_INFO *)self->img, read, off, buf, len);
   if (result < 0) {
     RaiseError(EIOError, "Unable to read image: %s", tsk_error_get());
+    tsk_error_reset();
     return 0;
   };
 
@@ -178,6 +180,7 @@ static FS_Info FS_Info_Con(FS_Info self, Img_Info img, TSK_OFF_T offset,
   if(!self->info) {
     RaiseError(EIOError, "Unable to open the image as a filesystem: %s",
                tsk_error_get());
+    tsk_error_reset();
     goto error;
   };
 
@@ -202,6 +205,7 @@ static File FS_Info_open(FS_Info self, ZString path) {
 
   if(!handle) {
     RaiseError(EIOError, "Cant open file: %s", tsk_error_get());
+    tsk_error_reset();
     return NULL;
   };
 
@@ -216,6 +220,7 @@ static File FS_Info_open_meta(FS_Info self, TSK_INUM_T inode) {
 
   if(!handle) {
     RaiseError(EIOError, "Cant open file: %s", tsk_error_get());
+    tsk_error_reset();
     return NULL;
   };
 
@@ -260,6 +265,7 @@ static Directory Directory_Con(Directory self, FS_Info fs,
 
   if(!self->info) {
     RaiseError(EIOError, "Unable to open directory: %s", tsk_error_get());
+    tsk_error_reset();
     goto error;
   };
 
@@ -289,6 +295,7 @@ static File Directory_next(Directory self) {
   info = tsk_fs_dir_get(self->info, self->current);
   if(!info) {
     RaiseError(EIOError, "Error opening File: %s", tsk_error_get());
+    tsk_error_reset();
     return NULL;
   };
 
@@ -355,6 +362,7 @@ static uint64_t File_read_random(File self, TSK_OFF_T offset,
 
   if(result < 0) {
     RaiseError(EIOError, "Read error: %s", tsk_error_get());
+    tsk_error_reset();
     return 0;
   };
 
@@ -385,6 +393,7 @@ static Attribute File_iternext(File self) {
   attribute = (TSK_FS_ATTR *)tsk_fs_file_attr_get_idx(self->info, self->current_attr);
   if(!attribute)  {
     RaiseError(EIOError, "Error opening File: %s", tsk_error_get());
+    tsk_error_reset();
     return NULL;
   };
 
