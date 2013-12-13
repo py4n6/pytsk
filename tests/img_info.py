@@ -99,7 +99,7 @@ class TSKImgInfoTest(unittest.TestCase):
     self.assertEquals(img_info.read(0x7c00, 16), 'This is another ')
 
     # Conforming to the POSIX seek the offset can exceed the file size
-    # but reading will result in no data being returned. Note that pytsk3
+    # but reading will result in no data being returned. Note that the SleuthKit
     # does not conform to the posix standard and will raise and IO error.
     with self.assertRaises(IOError):
       img_info.read(0x19000, 16)
