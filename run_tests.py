@@ -84,7 +84,7 @@ if __name__ == '__main__':
     print 'Unable to find pytsk3.so in build directory.'
     sys.exit(1)
 
-  sys.path.append(results[0])
+  sys.path.insert(0, results[0])
 
   test_results = RunTests(os.path.join('.', 'tests'))
 
