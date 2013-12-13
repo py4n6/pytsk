@@ -27,7 +27,9 @@ SCRIPTS="\
     ../pytsk/generate_bindings.py \
     ../pytsk/lexer.py \
     ../pytsk/make_dist.sh \
-    ../pytsk/setup.py"
+    ../pytsk/run_tests.py \
+    ../pytsk/setup.py \
+    ../pytsk/tests/*.py"
 
 DATA_FILES="\
     ../pytsk/LICENSE \
@@ -36,7 +38,8 @@ DATA_FILES="\
     ../pytsk/README \
     ../pytsk/dpkg \
     ../pytsk/msvscpp \
-    ../pytsk/samples"
+    ../pytsk/samples \
+    ../pytsk/test_data"
 
 FILES="\
     ${PYTSK_SOURCE_FILES} \
