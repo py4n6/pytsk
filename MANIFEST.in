@@ -1,3 +1,8 @@
-include LICENSE *.h *.py *.c
-recursive-include samples/ talloc/ *
+include LICENSE *.c *.h *.py
 exclude pytsk3.c
+recursive-include dpkg *
+recursive-include msvscpp *
+recursive-include samples *.py
+recursive-include talloc *
+recursive-include test_data *
+recursive-include tests *.py

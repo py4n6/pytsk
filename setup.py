@@ -278,10 +278,10 @@ setup(
     description = 'Python bindings for the sleuthkit',
     long_description = (
         'Python bindings for the sleuthkit (http://www.sleuthkit.org/)'),
+    license = 'Apache 2.0',
+    url = 'http://code.google.com/p/pytsk/',
     author = 'Michael Cohen',
     author_email = 'scudette@gmail.com',
-    url = 'http://code.google.com/p/pytsk/',
-    license = 'Apache 2.0',
     cmdclass = {'test': TestCommand},
     ext_modules = [
         Extension(
