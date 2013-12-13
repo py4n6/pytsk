@@ -1331,34 +1331,49 @@ class PyObject(Type):
         return "&%s" % self.name
 
 type_dispatcher = {
-    "IN char *": String,
     "IN unsigned char *": String,
+    "IN char *": String,
+
     "unsigned char *": String,
     "char *": String,
+
     "ZString": ZString,
 
-    "OUT char *": StringOut,
     "OUT unsigned char *": StringOut,
-    "unsigned int": Integer,
-    'int': Integer,
+    "OUT char *": StringOut,
+
     'OUT uint64_t *': PInteger64Out,
     'OUT uint32_t *': PInteger32Out,
-    'char': Char,
-    'void': Void,
+
     'void *': PVoid,
+    'void': Void,
 
     'TDB_DATA *': TDB_DATA_P,
     'TDB_DATA': TDB_DATA,
-    'uint64_t': Integer64,
     'TSK_INUM_T': Integer,
+
+    'off_t': Integer,
+    'size_t': Integer,
+    'ssize_t': Integer,
+    'time_t': Integer,
+
+    "unsigned long": Integer,
+    'long': Integer,
+    'unsigned long int': Integer,
+    'long int': Integer,
+    "unsigned int": Integer,
+    'int': Integer,
+
+    'uint64_t': Integer64,
     'uint32_t': Integer32,
-    'time_t': Integer32,
     'uint16_t': Integer,
     'uint8_t': Integer,
     'int64_t': Integer64,
-    'ssize_t': Integer,
-    'size_t': Integer,
-    'unsigned long int': Integer,
+    'int32_t': Integer32,
+    'int16_t': Integer,
+    'int8_t': Integer,
+    'char': Char,
+
     'struct timeval': Timeval,
     'char **': StringArray,
     'PyObject *': PyObject,
