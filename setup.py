@@ -226,20 +226,17 @@ PYTHON_HOME = '%s/.wine/drive_c/Python%s/' % (
     os.environ.get('HOME', ''), PYTHON_VERSION)
 
 # This is so horrible but less horrible than interfering with distutils.
-try:
-  if sys.argv[1] == 'mingw-xcompile':
-    sys.argv[1] = 'build'
-    sys.argv.extend(('-c', 'mingw32'))
-    sysconfig._init_nt()
-    CONFIG['HEADERS'].append(PYTHON_HOME + '/include')
-    CONFIG['LIBRARY_DIRS'].append(PYTHON_HOME + 'libs')
-    CONFIG['LIBRARIES'].append('python%s' % PYTHON_VERSION)
-    os.environ['CC'] = 'i586-mingw32msvc-gcc'
-except IndexError:
-  pass
+if len(sys.argv) > 1 and sys.argv[1] == 'mingw-xcompile':
+  sys.argv[1] = 'build'
+  sys.argv.extend(('-c', 'mingw32'))
+  sysconfig._init_nt()
+  CONFIG['HEADERS'].append(PYTHON_HOME + '/include')
+  CONFIG['LIBRARY_DIRS'].append(PYTHON_HOME + 'libs')
+  CONFIG['LIBRARIES'].append('python%s' % PYTHON_VERSION)
+  os.environ['CC'] = 'i586-mingw32msvc-gcc'
 
-# Monkeypatch this:
-cygwinccompiler.Mingw32CCompiler = Mingw32CCompiler
+  # Monkeypatch this:
+  cygwinccompiler.Mingw32CCompiler = Mingw32CCompiler
 
 # Determine if shared object version of libtalloc is available.
 # Try to 'use' the talloc_version_major function in libtalloc.
