@@ -73,6 +73,20 @@ class TSKFsInfoTest(TSKFsInfoTestCase):
     self._testOpenMeta(fs_info)
 
 
+class TSKFsInfoBogusTest(TSKFsInfoTestCase):
+  """The unit test for the FS_Info object that should fail."""
+
+  def setUp(self):
+    """Sets up the needed objects used throughout the test."""
+    self._test_file = os.path.join('test_data', 'bogus.raw')
+    self._img_info = pytsk3.Img_Info(self._test_file)
+
+  def testInitialize(self):
+    """Test the initialize functionality."""
+    with self.assertRaises(IOError):
+      fs_info = pytsk3.FS_Info(self._img_info, offset=0)
+
+
 class TSKFsInfoFileObjectTest(TSKFsInfoTestCase):
   """The unit test for the FS_Info object using an Img_Info file-like object."""
 
