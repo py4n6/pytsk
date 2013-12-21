@@ -90,7 +90,7 @@ DLL_PUBLIC void *aff4_raise_errors(int t, char *reason, ...) {
 
 #if defined( WIN32 )
 DLL_PUBLIC int *aff4_get_current_error(char **error_buffer) {
-  if(error_buffer) {
+  if(error_buffer != NULL) {
     *error_buffer = global_error_buffer;
   };
   return &global_error_type;
@@ -104,12 +104,12 @@ DLL_PUBLIC int *aff4_get_current_error(char **error_buffer) {
   type = pthread_getspecific(error_value_slot);
 
   // This is optional
-  if(error_buffer) {
+  if(error_buffer != NULL) {
     *error_buffer = pthread_getspecific(error_str_slot);
 
-  // If TLS buffers are not set we need to create them
-    if(!*error_buffer) {
-      *error_buffer =talloc_size(NULL, ERROR_BUFF_SIZE);
+    // If TLS buffers are not set we need to create them
+    if(*error_buffer == NULL) {
+      *error_buffer = talloc_size(NULL, ERROR_BUFF_SIZE);
       pthread_setspecific(error_str_slot, *error_buffer);
     };
   };

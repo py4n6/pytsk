@@ -74,12 +74,13 @@ static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type) {
   if(!self->img) {
     RaiseError(EIOError, "Unable to open image: %s", tsk_error_get());
     tsk_error_reset();
-    goto error;
+    goto on_error;
   };
 
   talloc_set_destructor((void *)self, Img_Info_dest);
   return self;
- error:
+
+on_error:
   talloc_free(self);
   return NULL;
 };
@@ -170,27 +171,30 @@ static FS_Info FS_Info_Con(FS_Info self, Img_Info img, TSK_OFF_T offset,
                            TSK_FS_TYPE_ENUM type) {
   Extended_TSK_IMG_INFO *img_info;
 
-  if(!img) goto reason;
-
+  if(!img) {
+    RaiseError(EInvalidParameter, "invalid img");
+    goto on_error;
+  }
   img_info = CALL(img, get_img_info);
-  if(!img_info) goto reason;
 
+  if(!img_info) {
+    RaiseError(EInvalidParameter, "invalid img_info");
+    goto on_error;
+  }
   // Now try to open the filesystem
   self->info = tsk_fs_open_img((TSK_IMG_INFO *)img_info, offset, type);
   if(!self->info) {
     RaiseError(EIOError, "Unable to open the image as a filesystem: %s",
                tsk_error_get());
     tsk_error_reset();
-    goto error;
+    goto on_error;
   };
 
   // Make sure that the filesystem is properly closed when we get freed
   talloc_set_destructor((void *)self, FS_Info_dest);
   return self;
 
- reason:
-  RaiseError(EInvalidParameter, "Img_info object is invalid");
- error:
+on_error:
   talloc_free(self);
   return NULL;
 };
@@ -254,7 +258,7 @@ static Directory Directory_Con(Directory self, FS_Info fs,
                                ZString path, TSK_INUM_T inode) {
   if(!fs) {
     RaiseError(EInvalidParameter, "FS_Info parameter is invalid.");
-    goto error;
+    goto on_error;
   };
 
   if(!path) {
@@ -266,7 +270,7 @@ static Directory Directory_Con(Directory self, FS_Info fs,
   if(!self->info) {
     RaiseError(EIOError, "Unable to open directory: %s", tsk_error_get());
     tsk_error_reset();
-    goto error;
+    goto on_error;
   };
 
   self->current = 0;
@@ -279,7 +283,7 @@ static Directory Directory_Con(Directory self, FS_Info fs,
 
   return self;
 
- error:
+on_error:
   talloc_free(self);
   return NULL;
 };
@@ -330,7 +334,7 @@ static File File_Con(File self, FS_Info fs, TSK_FS_FILE *info) {
 
   if(!fs) {
     RaiseError(EInvalidParameter, "FS_Info parameter is invalid.");
-    goto error;
+    goto on_error;
   };
 
   // Get the total number of attributes:
@@ -339,7 +343,7 @@ static File File_Con(File self, FS_Info fs, TSK_FS_FILE *info) {
   talloc_set_destructor((void *)self, File_dest);
   return self;
 
-error:
+on_error:
   talloc_free(self);
   return NULL;
 };
@@ -452,14 +456,14 @@ static Volume_Info Volume_Info_Con(Volume_Info self, Img_Info img,
                                    TSK_OFF_T offset) {
   if(!img) {
     RaiseError(EInvalidParameter, "Image object is not valid.");
-    goto error;
+    goto on_error;
   };
 
   self->info = tsk_vs_open((TSK_IMG_INFO *)img->img, offset, type);
   if(self->info)
     return self;
 
-error:
+on_error:
   talloc_free(self);
   return NULL;
 };

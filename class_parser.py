@@ -418,20 +418,24 @@ static int type_check(PyObject *obj, PyTypeObject *type) {
 };
 
 static int check_error() {
-   char *buffer;
+   char *buffer = NULL;
    int *error_type = (int *)aff4_get_current_error(&buffer);
 
    if(*error_type != EZero) {
          PyObject *exception = resolve_exception(&buffer);
 
-         PyErr_Format(exception, "%%s", buffer);
+         if(buffer != NULL) {
+           PyErr_Format(exception, "%%s", buffer);
+         } else {
+           PyErr_Format(exception, "Unable to retrieve exception reason.");
+         }
          ClearError();
          return 1;
    };
-  return 0;
+   return 0;
 };
 
-#define CHECK_ERROR if(check_error()) goto error;
+#define CHECK_ERROR if(check_error()) goto on_error;
 
 /** This function checks if a method was overridden in self over a
 method defined in type. This is used to determine if a python class is
@@ -647,7 +651,7 @@ class Type:
         """ Returns how we should call the function when simply passing args directly """
         return self.call_arg()
 
-    def pre_call(self, method):
+    def pre_call(self, method, **kw):
         return ''
 
     def assign(self, call, method, target=None):
@@ -655,7 +659,7 @@ class Type:
 
     def post_call(self, method):
         ## Check for errors
-        result = "if(check_error()) goto error;\n"
+        result = "if(check_error()) goto on_error;\n"
 
         if "DESTRUCTOR" in self.attributes:
             result+= "self->base = NULL;  //DESTRUCTOR - C object no longer valid\n"
@@ -699,7 +703,7 @@ class String(Type):
       %(result)s = Py_None;
     } else {
       %(result)s = PyString_FromStringAndSize((char *)%(name)s, %(length)s);
-      if(!%(result)s) goto error;
+      if(!%(result)s) goto on_error;
     };
 """ % dict(name=name, result=result,length=self.length)
 
@@ -716,7 +720,7 @@ class String(Type):
 
   PyErr_Clear();
   if(-1==PyString_AsStringAndSize(%(source)s, &buff, &length))
-     goto error;
+     goto on_error;
 
   %(destination)s = talloc_size(%(context)s, length + 1);
   memcpy(%(destination)s, buff, length);
@@ -765,7 +769,7 @@ class Char_and_Length(Type):
 
     def to_python_object(self, name=None, result='Py_result', **kw):
         return "PyErr_Clear();\n"\
-            "%s = PyString_FromStringAndSize((char *)%s, %s);\nif(!%s) goto error;" % (
+            "%s = PyString_FromStringAndSize((char *)%s, %s);\nif(!%s) goto on_error;" % (
             result, self.name, self.length, result);
 
 class Integer(Type):
@@ -821,7 +825,7 @@ class Char(Integer):
         return """{ char *str_%(name)s = &%(name)s;
     PyErr_Clear();
     %(result)s = PyString_FromStringAndSize(str_%(name)s, 1);
-if(!%(result)s) goto error;
+if(!%(result)s) goto on_error;
 };
 """ % dict(result=result, name = name or self.name)
 
@@ -833,13 +837,13 @@ if(!%(result)s) goto error;
     def byref(self):
         return "&str_%s" % self.name
 
-    def pre_call(self, method):
+    def pre_call(self, method, **kw):
         method.error_set = True
         return """
 if(strlen(str_%(name)s)!=1) {
   PyErr_Format(PyExc_RuntimeError,
           "You must only provide a single character for arg %(name)r");
-  goto error;
+  goto on_error;
 };
 
 %(name)s = str_%(name)s[0];
@@ -899,10 +903,10 @@ class Char_and_Length_OUT(Char_and_Length):
     def byref(self):
         return "&%s" % self.length
 
-    def pre_call(self, method):
+    def pre_call(self, method, **kw):
         return """PyErr_Clear();
 tmp_%s = PyString_FromStringAndSize(NULL, %s);
-if(!tmp_%s) goto error;
+if(!tmp_%s) goto on_error;
 PyString_AsStringAndSize(tmp_%s, &%s, (Py_ssize_t *)&%s);
 """ % (self.name, self.length, self.name, self.name, self.name, self.length)
 
@@ -932,7 +936,7 @@ if(func_return > %(length)s) {
         return """
 {
     char *tmp_buff; Py_ssize_t tmp_len;
-    if(-1==PyString_AsStringAndSize(%(result)s, &tmp_buff, &tmp_len)) goto error;
+    if(-1==PyString_AsStringAndSize(%(result)s, &tmp_buff, &tmp_len)) goto on_error;
 
     memcpy(%(name)s,tmp_buff, tmp_len);
     Py_DecRef(%(result)s);
@@ -952,7 +956,7 @@ class TDB_DATA_P(Char_and_Length_OUT):
     def byref(self):
         return "%s.dptr, &%s.dsize" % (self.name, self.name)
 
-    def pre_call(self, method):
+    def pre_call(self, method, **kw):
         return ''
 
     def call_arg(self):
@@ -973,7 +977,7 @@ class TDB_DATA_P(Char_and_Length_OUT):
 
   PyErr_Clear();
   if(-1==PyString_AsStringAndSize(%(source)s, &buf, &tmp)) {
-  goto error;
+  goto on_error;
 };
 
   // Take a copy of the python string
@@ -995,7 +999,7 @@ class TDB_DATA(TDB_DATA_P):
 
   PyErr_Clear();
   if(-1==PyString_AsStringAndSize(%(source)s, &buf, &tmp)) {
-  goto error;
+  goto on_error;
 };
 
   // Take a copy of the python string - This leaks - how to fix it?
@@ -1068,7 +1072,7 @@ Py_ssize_t i,size=0;
 if(%(source)s) {
    if(!PySequence_Check(%(source)s)) {
      PyErr_Format(PyExc_ValueError, "%(destination)s must be a sequence");
-     goto error;
+     goto on_error;
    };
 
    size = PySequence_Size(%(source)s);
@@ -1078,18 +1082,18 @@ if(%(source)s) {
 
 for(i=0; i<size;i++) {
  PyObject *tmp = PySequence_GetItem(%(source)s, i);
- if(!tmp) goto error;
+ if(!tmp) goto on_error;
  %(destination)s[i] = PyString_AsString(tmp);
  if(!%(destination)s[i]) {
    Py_DecRef(tmp);
-   goto error;
+   goto on_error;
  };
  Py_DecRef(tmp);
 };
 
 };""" % dict(source = source, destination = destination, context = context)
 
-    def pre_call(self, method):
+    def pre_call(self, method, **kw):
         return self.from_python_object("py_%s" % self.name, self.name, method)
 
     def error_condition(self):
@@ -1105,14 +1109,14 @@ class Wrapper(Type):
 /* First check that the returned value is in fact a Wrapper */
 if(!type_check(%(source)s, &%(type)s_Type)) {
   PyErr_Format(PyExc_RuntimeError, "function must return an %(type)s instance");
-  goto error;
+  goto on_error;
 };
 
 %(destination)s = ((Gen_wrapper)%(source)s)->base;
 
 if(!%(destination)s) {
   PyErr_Format(PyExc_RuntimeError, "%(type)s instance is no longer valid (was it gc'ed?)");
-  goto error;
+  goto on_error;
 };
 
 """ % dict(source = source, destination = destination, type = self.type)
@@ -1136,27 +1140,30 @@ if(!%(destination)s) {
     def call_arg(self):
         return "%s" % self.name
 
-    def pre_call(self, method):
+    def pre_call(self, method, wrapped_object_index=1, **kw):
         if 'OUT' in self.attributes or self.sense == 'OUT':
             return ''
         self.original_type = self.type.split()[0]
 
-        return """
-if(!wrapped_%(name)s || (PyObject *)wrapped_%(name)s==Py_None) {
-    %(name)s = NULL;
-} else if(!type_check((PyObject *)wrapped_%(name)s,&%(original_type)s_Type)) {
-    PyErr_Format(PyExc_RuntimeError, "%(name)s must be derived from type %(original_type)s");
-    goto error;
-} else if(!wrapped_%(name)s->base) {
-    PyErr_Format(PyExc_RuntimeError, "%(original_type)s instance is no longer valid (was it gc'ed?)");
-    goto error;
-} else {
-    %(name)s = wrapped_%(name)s->base;
-};
+        values_dict = dict(self.__dict__)
+        values_dict['wrapped_object_index'] = wrapped_object_index
 
-
-
-""" % self.__dict__
+        return (
+          "  if(wrapped_%(name)s == NULL || (PyObject *)wrapped_%(name)s == Py_None) {\n"
+          "    %(name)s = NULL;\n"
+          "  } else if(!type_check((PyObject *)wrapped_%(name)s,&%(original_type)s_Type)) {\n"
+          "    PyErr_Format(PyExc_RuntimeError, \"%(name)s must be derived from type %(original_type)s\");\n"
+          "    goto on_error;\n"
+          "  } else if(!wrapped_%(name)s->base) {\n"
+          "    PyErr_Format(PyExc_RuntimeError, \"%(original_type)s instance is no longer valid (was it gc'ed?)\");\n"
+          "    goto on_error;\n"
+          "  } else {\n"
+          "    %(name)s = wrapped_%(name)s->base;\n"
+          "    if(self->wrapped_object%(wrapped_object_index)s == NULL) {\n"
+          "      self->wrapped_object%(wrapped_object_index)s = (PyObject *)wrapped_%(name)s;\n"
+          "      Py_IncRef(self->wrapped_object%(wrapped_object_index)s);\n"
+          "    };\n"
+          "  };\n") % values_dict
 
     def assign(self, call, method, target=None):
         method.error_set = True;
@@ -1179,7 +1186,7 @@ if(!wrapped_%(name)s || (PyObject *)wrapped_%(name)s==Py_None) {
         ## be converted to None.
         if "NULL_OK" in self.attributes:
             result += """if(returned_object == NULL) {
-     goto error; """
+     goto on_error; """
         else:
             result += """
        // A NULL return without errors means we return None
@@ -1191,7 +1198,7 @@ if(!wrapped_%(name)s || (PyObject *)wrapped_%(name)s==Py_None) {
         result += """
        } else {
          wrapped_%(name)s = new_class_wrapper(returned_object);
-         if(!wrapped_%(name)s) goto error;
+         if(!wrapped_%(name)s) goto on_error;
 """ % args
 
         if "BORROWED" in self.attributes:
@@ -1235,7 +1242,7 @@ class PointerWrapper(Wrapper):
     def byref(self):
         return "&wrapped_%s" % self.name
 
-    def pre_call(self, method):
+    def pre_call(self, method, **kw):
         if 'OUT' in self.attributes or self.sense == 'OUT':
             return ''
         self.original_type = self.type.split()[0]
@@ -1245,7 +1252,7 @@ if(!wrapped_%(name)s || (PyObject *)wrapped_%(name)s==Py_None) {
    %(name)s = NULL;
 } else if(!type_check((PyObject *)wrapped_%(name)s,&%(original_type)s_Type)) {
      PyErr_Format(PyExc_RuntimeError, "%(name)s must be derived from type %(original_type)s");
-     goto error;
+     goto on_error;
 } else {
    %(name)s = (%(original_type)s *)&wrapped_%(name)s->base;
 };\n""" % self.__dict__
@@ -1318,7 +1325,7 @@ class Timeval(Type):
     def byref(self):
         return "&%s_flt" % self.name
 
-    def pre_call(self, method):
+    def pre_call(self, method, **kw):
         return "%(name)s.tv_sec = (int)%(name)s_flt; %(name)s.tv_usec = (%(name)s_flt - %(name)s.tv_sec) * 1e6;\n" % self.__dict__
 
     def to_python_object(self, name=None, result = 'Py_result', **kw):
@@ -1420,7 +1427,7 @@ class ResultException:
 
     def write(self, out):
         out.write("\n//Handle exceptions\n")
-        out.write("if(%s) {\n    PyErr_Format(PyExc_%s, %s);\n  goto error; \n};\n\n" % (
+        out.write("if(%s) {\n    PyErr_Format(PyExc_%s, %s);\n  goto on_error; \n};\n\n" % (
                 self.check, self.exception, self.message))
 
 class Method:
@@ -1489,7 +1496,7 @@ class Method:
         self.find_optional_vars()
 
         ## We do it in two passes - first mandatory then optional
-        kwlist = """static char *kwlist[] = {"""
+        kwlist = "  static char *kwlist[] = {"
         ## Mandatory
         for type in self.args:
             python_name = type.python_name()
@@ -1501,10 +1508,11 @@ class Method:
             if python_name and python_name in self.defaults:
                 kwlist += '"%s",' % python_name
 
-        kwlist += ' NULL};\n'
+        kwlist += " NULL};\n"
 
         for type in self.args:
             python_name = type.python_name()
+            out.write("  ")
             try:
                 out.write(type.definition(default = self.defaults[python_name]))
             except KeyError:
@@ -1531,7 +1539,11 @@ class Method:
         if not 'iternext' in self.name:
             ## Now parse the args from python objects
             out.write(kwlist)
-            out.write("\nif(!PyArg_ParseTupleAndKeywords(args, kwds, \"%s\", " % parse_line)
+            out.write((
+               "\n"
+               "  if(!PyArg_ParseTupleAndKeywords(args, kwds, \"%s\", ") % (
+                  parse_line))
+
             tmp = ['kwlist']
             for type in self.args:
                 ref = type.byref()
@@ -1540,7 +1552,10 @@ class Method:
 
             out.write(",".join(tmp))
             self.error_set = True
-            out.write("))\n goto error;\n\n")
+            out.write(
+               ")) {\n"
+               "    goto on_error;\n"
+               "  };\n")
 
     def error_condition(self):
         result = ""
@@ -1551,7 +1566,10 @@ class Method:
 
     def write_definition(self, out):
         args = dict(method = self.name, class_name = self.class_name)
-        out.write("\n/********************************************************\nAutogenerated wrapper for function:\n")
+        out.write(
+           "\n"
+           "/********************************************************\n"
+           "Autogenerated wrapper for function:\n")
         out.write(self.comment())
         out.write("********************************************************/\n")
 
@@ -1562,7 +1580,7 @@ class Method:
 
         out.write(self.return_type.definition())
 
-        self.write_local_vars( out);
+        self.write_local_vars(out);
 
         out.write("""// Make sure that we have something valid to wrap
 if(!self->base) return PyErr_Format(PyExc_RuntimeError, "%(class_name)s object no longer valid");
@@ -1580,7 +1598,7 @@ if(!self->base) return PyErr_Format(PyExc_RuntimeError, "%(class_name)s object n
 
   if(!method || (void *)unimplemented == (void *)method) {
          PyErr_Format(PyExc_RuntimeError, "%(class_name)s.%(method)s is not implemented");
-         goto error;
+         goto on_error;
   };
 """ % dict(def_class_name = self.definition_class_name, method=self.name,
            class_name = self.class_name))
@@ -1633,7 +1651,7 @@ if(!self->base) return PyErr_Format(PyExc_RuntimeError, "%(class_name)s object n
         ## Write the error part of the function
         if self.error_set:
             out.write("\n// error conditions:\n")
-            out.write("error:\n    " + self.error_condition());
+            out.write("on_error:\n    " + self.error_condition());
 
         out.write("\n};\n\n")
 
@@ -1694,8 +1712,9 @@ if(!self->base) return PyErr_Format(PyExc_RuntimeError, "%(class_name)s object n
         out.write(";\n")
 
     def _prototype(self, out):
-        out.write("""
-static PyObject *py%(class_name)s_%(method)s(py%(class_name)s *self, PyObject *args, PyObject *kwds) """ % dict(method = self.name, class_name = self.class_name))
+        out.write(
+           "static PyObject *py%(class_name)s_%(method)s(py%(class_name)s *self, PyObject *args, PyObject *kwds)" % dict(
+              method = self.name, class_name = self.class_name))
 
     def __str__(self):
         result = "def %s %s(%s):" % (
@@ -1757,133 +1776,155 @@ static int py%(class_name)s_init(py%(class_name)s *self, PyObject *args, PyObjec
 
     def prototype(self, out):
         self._prototype(out)
-        out.write(""";
-static void py%(class_name)s_initialize_proxies(py%(class_name)s *self, void *item);
-""" % self.__dict__)
+        out.write((
+           ";\n"
+           "static void py%(class_name)s_initialize_proxies(py%(class_name)s *self, void *item);\n") % (
+              self.__dict__))
 
     def write_destructor(self, out):
         free = FREE
 
-        out.write("""static void
-%(class_name)s_dealloc(py%(class_name)s *self) {
-  if(self != NULL) {
-    if(self->base != NULL) {
-      if(self->base_is_proxied == 0) {
-        %(free)s(self->base);
-      } else {
-        Py_DecRef((PyObject*)self->base);
-      }
-      self->base = NULL;
-    }
-    if(self->ob_type != NULL && self->ob_type->tp_free != NULL) {
-      self->ob_type->tp_free((PyObject*)self);
-    }
-  }
-};\n
-""" % dict(class_name = self.class_name, free=free))
+        out.write((
+           "static void %(class_name)s_dealloc(py%(class_name)s *self) {\n"
+           "  if(self != NULL) {\n"
+           "    if(self->base != NULL) {\n"
+           "      if(self->base_is_proxied == 0) {\n"
+           "        %(free)s(self->base);\n"
+           "      } else {\n"
+           "        Py_DecRef((PyObject*)self->base);\n"
+           "      };\n"
+           "      self->base = NULL;\n"
+           "    };\n"
+           "    if(self->wrapped_object2 != NULL) {\n"
+           "      Py_DecRef(self->wrapped_object2);\n"
+           "      self->wrapped_object2 = NULL;\n"
+           "    };\n"
+           "    if(self->wrapped_object1 != NULL) {\n"
+           "      Py_DecRef(self->wrapped_object1);\n"
+           "      self->wrapped_object1 = NULL;\n"
+           "    };\n"
+           "    if(self->ob_type != NULL && self->ob_type->tp_free != NULL) {\n"
+           "      self->ob_type->tp_free((PyObject*)self);\n"
+           "    };\n"
+           "  };\n"
+           "};\n"
+           "\n") % dict(class_name = self.class_name, free=free))
 
     def error_condition(self):
         return "return -1;";
 
     def initialise_proxies(self, out):
-        self.myclass.module.function_definitions.add("py%(class_name)s_initialize_proxies" % self.__dict__)
+        self.myclass.module.function_definitions.add(
+           "py%(class_name)s_initialize_proxies" % self.__dict__)
 
-        out.write("""
-static void py%(class_name)s_initialize_proxies(py%(class_name)s *self, void *item) {
-     %(class_name)s target = (%(class_name)s) item;
-
-     //Maintain a reference to the python object in the C object extension
-     ((Object)item)->extension = self;
-
-     self->base = target;
-     Py_IncRef((PyObject *)self->base);
-     self->base_is_proxied = 1;
-""" % self.__dict__)
+        out.write((
+           "static void py%(class_name)s_initialize_proxies(py%(class_name)s *self, void *item) {\n"
+           "  %(class_name)s target = (%(class_name)s) item;\n"
+           "\n"
+           "  //Maintain a reference to the python object in the C object extension\n"
+           "  ((Object)item)->extension = self;\n"
+           "\n"
+           "  self->base = target;\n"
+           "  Py_IncRef((PyObject *)self->base);\n"
+           "  self->base_is_proxied = 1;\n"
+           "  self->wrapped_object1 = NULL;\n"
+           "  self->wrapped_object2 = NULL;\n") % self.__dict__)
 
         ## Install proxies for all the method in the current class
         for x in self.myclass.module.classes[self.class_name].methods:
             if x.name[0]!='_':
-                out.write('''
-if(check_method_override((PyObject *)self, &%(class_name)s_Type, "%(name)s"))
-   ((%(definition_class_name)s)target)->%(name)s = %(proxied_name)s;
+                out.write((
+                   "  if(check_method_override((PyObject *)self, &%(class_name)s_Type, \"%(name)s\")) {\n"
+                   "    ((%(definition_class_name)s)target)->%(name)s = %(proxied_name)s;\n"
+                   "  };\n") % dict(
+                           name = x.name, class_name = x.class_name,
+                           definition_class_name = x.definition_class_name,
+                           proxied_name = x.proxied.get_name()))
 
-''' % dict(name = x.name,
-           class_name = x.class_name,
-           definition_class_name = x.definition_class_name,
-           proxied_name = x.proxied.get_name()))
-
-        out.write("""
-};
-""")
+        out.write("};\n")
 
     def write_definition(self, out):
         self.initialise_proxies(out)
         self._prototype(out)
-        out.write("""{\n""")
+        out.write("{\n")
         #pdb.set_trace()
         self.write_local_vars(out)
 
         ## Assign the initialise_proxies handler
-        out.write("""
-self->initialise = (void *)py%(class_name)s_initialize_proxies;
-
-""" % self.myclass.__dict__)
+        out.write((
+           "  self->wrapped_object1 = NULL;\n"
+           "  self->wrapped_object2 = NULL;\n"
+           "  self->initialise = (void *)py%(class_name)s_initialize_proxies;"
+           "\n\n") % self.myclass.__dict__)
 
         ## Precall preparations
+        wrapped_object_index = 1
         for type in self.args:
-            out.write(type.pre_call(self))
+            out.write(type.pre_call(
+                self, wrapped_object_index=wrapped_object_index))
+            wrapped_object_index += 1
 
         ## Now call the wrapped function
-        out.write("""
-ClearError();
-
-// Allocate a new instance
-self->base = (%(class_name)s)alloc_%(class_name)s();
-
-// Update the target by replacing its methods with proxies to call back into python
-py%(class_name)s_initialize_proxies(self, self->base);
-
-Py_BEGIN_ALLOW_THREADS
-
-// Now call the constructor
-if( !(%(class_name)s)((%(definition_class_name)s)&__%(class_name)s)->Con(
-  self->base""" % (dict(
-      class_name=self.class_name,
-      definition_class_name=self.definition_class_name)))
+        out.write((
+           "  ClearError();\n"
+           "\n"
+           "  // Allocate a new instance\n"
+           "  self->base = (%(class_name)s)alloc_%(class_name)s();\n"
+           "\n"
+           "  // Update the target by replacing its methods with proxies to call back into python\n"
+           "  py%(class_name)s_initialize_proxies(self, self->base);\n"
+           "\n"
+           "  Py_BEGIN_ALLOW_THREADS\n"
+           "\n"
+           "  // Now call the constructor\n"
+           "  if( !(%(class_name)s)((%(definition_class_name)s)&__%(class_name)s)->Con(self->base""") % (
+              dict(class_name=self.class_name, definition_class_name=self.definition_class_name)))
 
         tmp = ''
         for type in self.args:
             tmp += ", " + type.call_arg()
 
         self.error_set = True
-        out.write(tmp + """)) {
- self->base = NULL;
-};
+        out.write(tmp)
 
-Py_END_ALLOW_THREADS
-
-  if(!CheckError(EZero)) {
-    char *buffer;
-    PyObject *exception = resolve_exception(&buffer);
-
-    PyErr_Format(exception, "%%s", buffer);
-    ClearError();
-    goto error;
-
-  } else if(!self->base) {
-    PyErr_Format(PyExc_IOError, "Unable to construct class %(class_name)s");
-    goto error;
-  };
-
-""" % self.__dict__)
+        out.write((
+           ")) {\n"
+           "    self->base = NULL;\n"
+           "  };\n"
+           "\n"
+           "  Py_END_ALLOW_THREADS\n"
+           "\n"
+           "  if(!CheckError(EZero)) {\n"
+           "    char *buffer;\n"
+           "    PyObject *exception = resolve_exception(&buffer);\n"
+           "\n"
+           "    PyErr_Format(exception, \"%%s\", buffer);\n"
+           "    ClearError();\n"
+           "    goto on_error;\n"
+           "\n"
+           "  } else if(!self->base) {\n"
+           "    PyErr_Format(PyExc_IOError, \"Unable to construct class %(class_name)s\");\n"
+           "    goto on_error;\n"
+           "  };\n") % self.__dict__)
 
         out.write("  return 0;\n");
 
         ## Write the error part of the function
         if self.error_set:
-            out.write("error:\n    " + self.error_condition());
+            out.write((
+               "\n"
+               "on_error:\n"
+               "  if(self->wrapped_object2 != NULL) {\n"
+               "    Py_DecRef(self->wrapped_object2);\n"
+               "    self->wrapped_object2 = NULL;\n"
+               "  };\n"
+               "  if(self->wrapped_object1 != NULL) {\n"
+               "    Py_DecRef(self->wrapped_object1);\n"
+               "    self->wrapped_object1 = NULL;\n"
+               "  };\n"
+               "  ") + self.error_condition() + "\n");
 
-        out.write("\n};\n\n")
+        out.write("};\n\n")
 
 class GetattrMethod(Method):
     def __init__(self, class_name, base_class_name, myclass):
@@ -1947,7 +1988,7 @@ class GetattrMethod(Method):
      PyObject *tmp;
      PyMethodDef *i;
 
-     if(!result) goto error;
+     if(!result) goto on_error;
 """)
         ## Add attributes
         for class_name, attr in self.get_attributes():
@@ -2013,7 +2054,7 @@ if(!strcmp(name, "%(name)s")) {
 
         ## Write the error part of the function
         if self.error_set:
-            out.write("error:\n" + self.error_condition());
+            out.write("on_error:\n" + self.error_condition());
 
         out.write("}\n\n")
 
@@ -2086,7 +2127,7 @@ class ProxiedMethod(Method):
             out.write(arg.to_python_object(result = "py_%s" % arg.name,
                                            sense='proxied', BORROWED=True))
 
-        out.write('if(!((Object)self)->extension) {\n RaiseError(ERuntimeError, "No proxied object in %s"); goto error;\n};\n' % (self.myclass.class_name))
+        out.write('if(!((Object)self)->extension) {\n RaiseError(ERuntimeError, "No proxied object in %s"); goto on_error;\n};\n' % (self.myclass.class_name))
 
         out.write("\n//Now call the method\n")
         out.write("""PyErr_Clear();
@@ -2119,7 +2160,7 @@ if(PyErr_Occurred()) {
    };
    PyErr_Restore(exception_t, exception, tb);
    Py_DecRef(str);
-   goto error;
+   goto on_error;
 };
 
 """ % dict(CURRENT_ERROR_FUNCTION = CURRENT_ERROR_FUNCTION));
@@ -2140,7 +2181,7 @@ if(PyErr_Occurred()) {
 
         out.write(self.return_type.return_value('func_return'))
         if self.error_set:
-            out.write("\nerror:\n")
+            out.write("\non_error:\n")
             out.write("if(Py_result) { Py_DecRef(Py_result);};\nPy_DecRef(method_name);\n\n");
             ## Decref all our python objects:
             for arg in self.args:
@@ -2272,14 +2313,17 @@ class ClassGenerator:
             self.constructor.docstring = docstring
 
     def struct(self,out):
-        out.write("""\ntypedef struct {
-  PyObject_HEAD
-  %(class_name)s base;
-  int base_is_proxied;
-
-  void (*initialise)(Gen_wrapper self, void *item);
-} py%(class_name)s;\n
-""" % dict(class_name=self.class_name))
+        out.write((
+          "\n"
+          "typedef struct {\n"
+          "  PyObject_HEAD\n"
+          "  %(class_name)s base;\n"
+          "  int base_is_proxied;\n"
+          "  PyObject *wrapped_object1;\n"
+          "  PyObject *wrapped_object2;\n"
+          "\n"
+          "  void (*initialise)(Gen_wrapper self, void *item);\n"
+          "} py%(class_name)s;\n") % dict(class_name=self.class_name))
 
     def code(self, out):
         if not self.constructor:
@@ -2527,12 +2571,12 @@ class EnumConstructor(ConstructorMethod):
 static char *kwlist[] = {"value", NULL};
 
 if(!PyArg_ParseTupleAndKeywords(args, kwds, "O", kwlist, &self->value))
- goto error;
+  goto on_error;
 
 Py_IncRef(self->value);
 
   return 0;
-error:
+on_error:
     return -1;
 };
 
@@ -2660,7 +2704,7 @@ class EnumType(Integer):
 %s = PyObject_CallMethod(g_module, "%s", "K", (uint64_t)%s);
 """ % (result, self.type, name)
 
-    def pre_call(self, method):
+    def pre_call(self, method, **kw):
         method.error_set = True
         return """
 // Check if the integer passed is actually a valid member of the enum
@@ -2671,7 +2715,7 @@ if(%(name)s) { PyObject *py_%(name)s = PyLong_FromLong(%(name)s);
   Py_DecRef(py_%(name)s);
   if(!tmp) {
     PyErr_Format(PyExc_RuntimeError, "value %%lu is not valid for Enum %(type)s of arg '%(name)s'", (unsigned long)%(name)s);
-    goto error;
+    goto on_error;
   };
 };
 """ % self.__dict__
