@@ -16,9 +16,6 @@
  */
 #include "tsk3.h"
 
-/* TODO: sdd version check, e.g. " && ( TSK_VERSION_NUM <= 0x04000001 )"
- * when this gets fixed in sleuthkit
- */
 #if defined( TSK_MULTITHREAD_LIB )
 extern void tsk_init_lock(tsk_lock_t * lock);
 extern void tsk_deinit_lock(tsk_lock_t * lock);
@@ -60,6 +57,10 @@ static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type) {
     // Initialise the img struct with the correct callbacks:
     self->img = talloc_zero(self, Extended_TSK_IMG_INFO);
     self->img->container = self;
+
+#if defined( TSK_MULTITHREAD_LIB )
+    tsk_init_lock(&(self->img->base.cache_lock));
+#endif
 
     self->img->base.read = IMG_INFO_read;
     self->img->base.close = IMG_INFO_close;
