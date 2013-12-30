@@ -81,7 +81,7 @@ if __name__ == '__main__':
   results = glob.glob(os.path.join('build', 'lib.*'))
 
   if len(results) != 1:
-    results = glob.glob(os.path.join('msvscpp', 'Release')
+    results = glob.glob(os.path.join('msvscpp', 'Release'))
 
   if len(results) != 1:
     print 'Unable to find pytsk3 Python module.'
