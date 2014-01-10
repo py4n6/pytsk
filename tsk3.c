@@ -209,7 +209,7 @@ static File FS_Info_open(FS_Info self, ZString path) {
   File result;
 
   if(!handle) {
-    RaiseError(EIOError, "Cant open file: %s", tsk_error_get());
+    RaiseError(EIOError, "Unable to open file: %s", tsk_error_get());
     tsk_error_reset();
     return NULL;
   };
@@ -224,7 +224,7 @@ static File FS_Info_open_meta(FS_Info self, TSK_INUM_T inode) {
   File result;
 
   if(!handle) {
-    RaiseError(EIOError, "Cant open file: %s", tsk_error_get());
+    RaiseError(EIOError, "Unable to open file: %s", tsk_error_get());
     tsk_error_reset();
     return NULL;
   };

@@ -54,7 +54,7 @@ class Lexer(object):
 
        Note that derived classes may need to extend this.
     """
-    ## Cant save our state if we have errors. We need to guarantee
+    ## Unable to save our state if we have errors. We need to guarantee
     ## that we rewind to a good part of the file.
     if self.error:
       return
