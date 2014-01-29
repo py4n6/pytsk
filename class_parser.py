@@ -1192,7 +1192,7 @@ if(!%(destination)s) {
        // A NULL return without errors means we return None
        if(!returned_object) {
          wrapped_%(name)s = (Gen_wrapper)Py_None;
-         Py_IncRef(Py_None);
+         // Py_IncRef(Py_None);
 """ % args
 
         result += """
