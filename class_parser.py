@@ -356,7 +356,7 @@ static struct python_wrapper_map_t {
 table.
 */
 Gen_wrapper new_class_wrapper(Object item) {
-   int i;
+   int i = 0;
    Gen_wrapper result;
    Object cls;
 
@@ -1646,7 +1646,10 @@ if(!self->base) return PyErr_Format(PyExc_RuntimeError, "%(class_name)s object n
         else:
             out.write(results[0])
             ## This useless code removes compiler warnings
-            out.write("returned_result = Py_result;\nreturn returned_result;\n");
+            out.write(
+                "returned_result = Py_result;\n"
+                "Py_IncRef((PyObject *) returned_result);\n"
+                "return returned_result;\n");
 
         ## Write the error part of the function
         if self.error_set:
