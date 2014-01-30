@@ -665,7 +665,7 @@ class Type:
         result = "if(check_error()) goto on_error;\n"
 
         if "DESTRUCTOR" in self.attributes:
-            result+= "self->base = NULL;  //DESTRUCTOR - C object no longer valid\n"
+            result += "self->base = NULL;  //DESTRUCTOR - C object no longer valid\n"
 
         return result
 
@@ -1909,8 +1909,14 @@ static int py%(class_name)s_init(py%(class_name)s *self, PyObject *args, PyObjec
            "  // Allocate a new instance\n"
            "  self->base = (%(class_name)s)alloc_%(class_name)s();\n"
            "\n"
+           "  // Temporary hack to tell initialize_proxies not to treat the base as an Python object.\n"
+           "  self->base_is_wrapped = 1;\n"
+           "\n"
            "  // Update the target by replacing its methods with proxies to call back into python\n"
            "  py%(class_name)s_initialize_proxies(self, self->base);\n"
+           "\n"
+           "  // Temporary hack to tell initialize_proxies not to treat the base as an Python object.\n"
+           "  self->base_is_wrapped = 0;\n"
            "\n"
            "  Py_BEGIN_ALLOW_THREADS\n"
            "\n"

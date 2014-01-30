@@ -33,18 +33,24 @@ void IMG_INFO_close(TSK_IMG_INFO *self);
 #define GET_Object_from_member(type, object, member)                    \
   (type)(((char *)object) - (unsigned long)(&((type)0)->member))
 
-static int Img_Info_dest(void *x) {
-  Img_Info self = (Img_Info)x;
+/* Img_Info destructor
+ */
+static int Img_Info_dest(void *self) {
+  Img_Info img_info = (Img_Info) self;
 
 #if defined( TSK_MULTITHREAD_LIB )
-  tsk_deinit_lock(&self->img->base.cache_lock);
+  tsk_deinit_lock(&(img_info->img->base.cache_lock));
 #endif
 
-  tsk_img_close((TSK_IMG_INFO *)self->img);
+  tsk_img_close((TSK_IMG_INFO *) img_info->img);
+  tsk_img_free((TSK_IMG_INFO *) img_info->img);
+  img_info->img = NULL;
 
   return 0;
-};
+}
 
+/* Img_Info constructor
+ */
 static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type) {
 
   if(urn[0]) {
@@ -168,13 +174,20 @@ ssize_t IMG_INFO_read(TSK_IMG_INFO *img, TSK_OFF_T off, char *buf, size_t len) {
   return (ssize_t)CALL(self->container, read, (uint64_t)off, buf, len);
 };
 
-int FS_Info_dest(void *this) {
-  FS_Info self = (FS_Info)this;
+/* FS_Info destructor
+ */
+int FS_Info_dest(void *self) {
+  FS_Info fs_info = (FS_Info) self;
 
-  tsk_fs_close(self->info);
+  tsk_fs_close((TSK_FS_INFO *) fs_info->info);
+  tsk_fs_free((TSK_FS_INFO *) fs_info->info);
+  fs_info->info = NULL;
+
   return 0;
-};
+}
 
+/* FS_Info constructor
+ */
 static FS_Info FS_Info_Con(FS_Info self, Img_Info img, TSK_OFF_T offset,
                            TSK_FS_TYPE_ENUM type) {
   Extended_TSK_IMG_INFO *img_info;
@@ -254,14 +267,20 @@ VIRTUAL(FS_Info, Object) {
   VMETHOD(exit) = FS_Info_exit;
 } END_VIRTUAL
 
-
+/* Directory destructor
+ */
 static int Directory_dest(void *self) {
-  Directory this = (Directory)self;
-  tsk_fs_dir_close(this->info);
+  Directory directory = (Directory) self;
+
+  tsk_fs_dir_close((TSK_FS_DIR *) directory->info);
+  // There is no: tsk_fs_dir_free
+  directory->info = NULL;
 
   return 0;
-};
+}
 
+/* Directory constructor
+ */
 static Directory Directory_Con(Directory self, FS_Info fs,
                                ZString path, TSK_INUM_T inode) {
   if(!fs) {
@@ -331,14 +350,18 @@ VIRTUAL(Directory, Object) {
   VMETHOD(__iter__) = Directory_iter;
 } END_VIRTUAL
 
+/* File destructor
+ */
 static int File_dest(void *self) {
-  File this = (File)self;
-  tsk_fs_file_close(this->info);
+  File file = (File) self;
 
+  tsk_fs_file_close((TSK_FS_FILE *) file->info);
+  // There is no: tsk_fs_file_free
   return 0;
-};
+}
 
-
+/* File constructor
+ */
 static File File_Con(File self, FS_Info fs, TSK_FS_FILE *info) {
   self->info = info;
   self->fs = fs;
@@ -430,6 +453,8 @@ VIRTUAL(File, Object) {
   VMETHOD(__iter__) = File_iter__;
 } END_VIRTUAL
 
+/* Attribute constructor
+ */
 static Attribute Attribute_Con(Attribute self, TSK_FS_ATTR *info) {
   self->info = info;
 
@@ -462,6 +487,21 @@ VIRTUAL(Attribute, Object) {
 } END_VIRTUAL
 
 /* The following implement the volume system. */
+
+/* Volume_Info destructor
+ */
+static int Volume_Info_dest(void *self) {
+  Volume_Info volume_info = (Volume_Info) self;
+
+  tsk_vs_close((TSK_VS_INFO *) volume_info->info);
+  // There is no: tsk_vs_free
+  volume_info->info = NULL;
+
+  return 0;
+}
+
+/* Volume_Info constructor
+ */
 static Volume_Info Volume_Info_Con(Volume_Info self, Img_Info img,
                                    TSK_VS_TYPE_ENUM type,
                                    TSK_OFF_T offset) {
@@ -471,8 +511,10 @@ static Volume_Info Volume_Info_Con(Volume_Info self, Img_Info img,
   };
 
   self->info = tsk_vs_open((TSK_IMG_INFO *)img->img, offset, type);
-  if(self->info)
+  if(self->info) {
+    talloc_set_destructor((void *)self, Volume_Info_dest);
     return self;
+  }
 
 on_error:
   talloc_free(self);
