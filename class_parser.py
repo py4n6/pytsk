@@ -1034,7 +1034,9 @@ class Void(Type):
         return ''
 
     def to_python_object(self, name=None, result = 'Py_result', **kw):
-        return "Py_IncRef(Py_None); Py_result = Py_None;\n"
+        return (
+            "Py_IncRef(Py_None);\n"
+            "Py_result = Py_None;\n")
 
     def call_arg(self):
         return "NULL"
@@ -1185,32 +1187,32 @@ if(!%(destination)s) {
         ## can be returned (e.g. in iterators) but usually it should
         ## be converted to None.
         if "NULL_OK" in self.attributes:
-            result += """if(returned_object == NULL) {
-     goto on_error; """
+            result += (
+                "       if(returned_object == NULL) {\n"
+                "            goto on_error;\n")
         else:
-            result += """
-       // A NULL return without errors means we return None
-       if(!returned_object) {
-         wrapped_%(name)s = (Gen_wrapper)Py_None;
-         // Py_IncRef(Py_None);
-""" % args
+            result += (
+                "       // A NULL return without errors means we return None\n"
+                "       if(!returned_object) {\n"
+                "         wrapped_%(name)s = (Gen_wrapper)Py_None;\n"
+                "         Py_IncRef(Py_None);\n") % args
 
-        result += """
-       } else {
-         wrapped_%(name)s = new_class_wrapper(returned_object);
-         if(!wrapped_%(name)s) goto on_error;
-""" % args
+        result += (
+            "       } else {\n"
+            "           wrapped_%(name)s = new_class_wrapper(returned_object);\n"
+            "           if(!wrapped_%(name)s) goto on_error;\n") % args
 
         if "BORROWED" in self.attributes:
-            result += """  %(incref)s(wrapped_%(name)s->base);
-if(((Object)wrapped_%(name)s->base)->extension) {
-   Py_IncRef((PyObject *)((Object)wrapped_%(name)s->base)->extension);
-};
-""" % args
+            result += (
+                "  %(incref)s(wrapped_%(name)s->base);\n"
+                "if(((Object)wrapped_%(name)s->base)->extension) {\n"
+                "   Py_IncRef((PyObject *)((Object)wrapped_%(name)s->base)->extension);\n"
+                "};\n") % args
 
-        result += """       };
-    }
-"""
+        result += (
+            "       };\n"
+            "    }\n")
+
         return result
 
     def to_python_object(self, name=None, result = 'Py_result', sense='in', **kw):
@@ -1574,9 +1576,10 @@ class Method:
         out.write("********************************************************/\n")
 
         self._prototype(out)
-        out.write("""{
-       PyObject *returned_result, *Py_result;
-""" % args)
+        out.write((
+            "{\n"
+            "   PyObject *returned_result = NULL;\n"
+            "   PyObject *Py_result = NULL;\n") % args)
 
         out.write(self.return_type.definition())
 
@@ -1603,8 +1606,12 @@ if(!self->base) return PyErr_Format(PyExc_RuntimeError, "%(class_name)s object n
 """ % dict(def_class_name = self.definition_class_name, method=self.name,
            class_name = self.class_name))
 
-        out.write("\n// Make the call\n ClearError();")
-        call = "((%s)self->base)->%s(((%s)self->base)" % (self.definition_class_name, self.name, self.definition_class_name)
+        out.write(
+            "\n"
+            "    // Make the call\n"
+            "    ClearError();\n")
+        call = "    ((%s)self->base)->%s(((%s)self->base)" % (
+            self.definition_class_name, self.name, self.definition_class_name)
         tmp = ''
         for type in self.args:
             tmp += ", " + type.call_arg()
@@ -1618,11 +1625,22 @@ if(!self->base) return PyErr_Format(PyExc_RuntimeError, "%(class_name)s object n
 
         self.error_set = True
 
-        out.write("};\n\n// Postcall preparations\n")
+        out.write(
+            "    };\n"
+            "\n"
+            "    // Postcall preparations\n")
         ## Postcall preparations
-        out.write(self.return_type.post_call(self))
+        post_calls = []
+
+        post_call = self.return_type.post_call(self)
+        post_calls.append(post_call)
+        out.write("    %s" % post_call)
+
         for type in self.args:
-            out.write(type.post_call(self))
+            post_call = type.post_call(self)
+            if post_call not in post_calls:
+                post_calls.append(post_call)
+                out.write("    %s" % post_call)
 
         ## Now assemble the results
         results = [self.return_type.to_python_object()]
@@ -1635,28 +1653,34 @@ if(!self->base) return PyErr_Format(PyExc_RuntimeError, "%(class_name)s object n
         if isinstance(self.return_type, Void) and len(results)>1:
             results.pop(0)
 
-        out.write("\n// prepare results\n")
+        out.write(
+            "\n"
+            "    // prepare results\n")
         ## Make a tuple of results and pass them back
         if len(results)>1:
             out.write("returned_result = PyList_New(0);\n")
             for result in results:
                 out.write(result)
-                out.write("PyList_Append(returned_result, Py_result); Py_DecRef(Py_result);\n");
+                out.write(
+                    "PyList_Append(returned_result, Py_result);\n"
+                    "Py_DecRef(Py_result);\n");
             out.write("return returned_result;\n")
         else:
             out.write(results[0])
             ## This useless code removes compiler warnings
             out.write(
-                "returned_result = Py_result;\n"
-                "Py_IncRef((PyObject *) returned_result);\n"
-                "return returned_result;\n");
+                "    returned_result = Py_result;\n"
+                "    return returned_result;\n");
 
         ## Write the error part of the function
         if self.error_set:
-            out.write("\n// error conditions:\n")
-            out.write("on_error:\n    " + self.error_condition());
+            out.write((
+                "\n"
+                "// error conditions:\n"
+                "on_error:\n"
+                "    %s") % self.error_condition());
 
-        out.write("\n};\n\n")
+        out.write("};\n\n")
 
     def add_arg(self, type, name):
         try:
@@ -2133,8 +2157,9 @@ class ProxiedMethod(Method):
         out.write('if(!((Object)self)->extension) {\n RaiseError(ERuntimeError, "No proxied object in %s"); goto on_error;\n};\n' % (self.myclass.class_name))
 
         out.write("\n//Now call the method\n")
-        out.write("""PyErr_Clear();
-Py_result = PyObject_CallMethodObjArgs(((Object)self)->extension, method_name, """)
+        out.write(
+            "PyErr_Clear();\n"
+            "Py_result = PyObject_CallMethodObjArgs(((Object)self)->extension, method_name, \n")
         for arg in self.args:
             out.write("py_%s," % arg.name)
 

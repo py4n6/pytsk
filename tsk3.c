@@ -290,19 +290,22 @@ on_error:
 };
 
 static File Directory_next(Directory self) {
-  File result;
-  TSK_FS_FILE *info;
+  File result = NULL;
+  TSK_FS_FILE *info = NULL;
 
+  if(self == NULL) {
+    return NULL;
+  }
   if((self->current < 0) || ((uint64_t)self->current >= (uint64_t)self->size)) {
     return NULL;
-  };
+  }
 
   info = tsk_fs_dir_get(self->info, self->current);
   if(!info) {
     RaiseError(EIOError, "Error opening File: %s", tsk_error_get());
     tsk_error_reset();
     return NULL;
-  };
+  }
 
   result = CONSTRUCT(File, File, Con, NULL, self->fs, info);
   result->info = info;
