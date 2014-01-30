@@ -342,48 +342,51 @@ static PyObject *g_module = NULL;
 /** This is a generic wrapper type */
 typedef struct Gen_wrapper_t *Gen_wrapper;
 struct Gen_wrapper_t {
-  PyObject_HEAD
-  void *base;
+    PyObject_HEAD
+    void *base;
+    int base_is_proxied;
+    int base_is_wrapped;
 };
 
 static struct python_wrapper_map_t {
-       Object class_ref;
-       PyTypeObject *python_type;
-       void (*initialize_proxies)(Gen_wrapper self, void *item);
+    Object class_ref;
+    PyTypeObject *python_type;
+    void (*initialize_proxies)(Gen_wrapper self, void *item);
 } python_wrappers[%(classes_length)s];
 
 /* Create the relevant wrapper from the item based on the lookup
 table.
 */
 Gen_wrapper new_class_wrapper(Object item) {
-   int i = 0;
-   Gen_wrapper result;
-   Object cls;
+    int i = 0;
+    Gen_wrapper result = NULL;
+    Object cls = NULL;
 
-   // Return None for a NULL pointer
-   if(!item) {
-     Py_IncRef(Py_None);
-     return (Gen_wrapper)Py_None;
-   };
+    // Return None for a NULL pointer
+    if(item == NULL) {
+        Py_IncRef(Py_None);
+        return (Gen_wrapper)Py_None;
+    }
 
-   // Search for subclasses
-   for(cls=(Object)item->__class__; cls != cls->__super__; cls=cls->__super__) {
-     for(i=0; i<TOTAL_CLASSES; i++) {
-       if(python_wrappers[i].class_ref == cls) {
-         PyErr_Clear();
+    // Search for subclasses
+    for(cls=(Object)item->__class__; cls != cls->__super__; cls=cls->__super__) {
+        for(i=0; i<TOTAL_CLASSES; i++) {
+            if(python_wrappers[i].class_ref == cls) {
+                PyErr_Clear();
 
-         result = (Gen_wrapper)_PyObject_New(python_wrappers[i].python_type);
-         result->base = item;
-         python_wrappers[i].initialize_proxies(result, (void *)item);
+                result = (Gen_wrapper)_PyObject_New(python_wrappers[i].python_type);
+                result->base = item;
+                result->base_is_wrapped = 1;
+                python_wrappers[i].initialize_proxies(result, (void *)item);
 
-         return result;
-       };
-     };
-   };
+                return result;
+            }
+        }
+    }
 
-  PyErr_Format(PyExc_RuntimeError, "Unable to find a wrapper for object %%s", NAMEOF(item));
-  return NULL;
-};
+    PyErr_Format(PyExc_RuntimeError, "Unable to find a wrapper for object %%s", NAMEOF(item));
+    return NULL;
+}
 
 static PyObject *resolve_exception(char **error_buff) {
   int *type = (int *)%(get_current_error)s(error_buff);
@@ -1813,28 +1816,33 @@ static int py%(class_name)s_init(py%(class_name)s *self, PyObject *args, PyObjec
 
         out.write((
            "static void %(class_name)s_dealloc(py%(class_name)s *self) {\n"
-           "  if(self != NULL) {\n"
-           "    if(self->base != NULL) {\n"
-           "      if(self->base_is_proxied == 0) {\n"
-           "        %(free)s(self->base);\n"
-           "      } else {\n"
-           "        Py_DecRef((PyObject*)self->base);\n"
-           "      };\n"
-           "      self->base = NULL;\n"
-           "    };\n"
-           "    if(self->wrapped_object2 != NULL) {\n"
-           "      Py_DecRef(self->wrapped_object2);\n"
-           "      self->wrapped_object2 = NULL;\n"
-           "    };\n"
-           "    if(self->wrapped_object1 != NULL) {\n"
-           "      Py_DecRef(self->wrapped_object1);\n"
-           "      self->wrapped_object1 = NULL;\n"
-           "    };\n"
-           "    if(self->ob_type != NULL && self->ob_type->tp_free != NULL) {\n"
-           "      self->ob_type->tp_free((PyObject*)self);\n"
-           "    };\n"
-           "  };\n"
-           "};\n"
+           "    if(self != NULL) {\n"
+           "        if(self->base != NULL) {\n"
+           "            if(self->base_is_proxied != 0 || self->base_is_wrapped != 0) {\n"
+           "                if(((Object)self->base)->extension != NULL) {\n"
+           "                    Py_DecRef((PyObject*)((Object)self->base)->extension);\n"
+           "                }\n"
+           "            }\n"
+           "            if(self->base_is_proxied == 0) {\n"
+           "                %(free)s(self->base);\n"
+           "            } else {\n"
+           "                Py_DecRef((PyObject*)self->base);\n"
+           "            }\n"
+           "            self->base = NULL;\n"
+           "        }\n"
+           "        if(self->wrapped_object2 != NULL) {\n"
+           "            Py_DecRef(self->wrapped_object2);\n"
+           "            self->wrapped_object2 = NULL;\n"
+           "        }\n"
+           "        if(self->wrapped_object1 != NULL) {\n"
+           "            Py_DecRef(self->wrapped_object1);\n"
+           "            self->wrapped_object1 = NULL;\n"
+           "        }\n"
+           "        if(self->ob_type != NULL && self->ob_type->tp_free != NULL) {\n"
+           "            self->ob_type->tp_free((PyObject*)self);\n"
+           "        }\n"
+           "    }\n"
+           "}\n"
            "\n") % dict(class_name = self.class_name, free=free))
 
     def error_condition(self):
@@ -1846,16 +1854,19 @@ static int py%(class_name)s_init(py%(class_name)s *self, PyObject *args, PyObjec
 
         out.write((
            "static void py%(class_name)s_initialize_proxies(py%(class_name)s *self, void *item) {\n"
-           "  %(class_name)s target = (%(class_name)s) item;\n"
+           "    %(class_name)s target = (%(class_name)s) item;\n"
            "\n"
-           "  //Maintain a reference to the python object in the C object extension\n"
-           "  ((Object)item)->extension = self;\n"
+           "    //Maintain a reference to the python object in the C object extension\n"
+           "    ((Object)item)->extension = self;\n"
+           "    Py_IncRef((PyObject *)((Object)item)->extension);\n"
            "\n"
-           "  self->base = target;\n"
-           "  Py_IncRef((PyObject *)self->base);\n"
-           "  self->base_is_proxied = 1;\n"
-           "  self->wrapped_object1 = NULL;\n"
-           "  self->wrapped_object2 = NULL;\n") % self.__dict__)
+           "    self->base = target;\n"
+           "    if(self->base_is_wrapped == 0) {\n"
+           "        Py_IncRef((PyObject *)self->base);\n"
+           "        self->base_is_proxied = 1;\n"
+           "    }\n"
+           "    self->wrapped_object1 = NULL;\n"
+           "    self->wrapped_object2 = NULL;\n") % self.__dict__)
 
         ## Install proxies for all the method in the current class
         for x in self.myclass.module.classes[self.class_name].methods:
@@ -2347,6 +2358,7 @@ class ClassGenerator:
           "  PyObject_HEAD\n"
           "  %(class_name)s base;\n"
           "  int base_is_proxied;\n"
+          "  int base_is_wrapped;\n"
           "  PyObject *wrapped_object1;\n"
           "  PyObject *wrapped_object2;\n"
           "\n"
