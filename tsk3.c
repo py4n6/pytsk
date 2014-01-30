@@ -69,7 +69,11 @@ static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type) {
 #ifdef TSK_VERSION_NUM
     self->img->base.sector_size = 512;
 #endif
+#ifdef TSK_IMG_TYPE_EXTERNAL
+    self->img->base.itype = TSK_IMG_TYPE_EXTERNAL;
+#else
     self->img->base.itype = TSK_IMG_TYPE_RAW_SING;
+#endif
   };
 
   if(!self->img) {
@@ -127,8 +131,11 @@ Extended_TSK_IMG_INFO *Img_Info_get_img_info(Img_Info self) {
 #ifdef TSK_VERSION_NUM
   img->base.sector_size = 512;
 #endif
+#ifdef TSK_IMG_TYPE_EXTERNAL
+    self->img->base.itype = TSK_IMG_TYPE_EXTERNAL;
+#else
   img->base.itype = TSK_IMG_TYPE_RAW_SING;
-
+#endif
   return img;
 };
 
