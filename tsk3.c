@@ -35,66 +35,72 @@ void IMG_INFO_close(TSK_IMG_INFO *self);
 
 /* Img_Info destructor
  */
-static int Img_Info_dest(void *self) {
-  Img_Info img_info = (Img_Info) self;
+static int Img_Info_dest(Img_Info self) {
+    if(self == NULL) {
+        return -1;
+    }
+    tsk_img_close((TSK_IMG_INFO *) self->img);
 
+    if(self->img_is_internal != 0) {
 #if defined( TSK_MULTITHREAD_LIB )
-  tsk_deinit_lock(&(img_info->img->base.cache_lock));
+      tsk_deinit_lock(&(self->img->base.cache_lock));
 #endif
+      // If img is internal talloc will free it.
+    }
+    self->img = NULL;
 
-  tsk_img_close((TSK_IMG_INFO *) img_info->img);
-  tsk_img_free((TSK_IMG_INFO *) img_info->img);
-  img_info->img = NULL;
-
-  return 0;
+    return 0;
 }
 
 /* Img_Info constructor
  */
 static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type) {
 
-  if(urn[0]) {
+    if(self == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: self.");
+        return NULL;
+    }
+    if(urn != NULL && urn[0] != 0) {
 #ifdef TSK_VERSION_NUM
-    self->img = (Extended_TSK_IMG_INFO *)tsk_img_open_utf8(1, (const char **)&urn, type, 0);
+        self->img = (Extended_TSK_IMG_INFO *) tsk_img_open_utf8(1, (const char **) &urn, type, 0);
 #else
-    self->img = (Extended_TSK_IMG_INFO *)tsk_img_open_utf8(1, (const char **)&urn, type);
+        self->img = (Extended_TSK_IMG_INFO *) tsk_img_open_utf8(1, (const char **) &urn, type);
 #endif
-  } else {
-    // Initialise the img struct with the correct callbacks:
-    self->img = talloc_zero(self, Extended_TSK_IMG_INFO);
-    self->img->container = self;
+        self->img_is_internal = 0;
+
+    } else {
+        // Initialise the img struct with the correct callbacks:
+        self->img = talloc_zero(self, Extended_TSK_IMG_INFO);
+        self->img_is_internal = 1;
+
+        self->img->container = self;
 
 #if defined( TSK_MULTITHREAD_LIB )
-    tsk_init_lock(&(self->img->base.cache_lock));
+        tsk_init_lock(&(self->img->base.cache_lock));
 #endif
 
-    self->img->base.read = IMG_INFO_read;
-    self->img->base.close = IMG_INFO_close;
-    self->img->base.size = CALL(self, get_size);
+        self->img->base.read = IMG_INFO_read;
+        self->img->base.close = IMG_INFO_close;
+        self->img->base.size = CALL(self, get_size);
 
 #ifdef TSK_VERSION_NUM
-    self->img->base.sector_size = 512;
+        self->img->base.sector_size = 512;
 #endif
 #if defined( TSK_VERSION_NUM ) && ( TSK_VERSION_NUM >= 0x040103ff )
-    self->img->base.itype = TSK_IMG_TYPE_EXTERNAL;
+        self->img->base.itype = TSK_IMG_TYPE_EXTERNAL;
 #else
-    self->img->base.itype = TSK_IMG_TYPE_RAW_SING;
+        self->img->base.itype = TSK_IMG_TYPE_RAW_SING;
 #endif
-  };
+    }
+    if(self->img == NULL) {
+        RaiseError(EIOError, "Unable to open image: %s", tsk_error_get());
+        tsk_error_reset();
+        return NULL;
+    }
+    talloc_set_destructor((void *) self, (int(*)(void *)) &Img_Info_dest);
 
-  if(!self->img) {
-    RaiseError(EIOError, "Unable to open image: %s", tsk_error_get());
-    tsk_error_reset();
-    goto on_error;
-  };
-
-  talloc_set_destructor((void *)self, Img_Info_dest);
-  return self;
-
-on_error:
-  talloc_free(self);
-  return NULL;
-};
+    return self;
+}
 
 uint64_t Img_Info_read(Img_Info self, TSK_OFF_T off, OUT char *buf, size_t len) {
   ssize_t read_count = 0;
@@ -120,30 +126,37 @@ void Img_Info_close(Img_Info self PYTSK3_ATTRIBUTE_UNUSED) {
 };
 
 Extended_TSK_IMG_INFO *Img_Info_get_img_info(Img_Info self) {
-  // Initialise the img struct with the correct callbacks:
-  Extended_TSK_IMG_INFO *img;
+    // Initialise the img struct with the correct callbacks:
+    Extended_TSK_IMG_INFO *img = NULL;
 
-  img = talloc_zero(self, Extended_TSK_IMG_INFO);
-  img->container = self;
+    if(self == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: self.");
+        return NULL;
+    }
+    // Create a new talloc context here since we do not want to
+    // unnecessarily keep unused versions around.
+    img = talloc_zero(NULL, Extended_TSK_IMG_INFO);
+    img->container = self;
 
 #if defined( TSK_MULTITHREAD_LIB )
-  tsk_init_lock(&img->base.cache_lock);
+    tsk_init_lock(&img->base.cache_lock);
 #endif
 
-  img->base.read = IMG_INFO_read;
-  img->base.close = IMG_INFO_close;
-  img->base.size = CALL(self, get_size);
+    img->base.read = IMG_INFO_read;
+    img->base.close = IMG_INFO_close;
+    img->base.size = self->get_size(self);
 
 #ifdef TSK_VERSION_NUM
-  img->base.sector_size = 512;
+    img->base.sector_size = 512;
 #endif
 #if defined( TSK_VERSION_NUM ) && ( TSK_VERSION_NUM >= 0x040103ff )
     self->img->base.itype = TSK_IMG_TYPE_EXTERNAL;
 #else
-  img->base.itype = TSK_IMG_TYPE_RAW_SING;
+    img->base.itype = TSK_IMG_TYPE_RAW_SING;
 #endif
-  return img;
-};
+
+    return img;
+}
 
 uint64_t Img_Info_get_size(Img_Info self) {
   if(self->img)
@@ -176,83 +189,162 @@ ssize_t IMG_INFO_read(TSK_IMG_INFO *img, TSK_OFF_T off, char *buf, size_t len) {
 
 /* FS_Info destructor
  */
-int FS_Info_dest(void *self) {
-  FS_Info fs_info = (FS_Info) self;
+int FS_Info_dest(FS_Info self) {
+    if(self == NULL) {
+        return -1;
+    }
+    tsk_fs_close(self->info);
 
-  tsk_fs_close((TSK_FS_INFO *) fs_info->info);
-  tsk_fs_free((TSK_FS_INFO *) fs_info->info);
-  fs_info->info = NULL;
+    self->info = NULL;
 
-  return 0;
+    // The extended_img_info was allocated in a separate talloc context.
+    talloc_free(self->extended_img_info);
+    self->extended_img_info = NULL;
+
+    return 0;
 }
 
 /* FS_Info constructor
  */
 static FS_Info FS_Info_Con(FS_Info self, Img_Info img, TSK_OFF_T offset,
                            TSK_FS_TYPE_ENUM type) {
-  Extended_TSK_IMG_INFO *img_info;
+    if(self == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: self.");
+        return NULL;
+    }
+    if(img == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: img.");
+        return NULL;
+    }
+    // TODO: why is a new instance of img_info necessary here?
+    self->extended_img_info = img->get_img_info(img);
 
-  if(!img) {
-    RaiseError(EInvalidParameter, "invalid img");
-    goto on_error;
-  }
-  img_info = CALL(img, get_img_info);
+    if(self->extended_img_info == NULL) {
+        RaiseError(EInvalidParameter, "Invalid self->extended_img_info");
+        goto on_error;
+    }
+    self->info = tsk_fs_open_img((TSK_IMG_INFO *) self->extended_img_info, offset, type);
 
-  if(!img_info) {
-    RaiseError(EInvalidParameter, "invalid img_info");
-    goto on_error;
-  }
-  // Now try to open the filesystem
-  self->info = tsk_fs_open_img((TSK_IMG_INFO *)img_info, offset, type);
-  if(!self->info) {
-    RaiseError(EIOError, "Unable to open the image as a filesystem: %s",
-               tsk_error_get());
-    tsk_error_reset();
-    goto on_error;
-  };
+    if(!self->info) {
+        RaiseError(EIOError, "Unable to open the image as a filesystem: %s",
+                   tsk_error_get());
+        tsk_error_reset();
+        goto on_error;
+    }
+    // Make sure that the filesystem is properly closed when we get freed
+    talloc_set_destructor((void *) self, (int(*)(void *)) &FS_Info_dest);
 
-  // Make sure that the filesystem is properly closed when we get freed
-  talloc_set_destructor((void *)self, FS_Info_dest);
-  return self;
+    return self;
 
 on_error:
-  talloc_free(self);
-  return NULL;
+    if(self->extended_img_info != NULL) {
+        talloc_free(self->extended_img_info);
+    }
+    return NULL;
 };
 
 static Directory FS_Info_open_dir(FS_Info self, ZString path, TSK_INUM_T inode) {
-  return CONSTRUCT(Directory, Directory, Con, NULL, self, path, inode);
+    Directory object = NULL;
+
+    if(self == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: self.");
+        return NULL;
+    }
+    // CONSTRUCT_CREATE calls _talloc_memdup to allocate memory for the object.
+    object = CONSTRUCT_CREATE(Directory, Directory, NULL);
+
+    if(object != NULL) {
+        // CONSTRUCT_INITIALIZE calls the constructor function on the object.
+        if(CONSTRUCT_INITIALIZE(Directory, Directory, Con, object, self, path, inode) == NULL) {
+            goto on_error;
+        }
+    }
+    return object;
+
+on_error:
+    if(object != NULL) {
+        talloc_free(object);
+    }
+    return NULL;
 };
 
 static File FS_Info_open(FS_Info self, ZString path) {
-  TSK_FS_FILE *handle = tsk_fs_file_open(self->info, NULL, path);
-  File result;
+    TSK_FS_FILE *info = NULL;
+    File object = NULL;
 
-  if(!handle) {
-    RaiseError(EIOError, "Unable to open file: %s", tsk_error_get());
-    tsk_error_reset();
+    if(self == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: self.");
+        return NULL;
+    }
+    info = tsk_fs_file_open(self->info, NULL, path);
+
+    if(info == NULL) {
+        RaiseError(EIOError, "Unable to open file: %s", tsk_error_get());
+        tsk_error_reset();
+        goto on_error;
+    }
+    // CONSTRUCT_CREATE calls _talloc_memdup to allocate memory for the object.
+    object = CONSTRUCT_CREATE(File, File, NULL);
+
+    if(object != NULL) {
+        // CONSTRUCT_INITIALIZE calls the constructor function on the object.
+        if(CONSTRUCT_INITIALIZE(File, File, Con, object, self, info) == NULL) {
+            goto on_error;
+        }
+    }
+    // Tell the File object to manage info.
+    object->info_is_internal = 1;
+
+    return object;
+
+on_error:
+    if(object != NULL) {
+        talloc_free(object);
+    }
+    if(info != NULL) {
+        tsk_fs_file_close(info);
+    }
     return NULL;
-  };
-
-  result = CONSTRUCT(File, File, Con, NULL, self, handle);
-
-  return result;
 };
 
 static File FS_Info_open_meta(FS_Info self, TSK_INUM_T inode) {
-  TSK_FS_FILE *handle = tsk_fs_file_open_meta(self->info, NULL, inode);
-  File result;
+    TSK_FS_FILE *info = NULL;
+    File object = NULL;
 
-  if(!handle) {
-    RaiseError(EIOError, "Unable to open file: %s", tsk_error_get());
-    tsk_error_reset();
+    if(self == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: self.");
+        return NULL;
+    }
+    info = tsk_fs_file_open_meta(self->info, NULL, inode);
+
+    if(info == NULL) {
+        RaiseError(EIOError, "Unable to open file: %s", tsk_error_get());
+        tsk_error_reset();
+        goto on_error;
+    }
+    // CONSTRUCT_CREATE calls _talloc_memdup to allocate memory for the object.
+    object = CONSTRUCT_CREATE(File, File, NULL);
+
+    if(object != NULL) {
+        // CONSTRUCT_INITIALIZE calls the constructor function on the object.
+        if(CONSTRUCT_INITIALIZE(File, File, Con, object, self, info) == NULL) {
+            goto on_error;
+        }
+    }
+    // Tell the File object to manage info.
+    object->info_is_internal = 1;
+
+    return object;
+
+on_error:
+    if(object != NULL) {
+        talloc_free(object);
+    }
+    if(info != NULL) {
+        tsk_fs_file_close(info);
+    }
     return NULL;
-  };
-
-  result = CONSTRUCT(File, File, Con, NULL, self, handle);
-
-  return result;
-};
+}
 
 static void FS_Info_exit(FS_Info self PYTSK3_ATTRIBUTE_UNUSED) {
   PYTSK3_UNREFERENCED_PARAMETER(self)
@@ -269,75 +361,97 @@ VIRTUAL(FS_Info, Object) {
 
 /* Directory destructor
  */
-static int Directory_dest(void *self) {
-  Directory directory = (Directory) self;
+static int Directory_dest(Directory self) {
+    if(self == NULL) {
+        return -1;
+    }
+    tsk_fs_dir_close(self->info);
+    self->info = NULL;
 
-  tsk_fs_dir_close((TSK_FS_DIR *) directory->info);
-  // There is no: tsk_fs_dir_free
-  directory->info = NULL;
-
-  return 0;
+    return 0;
 }
 
 /* Directory constructor
  */
-static Directory Directory_Con(Directory self, FS_Info fs,
-                               ZString path, TSK_INUM_T inode) {
-  if(!fs) {
-    RaiseError(EInvalidParameter, "FS_Info parameter is invalid.");
-    goto on_error;
-  };
+static Directory Directory_Con(Directory self, FS_Info fs, ZString path, TSK_INUM_T inode) {
 
-  if(!path) {
-    self->info = tsk_fs_dir_open_meta(fs->info, inode);
-  } else {
-    self->info = tsk_fs_dir_open(fs->info, path);
-  };
+    if(self == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: self.");
+        return NULL;
+    }
+    if(fs == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: fs.");
+        return NULL;
+    }
+    if(path == NULL) {
+        self->info = tsk_fs_dir_open_meta(fs->info, inode);
+    } else {
+        self->info = tsk_fs_dir_open(fs->info, path);
+    }
+    if(self->info == NULL) {
+        RaiseError(EIOError, "Unable to open directory: %s", tsk_error_get());
+        tsk_error_reset();
+        return NULL;
+    }
+    self->current = 0;
+    self->size = tsk_fs_dir_getsize(self->info);
+    self->fs = fs;
 
-  if(!self->info) {
-    RaiseError(EIOError, "Unable to open directory: %s", tsk_error_get());
-    tsk_error_reset();
-    goto on_error;
-  };
+    // TODO: is this still applicable?
+    // Add a reference to them to ensure they dont get freed until we do.
+    // talloc_reference(self, fs);
 
-  self->current = 0;
-  self->size = tsk_fs_dir_getsize(self->info);
-  self->fs = fs;
-  // Add a reference to them to ensure they dont get freed until we
-  // do.
-  //talloc_reference(self, fs);
-  talloc_set_destructor((void *)self, Directory_dest);
+    talloc_set_destructor((void *) self, (int(*)(void *)) &Directory_dest);
 
-  return self;
-
-on_error:
-  talloc_free(self);
-  return NULL;
-};
+    return self;
+}
 
 static File Directory_next(Directory self) {
-  File result = NULL;
-  TSK_FS_FILE *info = NULL;
+    TSK_FS_FILE *info = NULL;
+    File object = NULL;
 
-  if(self == NULL) {
+    if(self == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: self.");
+        return NULL;
+    }
+    if((self->current < 0) || ((uint64_t) self->current > (uint64_t) self->size)) {
+        RaiseError(EInvalidParameter, "Invalid parameter: current.");
+        return NULL;
+    }
+    if((uint64_t) self->current == (uint64_t) self->size) {
+        return NULL;
+    }
+    info = tsk_fs_dir_get(self->info, self->current);
+
+    if(info == NULL) {
+        RaiseError(EIOError, "Error opening File: %s", tsk_error_get());
+        tsk_error_reset();
+        goto on_error;
+    }
+    // CONSTRUCT_CREATE calls _talloc_memdup to allocate memory for the object.
+    object = CONSTRUCT_CREATE(File, File, NULL);
+
+    if(object != NULL) {
+        // CONSTRUCT_INITIALIZE calls the constructor function on the object.
+        if(CONSTRUCT_INITIALIZE(File, File, Con, object, self->fs, info) == NULL) {
+            goto on_error;
+        }
+    }
+    // Tell the File object to manage info.
+    object->info_is_internal = 1;
+
+    self->current++;
+
+    return object;
+
+on_error:
+    if(object != NULL) {
+        talloc_free(object);
+    }
+    if(info != NULL) {
+        tsk_fs_file_close(info);
+    }
     return NULL;
-  }
-  if((self->current < 0) || ((uint64_t)self->current >= (uint64_t)self->size)) {
-    return NULL;
-  }
-
-  info = tsk_fs_dir_get(self->info, self->current);
-  if(!info) {
-    RaiseError(EIOError, "Error opening File: %s", tsk_error_get());
-    tsk_error_reset();
-    return NULL;
-  }
-
-  result = CONSTRUCT(File, File, Con, NULL, self->fs, info);
-  result->info = info;
-  self->current ++;
-
-  return result;
 };
 
 static void Directory_iter(Directory self) {
@@ -352,34 +466,44 @@ VIRTUAL(Directory, Object) {
 
 /* File destructor
  */
-static int File_dest(void *self) {
-  File file = (File) self;
+static int File_dest(File self) {
+    if(self == NULL) {
+        return -1;
+    }
+    if(self->info_is_internal != 0) {
+        // Here internal refers to the File object managing info
+        // not that info was allocated by talloc.
+        tsk_fs_file_close(self->info);
+    }
+    self->info = NULL;
 
-  tsk_fs_file_close((TSK_FS_FILE *) file->info);
-  // There is no: tsk_fs_file_free
-  return 0;
+    return 0;
 }
 
 /* File constructor
  */
 static File File_Con(File self, FS_Info fs, TSK_FS_FILE *info) {
-  self->info = info;
-  self->fs = fs;
+    if(self == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: self.");
+        return NULL;
+    }
+    if(fs == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: fs.");
+        return NULL;
+    }
+    if(info == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: info.");
+        return NULL;
+    }
+    self->fs = fs;
+    self->info = info;
 
-  if(!fs) {
-    RaiseError(EInvalidParameter, "FS_Info parameter is invalid.");
-    goto on_error;
-  };
+    // Get the total number of attributes.
+    self->max_attr = tsk_fs_file_attr_getsize(info);
 
-  // Get the total number of attributes:
-  self->max_attr = tsk_fs_file_attr_getsize(info);
+    talloc_set_destructor((void *) self, (int(*)(void *)) &File_dest);
 
-  talloc_set_destructor((void *)self, File_dest);
-  return self;
-
-on_error:
-  talloc_free(self);
-  return NULL;
+    return self;
 };
 
 static uint64_t File_read_random(File self, TSK_OFF_T offset,
@@ -408,37 +532,79 @@ static uint64_t File_read_random(File self, TSK_OFF_T offset,
 };
 
 static Directory File_as_directory(File self) {
-  if(self->info->meta && self->info->meta->type == TSK_FS_META_TYPE_DIR) {
-    Directory result = CONSTRUCT(Directory, Directory, Con, NULL,
-                                 self->fs, NULL,
-                                 self->info->meta->addr);
+    Directory object = NULL;
 
-    if(result) return result;
-  };
+    if(self == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: self.");
+        return NULL;
+    }
+    if(self->info == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: self->info.");
+        return NULL;
+    }
+    if(self->info->meta == NULL || self->info->meta->type != TSK_FS_META_TYPE_DIR) {
+        RaiseError(EIOError, "Not a directory");
+        return NULL;
+    }
+    // CONSTRUCT_CREATE calls _talloc_memdup to allocate memory for the object.
+    object = CONSTRUCT_CREATE(Directory, Directory, NULL);
 
-  RaiseError(EIOError, "Not a directory");
-  return NULL;
+    if(object != NULL) {
+        // CONSTRUCT_INITIALIZE calls the constructor function on the object.
+        if(CONSTRUCT_INITIALIZE(Directory, Directory, Con, object, self->fs, NULL, self->info->meta->addr) == NULL) {
+            goto on_error;
+        }
+    }
+    return object;
+
+on_error:
+    if(object != NULL) {
+        talloc_free(object);
+    }
+    return NULL;
 };
 
 static Attribute File_iternext(File self) {
-  TSK_FS_ATTR *attribute;
-  Attribute result;
+    TSK_FS_ATTR *attribute = NULL;
+    Attribute object = NULL;
 
-  if(self->current_attr >= self->max_attr) {
+    if(self == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: self.");
+        return NULL;
+    }
+    if(self->current_attr < 0 || self->current_attr > self->max_attr) {
+        RaiseError(EInvalidParameter, "Invalid parameter: self->current_attr.");
+        return NULL;
+    }
+    if(self->current_attr == self->max_attr) {
+        return NULL;
+    }
+    // It looks like attribute is managed by the SleuthKit.
+    attribute = (TSK_FS_ATTR *) tsk_fs_file_attr_get_idx(self->info, self->current_attr);
+
+    if(!attribute)  {
+        RaiseError(EIOError, "Error opening File: %s", tsk_error_get());
+        tsk_error_reset();
+        return NULL;
+    }
+    // CONSTRUCT_CREATE calls _talloc_memdup to allocate memory for the object.
+    object = CONSTRUCT_CREATE(Attribute, Attribute, NULL);
+
+    if(object != NULL) {
+        // CONSTRUCT_INITIALIZE calls the constructor function on the object.
+        if(CONSTRUCT_INITIALIZE(Attribute, Attribute, Con, object, attribute) == NULL) {
+            goto on_error;
+        }
+    }
+    self->current_attr++;
+
+    return object;
+
+on_error:
+    if(object != NULL) {
+        talloc_free(object);
+    }
     return NULL;
-  };
-
-  attribute = (TSK_FS_ATTR *)tsk_fs_file_attr_get_idx(self->info, self->current_attr);
-  if(!attribute)  {
-    RaiseError(EIOError, "Error opening File: %s", tsk_error_get());
-    tsk_error_reset();
-    return NULL;
-  };
-
-  result = CONSTRUCT(Attribute, Attribute, Con, NULL, attribute);
-  self->current_attr ++;
-
-  return result;
 };
 
 static void File_iter__(File self) {
@@ -456,48 +622,57 @@ VIRTUAL(File, Object) {
 /* Attribute constructor
  */
 static Attribute Attribute_Con(Attribute self, TSK_FS_ATTR *info) {
-  self->info = info;
+    if(self == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: self.");
+        return NULL;
+    }
+    if(info == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: info.");
+        return NULL;
+    }
+    self->info = info;
 
-  return self;
-};
+    return self;
+}
 
 static void Attribute_iter(Attribute self) {
   self->current = self->info->nrd.run;
 };
 
 static TSK_FS_ATTR_RUN *Attribute_iternext(Attribute self) {
-  TSK_FS_ATTR_RUN *result = self->current;
+    TSK_FS_ATTR_RUN *result = NULL;
 
-  if(result) {
+    if(self->current == NULL) {
+        return NULL;
+    }
+    result = self->current;
+
     self->current = self->current->next;
-    if(self->current == self->info->nrd.run){
-      self->current = NULL;
-    };
 
-    result = talloc_memdup(NULL, result, sizeof(*result));
-  };
-
-  return result;
-};
+    if(self->current == self->info->nrd.run) {
+        self->current = NULL;
+    }
+    return talloc_memdup(NULL, result, sizeof(*result));
+}
 
 VIRTUAL(Attribute, Object) {
-  VMETHOD(Con) = Attribute_Con;
-  VMETHOD(iternext) = Attribute_iternext;
-  VMETHOD(__iter__) = Attribute_iter;
+    VMETHOD(Con) = Attribute_Con;
+    VMETHOD(iternext) = Attribute_iternext;
+    VMETHOD(__iter__) = Attribute_iter;
 } END_VIRTUAL
 
 /* The following implement the volume system. */
 
 /* Volume_Info destructor
  */
-static int Volume_Info_dest(void *self) {
-  Volume_Info volume_info = (Volume_Info) self;
+static int Volume_Info_dest(Volume_Info self) {
+    if(self == NULL) {
+        return -1;
+    }
+    tsk_vs_close(self->info);
+    self->info = NULL;
 
-  tsk_vs_close((TSK_VS_INFO *) volume_info->info);
-  // There is no: tsk_vs_free
-  volume_info->info = NULL;
-
-  return 0;
+    return 0;
 }
 
 /* Volume_Info constructor
@@ -505,21 +680,25 @@ static int Volume_Info_dest(void *self) {
 static Volume_Info Volume_Info_Con(Volume_Info self, Img_Info img,
                                    TSK_VS_TYPE_ENUM type,
                                    TSK_OFF_T offset) {
-  if(!img) {
-    RaiseError(EInvalidParameter, "Image object is not valid.");
-    goto on_error;
-  };
+    if(self == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: self.");
+        return NULL;
+    }
+    if(img == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: img.");
+        return NULL;
+    }
+    self->info = tsk_vs_open((TSK_IMG_INFO *) img->img, offset, type);
 
-  self->info = tsk_vs_open((TSK_IMG_INFO *)img->img, offset, type);
-  if(self->info) {
-    talloc_set_destructor((void *)self, Volume_Info_dest);
+    if(self->info == NULL) {
+        RaiseError(EIOError, "Error opening Volume_Info: %s", tsk_error_get());
+        tsk_error_reset();
+        return NULL;
+    }
+    talloc_set_destructor((void *) self, (int(*)(void *)) &Volume_Info_dest);
+
     return self;
-  }
-
-on_error:
-  talloc_free(self);
-  return NULL;
-};
+}
 
 static void Volume_Info_iter(Volume_Info self) {
   self->current = 0;

@@ -67,6 +67,10 @@ BIND_STRUCT(TSK_VS_INFO);
 CLASS(Img_Info, Object)
      PRIVATE Extended_TSK_IMG_INFO *img;
 
+     /* Value to indicate if img is managed internally
+      */
+     PRIVATE int img_is_internal;
+
      /** Open an image using the Sleuthkit.
 
          DEFAULT(type) = TSK_IMG_TYPE_DETECT;
@@ -143,6 +147,11 @@ END_CLASS
 */
 CLASS(File, Object)
      FOREIGN TSK_FS_FILE *info;
+
+     /* Value to indicate if info is managed internally
+      */
+     PRIVATE int info_is_internal;
+
      PRIVATE struct FS_Info_t *fs;
 
      int max_attr;
@@ -208,6 +217,8 @@ END_CLASS
  */
 CLASS(FS_Info, Object)
      FOREIGN TSK_FS_INFO *info;
+
+     PRIVATE Extended_TSK_IMG_INFO *extended_img_info;
 
      /** Open the filesystem stored on image.
 

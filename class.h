@@ -294,10 +294,24 @@ extern "C" {
 
   // This requires the class initializers to have been called
   // previously. Therefore they are not exported.
-#define CONSTRUCT(class, virt_class, constructor, context, ... )        \
-  (class)(((virt_class)(&__ ## class))->constructor(                    \
-      (virt_class)_talloc_memdup(context, &__ ## class, sizeof(struct class ## _t),  __location__ "(" #class ")"), \
-				   ## __VA_ARGS__) )
+#define CONSTRUCT(class, virt_class, constructor, context, ...) \
+    (class)(((virt_class) (&__ ## class))->constructor( \
+        (virt_class) _talloc_memdup( \
+            context, &__ ## class, \
+            sizeof(struct class ## _t), \
+            __location__ "(" #class ")"), \
+        ## __VA_ARGS__) )
+
+/* _talloc_memdup version
+#define CONSTRUCT_CREATE(class, virt_class, context) \
+     (virt_class) _talloc_memdup(context, &__ ## class, sizeof(struct class ## _t), __location__ "(" #class ")")
+*/
+
+#define CONSTRUCT_CREATE(class, virt_class, context) \
+     (virt_class) talloc_memdup(context, &__ ## class, sizeof(struct class ## _t))
+
+#define CONSTRUCT_INITIALIZE(class, virt_class, constructor, object, ...) \
+    (class)(((virt_class) (&__ ## class))->constructor(object, ## __VA_ARGS__))
 
 /* This variant is useful when all we have is a class reference
  *   (GETCLASS(Foo)) or &__Foo

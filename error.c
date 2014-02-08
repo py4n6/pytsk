@@ -108,6 +108,7 @@ DLL_PUBLIC int *aff4_get_current_error(char **error_buffer) {
     *error_buffer = pthread_getspecific(error_str_slot);
 
     // If TLS buffers are not set we need to create them
+    // TODO: the TLS buffers need to be freed on exit.
     if(*error_buffer == NULL) {
       *error_buffer = talloc_size(NULL, ERROR_BUFF_SIZE);
       pthread_setspecific(error_str_slot, *error_buffer);
