@@ -30,8 +30,8 @@ void IMG_INFO_close(TSK_IMG_INFO *self);
 
 /* This macro is used to receive the object reference from a member of the type.
  */
-#define GET_Object_from_member(type, object, member)                    \
-  (type)(((char *)object) - (unsigned long)(&((type)0)->member))
+#define GET_Object_from_member(type, object, member) \
+    (type)(((char *)object) - (unsigned long)(&((type)0)->member))
 
 /* Img_Info destructor
  */
@@ -43,9 +43,9 @@ static int Img_Info_dest(Img_Info self) {
 
     if(self->img_is_internal != 0) {
 #if defined( TSK_MULTITHREAD_LIB )
-      tsk_deinit_lock(&(self->img->base.cache_lock));
+        tsk_deinit_lock(&(self->img->base.cache_lock));
 #endif
-      // If img is internal talloc will free it.
+        // If img is internal talloc will free it.
     }
     self->img = NULL;
 
@@ -97,33 +97,47 @@ static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type) {
         tsk_error_reset();
         return NULL;
     }
+    self->img_is_open = 1;
+
     talloc_set_destructor((void *) self, (int(*)(void *)) &Img_Info_dest);
 
     return self;
 }
 
 uint64_t Img_Info_read(Img_Info self, TSK_OFF_T off, OUT char *buf, size_t len) {
-  ssize_t read_count = 0;
+    ssize_t read_count = 0;
 
-  if (off < 0) {
-    RaiseError(EIOError, "Invalid offset value out of bounds.");
-    return 0;
-  };
+    if(self == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: self.");
+        return 0;
+    }
+    if(self->img_is_open == 0) {
+        RaiseError(EIOError, "Invalid Img_Info not opened.");
+        return 0;
+    }
+    if(off < 0) {
+        RaiseError(EIOError, "Invalid offset value out of bounds.");
+        return 0;
+    }
+    if(buf == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: buf.");
+        return 0;
+    }
+    read_count = CALL((TSK_IMG_INFO *) self->img, read, off, buf, len);
 
-  read_count = CALL((TSK_IMG_INFO *)self->img, read, off, buf, len);
-  if (read_count < 0) {
-    RaiseError(EIOError, "Unable to read image: %s", tsk_error_get());
-    tsk_error_reset();
-    return 0;
-  };
+    if(read_count < 0) {
+        RaiseError(EIOError, "Unable to read image: %s", tsk_error_get());
+        tsk_error_reset();
+        return 0;
+    }
+    return read_count;
+}
 
-  return read_count;
-};
-
-// Dont really do anything here
-void Img_Info_close(Img_Info self PYTSK3_ATTRIBUTE_UNUSED) {
-  PYTSK3_UNREFERENCED_PARAMETER(self)
-};
+void Img_Info_close(Img_Info self) {
+    if(self != NULL) {
+        self->img_is_open = 0;
+    }
+}
 
 Extended_TSK_IMG_INFO *Img_Info_get_img_info(Img_Info self) {
     // Initialise the img struct with the correct callbacks:
@@ -159,33 +173,38 @@ Extended_TSK_IMG_INFO *Img_Info_get_img_info(Img_Info self) {
 }
 
 uint64_t Img_Info_get_size(Img_Info self) {
-  if(self->img)
-    return ((TSK_IMG_INFO *)self->img)->size;
-
-  return (uint64_t)-1;
-};
+    if(self == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: self.");
+        return NULL;
+    }
+    if(self->img != NULL) {
+        return ((TSK_IMG_INFO *) self->img)->size;
+    }
+    return (uint64_t) -1;
+}
 
 VIRTUAL(Img_Info, Object) {
-  VMETHOD(Con) = Img_Info_Con;
-  VMETHOD(read) = Img_Info_read;
-  VMETHOD(close) = Img_Info_close;
-  VMETHOD(get_img_info) = Img_Info_get_img_info;
-  VMETHOD(get_size) = Img_Info_get_size;
+    VMETHOD(Con) = Img_Info_Con;
+    VMETHOD(read) = Img_Info_read;
+    VMETHOD(close) = Img_Info_close;
+    VMETHOD(get_img_info) = Img_Info_get_img_info;
+    VMETHOD(get_size) = Img_Info_get_size;
 } END_VIRTUAL
 
 void IMG_INFO_close(TSK_IMG_INFO *img) {
-  Extended_TSK_IMG_INFO *self = (Extended_TSK_IMG_INFO *)img;
+    Extended_TSK_IMG_INFO *self = (Extended_TSK_IMG_INFO *) img;
 
-  CALL(self->container, close);
+    CALL(self->container, close);
 };
 
 ssize_t IMG_INFO_read(TSK_IMG_INFO *img, TSK_OFF_T off, char *buf, size_t len) {
-  Extended_TSK_IMG_INFO *self = (Extended_TSK_IMG_INFO *)img;
+    Extended_TSK_IMG_INFO *self = (Extended_TSK_IMG_INFO *) img;
 
-  if(len == 0) return 0;
-
-  return (ssize_t)CALL(self->container, read, (uint64_t)off, buf, len);
-};
+    if(len == 0) {
+      return 0;
+    }
+    return (ssize_t) CALL(self->container, read, (uint64_t) off, buf, len);
+}
 
 /* FS_Info destructor
  */

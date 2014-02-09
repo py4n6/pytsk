@@ -356,10 +356,6 @@ struct Gen_wrapper_t {
 
     PyObject *python_object1;
     PyObject *python_object2;
-
-    /* Value to indicate the object is proxied.
-     */
-    int object_is_proxied;
 };
 
 static struct python_wrapper_map_t {
@@ -395,7 +391,6 @@ Gen_wrapper new_class_wrapper(Object item, int item_is_python_object) {
                 result->base_is_internal = 1;
                 result->python_object1 = NULL;
                 result->python_object2 = NULL;
-                result->object_is_proxied = 0;
 
                 python_wrapper->initialize_proxies(result, (void *) item);
 
@@ -1280,7 +1275,7 @@ class Wrapper(Type):
 
         if "BORROWED" in self.attributes:
             result += (
-                "        #warning unchecked BORROWED code segment\n"
+                "        #error unchecked BORROWED code segment\n"
                 "        %(incref)s(wrapped_%(name)s->base);\n"
                 "        if(((Object) wrapped_%(name)s->base)->extension) {\n"
                 "            Py_IncRef((PyObject *) ((Object) wrapped_%(name)s->base)->extension);\n"
@@ -1363,7 +1358,6 @@ class StructWrapper(Wrapper):
               "        wrapped_%(name)s->base_is_internal = 0;\n"
               "        wrapped_%(name)s->python_object1 = NULL;\n"
               "        wrapped_%(name)s->python_object2 = NULL;\n"
-              "        wrapped_%(name)s->object_is_proxied = 0;\n"
               "\n") % args
         else:
           result += (
@@ -1372,7 +1366,6 @@ class StructWrapper(Wrapper):
               "        wrapped_%(name)s->base_is_internal = 1;\n"
               "        wrapped_%(name)s->python_object1 = NULL;\n"
               "        wrapped_%(name)s->python_object2 = NULL;\n"
-              "        wrapped_%(name)s->object_is_proxied = 0;\n"
               "\n") % args
 
         if "NULL_OK" in self.attributes:
@@ -1940,11 +1933,6 @@ class ConstructorMethod(Method):
             "static void %(class_name)s_dealloc(py%(class_name)s *self) {\n"
             "    if(self != NULL) {\n"
             "        if(self->base != NULL) {\n"
-            "            if(self->object_is_proxied != 0) {\n"
-            "                if(((Object) self->base)->extension != NULL) {\n"
-            "                    Py_DecRef((PyObject *) ((Object) self->base)->extension);\n"
-            "                }\n"
-            "            }\n"
             "            if(self->base_is_python_object != 0) {\n"
             "                Py_DecRef((PyObject*) self->base);\n"
             "            } else if(self->base_is_internal != 0) {\n"
@@ -1976,7 +1964,6 @@ class ConstructorMethod(Method):
 
         out.write((
             "static void py%(class_name)s_initialize_proxies(py%(class_name)s *self, void *item) {\n"
-            "    int proxied_method_found = 0;\n"
             "    %(class_name)s target = (%(class_name)s) item;\n"
             "\n"
             "    // Maintain a reference to the python object in the C object extension\n"
@@ -1984,24 +1971,23 @@ class ConstructorMethod(Method):
             "\n") % self.__dict__)
 
         # Install proxies for all the method in the current class
-        for x in self.myclass.module.classes[self.class_name].methods:
-            if x.name[0]!='_':
+        for method in self.myclass.module.classes[self.class_name].methods:
+            if method.name.startswith("_"):
+                continue
+
+            # Since the SleuthKit uses close method also for freeing it needs to be handled
+            # separately to prevent the C/C++ code calling back into a garbage collected
+            # Python object. For close we keep the default implementation and have its
+            # destructor deal with correctly closing the SleuthKit object.
+            if method.name != 'close':
                 out.write((
-                   "    if(check_method_override((PyObject *)self, &%(class_name)s_Type, \"%(name)s\")) {\n"
+                   "    if(check_method_override((PyObject *) self, &%(class_name)s_Type, \"%(name)s\")) {\n"
                    "        // Proxy the %(name)s method\n"
                    "        ((%(definition_class_name)s) target)->%(name)s = %(proxied_name)s;\n"
-                   "\n"
-                   "        proxied_method_found = 1;\n"
                    "    }\n") % dict(
-                       name=x.name, class_name=x.class_name, definition_class_name=x.definition_class_name,
-                       proxied_name=x.proxied.get_name()))
-
-        out.write((
-            "    if(proxied_method_found != 0) {\n"
-            "        self->object_is_proxied = 1;\n"
-            "        // Poor mans solution to making sure the proxying object is not garbage collected.\n"
-            "        Py_IncRef((PyObject *) ((Object) item)->extension);\n"
-            "    }\n") % self.__dict__)
+                       name=method.name, class_name=method.class_name,
+                       definition_class_name=method.definition_class_name,
+                       proxied_name=method.proxied.get_name()))
 
         out.write("}\n\n")
 
@@ -2360,7 +2346,7 @@ class ProxiedMethod(Method):
            "\n"
            "        goto on_error;\n"
            "    }\n"
-           "\n") % dict(CURRENT_ERROR_FUNCTION = CURRENT_ERROR_FUNCTION));
+           "\n") % dict(CURRENT_ERROR_FUNCTION=CURRENT_ERROR_FUNCTION));
 
         for arg in self.args:
             out.write(arg.python_proxy_post_call())
@@ -2576,15 +2562,17 @@ class ClassGenerator:
         if self.attributes:
             self.attributes.write_definition(out)
 
-        for m in self.methods:
-            m.write_definition(out)
-            m.proxied.write_definition(out)
+        for method in self.methods:
+            method.write_definition(out)
+
+            if hasattr(method, 'proxied'):
+                method.proxied.write_definition(out)
 
     def initialise(self):
-        result = """
-python_wrappers[TOTAL_CLASSES].class_ref = (Object)&__%(class_name)s;
-python_wrappers[TOTAL_CLASSES].python_type = &%(class_name)s_Type;
-""" % self.__dict__
+        result = (
+            "python_wrappers[TOTAL_CLASSES].class_ref = (Object)&__%(class_name)s;\n"
+            "python_wrappers[TOTAL_CLASSES].python_type = &%(class_name)s_Type;\n") % self.__dict__
+
         func_name = "py%(class_name)s_initialize_proxies" % self.__dict__
         if func_name in self.module.function_definitions:
             result += "python_wrappers[TOTAL_CLASSES].initialize_proxies = (void *)%s;\n" % func_name
@@ -2612,7 +2600,12 @@ python_wrappers[TOTAL_CLASSES].python_type = &%(class_name)s_Type;
             self.attributes.prototype(out)
         for method in self.methods:
             method.prototype(out)
-            # Each method has a proxy method automatically
+
+            # Each method, except for close, needs a proxy method that is called
+            # when the object is sub typed.
+            if method.name == 'close':
+                continue
+
             method.proxied = ProxiedMethod(method, method.myclass)
             method.proxied.prototype(out)
 

@@ -71,25 +71,29 @@ CLASS(Img_Info, Object)
       */
      PRIVATE int img_is_internal;
 
-     /** Open an image using the Sleuthkit.
+     /* Value to indicate if img is open 
+      */
+     PRIVATE int img_is_open;
 
-         DEFAULT(type) = TSK_IMG_TYPE_DETECT;
-         DEFAULT(url) = "";
-     */
+     /* Open an image using the Sleuthkit.
+      *
+      * DEFAULT(type) = TSK_IMG_TYPE_DETECT;
+      * DEFAULT(url) = "";
+      */
      Img_Info METHOD(Img_Info, Con, ZString url, TSK_IMG_TYPE_ENUM type);
 
      /* Read a random buffer from the image */
      uint64_t METHOD(Img_Info, read, TSK_OFF_T off, OUT char *buf, size_t len);
 
-     /** Retrieve the size of the image */
+     /* Retrieve the size of the image */
      uint64_t METHOD(Img_Info, get_size);
 
      /* Closes the image */
      void METHOD(Img_Info, close);
 
      /* An accessor for our img object - used by TSK classes to get
-        our object.
-     */
+      * our object.
+      */
      PRIVATE Extended_TSK_IMG_INFO *METHOD(Img_Info, get_img_info);
 END_CLASS
 
