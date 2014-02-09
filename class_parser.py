@@ -2281,17 +2281,19 @@ class ProxiedMethod(Method):
             "\n"
             "    // Grab the GIL so we can do python stuff\n"
             "    gstate = PyGILState_Ensure();\n"
-            "\n")
-
-        out.write((
+            "\n"
             "    PyObject *Py_result = NULL;\n"
-            "    PyObject *method_name = PyString_FromString(\"%s\");\n") % self.name)
+            "    PyObject *method_name = NULL;\n")
 
         out.write(self.return_type.returned_python_definition())
 
         for arg in self.args:
             out.write(arg.local_definition())
             out.write("PyObject *py_%s = NULL;\n" % arg.name)
+
+        out.write((
+            "\n"
+            "    method_name = PyString_FromString(\"%s\");\n") % self.name)
 
         out.write("\n// Obtain python objects for all the args:\n")
         for arg in self.args:
