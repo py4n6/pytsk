@@ -2278,10 +2278,6 @@ class ProxiedMethod(Method):
         out.write(
             " {\n"
             "    PyGILState_STATE gstate;\n"
-            "\n"
-            "    // Grab the GIL so we can do python stuff\n"
-            "    gstate = PyGILState_Ensure();\n"
-            "\n"
             "    PyObject *Py_result = NULL;\n"
             "    PyObject *method_name = NULL;\n")
 
@@ -2292,6 +2288,9 @@ class ProxiedMethod(Method):
             out.write("PyObject *py_%s = NULL;\n" % arg.name)
 
         out.write((
+            "\n"
+            "    // Grab the GIL so we can do python stuff\n"
+            "    gstate = PyGILState_Ensure();\n"
             "\n"
             "    method_name = PyString_FromString(\"%s\");\n") % self.name)
 
