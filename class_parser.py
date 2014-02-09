@@ -284,7 +284,7 @@ class Module:
     def initialization(self):
         result = self.init_string + (
             "\n"
-            "talloc_set_log_fn((void *) printf);\n"
+            "talloc_set_log_fn((void (*)(const char *)) printf);\n"
             "// DEBUG: talloc_enable_leak_report();\n"
             "// DEBUG: talloc_enable_leak_report_full();\n")
 
