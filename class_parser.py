@@ -615,7 +615,7 @@ PyMODINIT_FUNC init%(module)s(void) {
         # Add the constants in here
         for constant, type in self.constants:
             if type == 'integer':
-                out.write(""" tmp = PyLong_FromUnsignedLongLong((int64_t)%s); \n""" % constant)
+                out.write(""" tmp = PyLong_FromUnsignedLongLong((uint64_t) %s); \n""" % constant)
             elif type == 'string':
                 out.write(" tmp = PyString_FromString((char *)%s); \n" % constant)
             else:
@@ -2576,7 +2576,7 @@ class ClassGenerator:
 
         func_name = "py%(class_name)s_initialize_proxies" % self.__dict__
         if func_name in self.module.function_definitions:
-            result += "python_wrappers[TOTAL_CLASSES].initialize_proxies = (void *)%s;\n" % func_name
+            result += "python_wrappers[TOTAL_CLASSES].initialize_proxies = (void (*)(Gen_wrapper, void *)) &%s;\n" % func_name
 
         result += "TOTAL_CLASSES++;\n"
         return result

@@ -175,7 +175,7 @@ Extended_TSK_IMG_INFO *Img_Info_get_img_info(Img_Info self) {
 uint64_t Img_Info_get_size(Img_Info self) {
     if(self == NULL) {
         RaiseError(EInvalidParameter, "Invalid parameter: self.");
-        return NULL;
+        return 0;
     }
     if(self->img != NULL) {
         return ((TSK_IMG_INFO *) self->img)->size;
