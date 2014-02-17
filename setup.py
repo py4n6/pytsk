@@ -46,7 +46,7 @@ class TestCommand(Command):
 
 # Unfortunately distutils hardcodes compilers etc. We need to monkey
 # patch it here to make it work with other compilers.
-class Mingw32CCompiler (cygwinccompiler.CygwinCCompiler):
+class Mingw32CCompiler(cygwinccompiler.CygwinCCompiler):
   compiler_type = 'mingw32'
 
   def __init__ (self, verbose=0, dry_run=0, force=0):
@@ -139,6 +139,25 @@ if not TSK_VERSION:
   raise EnvironmentError('Unable to determine SleuthKit version.')
 
 print 'Sleuthkit version found: %s' % TSK_VERSION
+
+PYTSK_VERSION = None
+
+file_object = open('class_parser.py')
+
+for line in file_object.readlines():
+  line = line.rstrip()
+  if line.startswith('VERSION = "') and line.endswith('"'):
+    PYTSK_VERSION = line[11:-1]
+    break
+
+file_object.close()
+
+if not PYTSK_VERSION:
+  raise EnvironmentError('Unable to determine pytsk version.')
+
+print 'Pytsk version found: %s' % PYTSK_VERSION
+
+PYTSK_VERSION = '{0:s}-{1:s}'.format(TSK_VERSION, PYTSK_VERSION)
 
 # Set-up the build configuration.
 CONFIG = dict(
@@ -271,7 +290,7 @@ if not have_libtalloc:
 
 setup(
     name='pytsk3',
-    version=TSK_VERSION,
+    version=PYTSK_VERSION,
     description = 'Python bindings for the sleuthkit',
     long_description = (
         'Python bindings for the sleuthkit (http://www.sleuthkit.org/)'),
