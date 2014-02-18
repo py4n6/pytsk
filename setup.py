@@ -157,7 +157,12 @@ if not PYTSK_VERSION:
 
 print 'Pytsk version found: %s' % PYTSK_VERSION
 
-PYTSK_VERSION = '{0:s}-{1:s}'.format(TSK_VERSION, PYTSK_VERSION)
+# Command bdist_msi does not support the SleuthKit version followed by
+# the pytsk version.
+if 'bdist_msi' in sys.argv:
+  PYTSK_VERSION = TSK_VERSION
+else:
+  PYTSK_VERSION = '{0:s}-{1:s}'.format(TSK_VERSION, PYTSK_VERSION)
 
 # Set-up the build configuration.
 CONFIG = dict(
