@@ -9,7 +9,7 @@ Homepage: http://code.google.com/p/pytsk/
 Package: pytsk3
 Section: python
 Architecture: any
-Depends: libtsk (= ${Source-Version}), ${shlibs:Depends}, ${python:Depends}
+Depends: libtsk (= 4.1.2-1), ${shlibs:Depends}, ${python:Depends}
 Description: Python bindings for libtsk
  Python bindings for libtsk.
 
