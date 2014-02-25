@@ -1,7 +1,7 @@
 #!/bin/sh
 # Script to package pytsk
 
-DATE=`date +"%Y-%m-%d"`;
+VERSION=`grep -e "^VERSION = " class_parser.py | sed 's/^.*"\([0-9]*\)"$/\1/'`;
 
 rm -f pytsk-*.tgz
 
@@ -47,6 +47,6 @@ FILES="\
     ${SCRIPTS} \
     ${DATA_FILES}"
 
-echo "Creating: pytsk-${DATE}.tgz"
-tar zcf pytsk-${DATE}.tgz ${FILES} 2>/dev/null
+echo "Creating: pytsk-${VERSION}.tgz"
+tar zcf pytsk-${VERSION}.tgz ${FILES} 2>/dev/null
 
