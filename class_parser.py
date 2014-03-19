@@ -234,7 +234,7 @@ import sys
 DEBUG = 0
 
 # The pytsk3 version
-VERSION = "20140217"
+VERSION = "20140319"
 
 # These functions are used to manage library memory
 FREE = "aff4_free"
@@ -869,7 +869,8 @@ class IntegerUnsigned(Integer):
         name = name or self.name
         return((
             "PyErr_Clear();\n"
-            "%(result)s = PyInt_FromUnsignedLong(%(name)s);\n") % dict(result=result, name=name))
+            "%(result)s = PyInt_FromLong((long) %(name)s);\n") % (
+                dict(result=result, name=name)))
 
     def from_python_object(self, source, destination, method, **kw):
         return((
