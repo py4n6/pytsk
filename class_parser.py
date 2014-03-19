@@ -848,7 +848,28 @@ class Integer(Type):
         name = name or self.name
         return((
             "PyErr_Clear();\n"
-            "%s = PyLong_FromLong(%s);\n") % (result, name))
+            "%(result)s = PyInt_FromLong(%(name)s);\n") % (
+                dict(result=result, name=name)))
+
+    def from_python_object(self, source, destination, method, **kw):
+        return((
+            "PyErr_Clear();\n"
+            "%(destination)s = PyInt_AsLongMask(%(source)s);\n") % (
+                dict(source=source, destination=destination)))
+
+    def comment(self):
+        return "%s %s " % (self.original_type, self.name)
+
+
+class IntegerUnsigned(Integer):
+    buildstr = 'I'
+    int_type = 'unsigned int '
+
+    def to_python_object(self, name=None, result='Py_result', **kw):
+        name = name or self.name
+        return((
+            "PyErr_Clear();\n"
+            "%(result)s = PyInt_FromUnsignedLong(%(name)s);\n") % dict(result=result, name=name))
 
     def from_python_object(self, source, destination, method, **kw):
         return((
@@ -856,34 +877,113 @@ class Integer(Type):
             "%(destination)s = PyInt_AsUnsignedLongMask(%(source)s);\n") % (
                 dict(source=source, destination=destination)))
 
-    def comment(self):
-        return "%s %s " % (self.original_type, self.name)
+
+class Integer8(Integer):
+    int_type = 'int8_t '
+
+
+class Integer8Unsigned(IntegerUnsigned):
+    int_type = 'uint8_t '
+
+
+class Integer16(Integer):
+    int_type = 'int16_t '
+
+
+class Integer16Unsigned(IntegerUnsigned):
+    int_type = 'uint16_t '
 
 
 class Integer32(Integer):
-    buildstr = 'I'
-    int_type = 'uint32_t '
+    int_type = 'int32_t '
 
-    def to_python_object(self, name=None, result='Py_result', **kw):
-        return((
-            "PyErr_Clear();\n"
-            "%s = PyLong_FromLong(%s);\n") % (result, name or self.name))
+
+class Integer32Unsigned(IntegerUnsigned):
+    int_type = 'uint32_t '
 
 
 class Integer64(Integer):
+    buildstr = 'L'
+    int_type = 'int64_t '
+
+    def to_python_object(self, name=None, result='Py_result', **kw):
+        name = name or self.name
+        return((
+            "PyErr_Clear();\n"
+            "#if defined( HAVE_LONG_LONG )\n"
+            "    %(result)s = PyLong_FromLongLong(%(name)s);\n"
+            "#else\n"
+            "    %(result)s = PyLong_FromLong(%(name)s);\n"
+            "#endif\n") % dict(result=result, name=name))
+
+    def from_python_object(self, source, destination, method, **kw):
+        return((
+            "PyErr_Clear();\n"
+            "#if defined( HAVE_LONG_LONG )\n"
+            "    %(destination)s = PyInt_AsLongLongMask(%(source)s);\n"
+            "#else\n"
+            "    %(destination)s = PyInt_AsLongMask(%(source)s);\n"
+            "#endif\n") % dict(source=source, destination=destination))
+
+
+class Integer64Unsigned(Integer):
     buildstr = 'K'
     int_type = 'uint64_t '
 
     def to_python_object(self, name=None, result='Py_result', **kw):
+        name = name or self.name
         return((
             "PyErr_Clear();\n"
-            "%s = PyLong_FromLongLong(%s);\n") % (result, name or self.name))
+            "#if defined( HAVE_LONG_LONG )\n"
+            "    %(result)s = PyLong_FromUnsignedLongLong(%(name)s);\n"
+            "#else\n"
+            "    %(result)s = PyLong_FromUnsignedLong(%(name)s);\n"
+            "#endif\n") % dict(result=result, name=name))
 
     def from_python_object(self, source, destination, method, **kw):
         return((
-            "PyErr_Clear();\n"\
-            "%(destination)s = PyInt_AsUnsignedLongLongMask(%(source)s);\n") % dict(
-                source = source, destination=destination))
+            "PyErr_Clear();\n"
+            "#if defined( HAVE_LONG_LONG )\n"
+            "    %(destination)s = PyInt_AsUnsignedLongLongMask(%(source)s);\n"
+            "#else\n"
+            "    %(destination)s = PyInt_AsUnsignedLongMask(%(source)s);\n"
+            "#endif\n") % dict(source=source, destination=destination))
+
+
+class Long(Integer):
+    buildstr = 'l'
+    int_type = 'long '
+
+    def to_python_object(self, name=None, result='Py_result', **kw):
+        name = name or self.name
+        return((
+            "PyErr_Clear();\n"
+            "%(result)s = PyLong_FromLongLong(%(name)s);\n") % (
+                dict(result=result, name=name)))
+
+    def from_python_object(self, source, destination, method, **kw):
+        return((
+            "PyErr_Clear();\n"
+            "%(destination)s = PyLong_AsLongMask(%(source)s);\n") % (
+                dict(source=source, destination=destination)))
+
+
+class LongUnsigned(Integer):
+    buildstr = 'k'
+    int_type = 'unsigned long '
+
+    def to_python_object(self, name=None, result='Py_result', **kw):
+        name = name or self.name
+        return((
+            "PyErr_Clear();\n"
+            "%(result)s = PyLong_FromUnsignedLong(%(name)s);\n") % (
+                dict(result=result, name=name)))
+
+    def from_python_object(self, source, destination, method, **kw):
+        return((
+            "PyErr_Clear();\n"
+            "%(destination)s = PyLong_AsUnsignedLongMask(%(source)s);\n") % (
+                dict(source=source, destination=destination)))
 
 
 class Char(Integer):
@@ -919,8 +1019,10 @@ class Char(Integer):
             "\n"
             "    %(name)s = str_%(name)s[0];\n") % dict(name = self.name))
 
+
 class StringOut(String):
     sense = 'OUT'
+
 
 class IntegerOut(Integer):
     """ Handle Integers pushed out through OUT int *result """
@@ -951,12 +1053,12 @@ class IntegerOut(Integer):
         return self.name
 
 
-class PInteger32Out(IntegerOut):
+class PInteger32UnsignedOut(IntegerOut):
     buildstr = ''
     int_type = 'uint32_t *'
 
 
-class PInteger64Out(IntegerOut):
+class PInteger64UnsignedOut(IntegerOut):
     buildstr = ''
     int_type = 'uint64_t *'
 
@@ -1493,44 +1595,44 @@ type_dispatcher = {
     "OUT unsigned char *": StringOut,
     "OUT char *": StringOut,
 
-    'OUT uint64_t *': PInteger64Out,
-    'OUT uint32_t *': PInteger32Out,
+    "OUT uint64_t *": PInteger64UnsignedOut,
+    "OUT uint32_t *": PInteger32UnsignedOut,
 
-    'void *': PVoid,
-    'void': Void,
+    "void *": PVoid,
+    "void": Void,
 
-    'TDB_DATA *': TDB_DATA_P,
-    'TDB_DATA': TDB_DATA,
-    'TSK_INUM_T': Integer,
+    "TDB_DATA *": TDB_DATA_P,
+    "TDB_DATA": TDB_DATA,
+    "TSK_INUM_T": Integer,
 
-    'off_t': Integer,
-    'size_t': Integer,
-    'ssize_t': Integer,
-    'time_t': Integer,
+    "off_t": Integer64,
+    "size_t": Integer64Unsigned,
+    "ssize_t": Integer64,
+    "time_t": Integer64,
 
-    "unsigned long": Integer,
-    'long': Integer,
-    'unsigned long int': Integer,
-    'long int': Integer,
+    "unsigned long": LongUnsigned,
+    "long": Long,
+    "unsigned long int": LongUnsigned,
+    "long int": Integer,
     "unsigned int": Integer,
-    'int': Integer,
+    "int": Integer,
 
-    'uint64_t': Integer64,
-    'uint32_t': Integer32,
-    'uint16_t': Integer,
-    'uint8_t': Integer,
-    'int64_t': Integer64,
-    'int32_t': Integer32,
-    'int16_t': Integer,
-    'int8_t': Integer,
-    'char': Char,
+    "uint64_t": Integer64Unsigned,
+    "uint32_t": Integer32Unsigned,
+    "uint16_t": Integer16Unsigned,
+    "uint8_t": Integer8Unsigned,
+    "int64_t": Integer64,
+    "int32_t": Integer32,
+    "int16_t": Integer16,
+    "int8_t": Integer8,
+    "char": Char,
 
-    'struct timeval': Timeval,
-    'char **': StringArray,
-    'PyObject *': PyObject,
+    "struct timeval": Timeval,
+    "char **": StringArray,
+    "PyObject *": PyObject,
     }
 
-method_attributes = ['BORROWED', 'DESTRUCTOR','IGNORE']
+method_attributes = ["BORROWED", "DESTRUCTOR", "IGNORE"]
 
 def dispatch(name, type):
     if not type: return PVoid(name)
