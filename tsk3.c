@@ -181,11 +181,6 @@ int FS_Info_dest(FS_Info self) {
     tsk_fs_close(self->info);
 
     self->info = NULL;
-
-#ifdef TODO
-    // The extended_img_info was allocated in a separate talloc context.
-    talloc_free(self->extended_img_info);
-#endif
     self->extended_img_info = NULL;
 
     return 0;
