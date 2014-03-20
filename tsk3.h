@@ -90,11 +90,6 @@ CLASS(Img_Info, Object)
 
      /* Closes the image */
      void METHOD(Img_Info, close);
-
-     /* An accessor for our img object - used by TSK classes to get
-      * our object.
-      */
-     PRIVATE Extended_TSK_IMG_INFO *METHOD(Img_Info, get_img_info);
 END_CLASS
 
 /** This object handles volumes.

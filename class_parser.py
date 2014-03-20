@@ -234,7 +234,7 @@ import sys
 DEBUG = 0
 
 # The pytsk3 version
-VERSION = "20140319"
+VERSION = "20140320"
 
 # These functions are used to manage library memory
 FREE = "aff4_free"
@@ -289,7 +289,8 @@ class Module:
             "\n"
             "talloc_set_log_fn((void (*)(const char *)) printf);\n"
             "// DEBUG: talloc_enable_leak_report();\n"
-            "// DEBUG: talloc_enable_leak_report_full();\n")
+            "// DEBUG: talloc_enable_leak_report_full();\n"
+            "talloc_enable_leak_report_full();\n")
 
         for cls in self.classes.values():
             if cls.is_active():

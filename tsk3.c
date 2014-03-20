@@ -139,39 +139,6 @@ void Img_Info_close(Img_Info self) {
     }
 }
 
-Extended_TSK_IMG_INFO *Img_Info_get_img_info(Img_Info self) {
-    // Initialise the img struct with the correct callbacks:
-    Extended_TSK_IMG_INFO *img = NULL;
-
-    if(self == NULL) {
-        RaiseError(EInvalidParameter, "Invalid parameter: self.");
-        return NULL;
-    }
-    // Create a new talloc context here since we do not want to
-    // unnecessarily keep unused versions around.
-    img = talloc_zero(NULL, Extended_TSK_IMG_INFO);
-    img->container = self;
-
-#if defined( TSK_MULTITHREAD_LIB )
-    tsk_init_lock(&img->base.cache_lock);
-#endif
-
-    img->base.read = IMG_INFO_read;
-    img->base.close = IMG_INFO_close;
-    img->base.size = self->get_size(self);
-
-#ifdef TSK_VERSION_NUM
-    img->base.sector_size = 512;
-#endif
-#if defined( TSK_VERSION_NUM ) && ( TSK_VERSION_NUM >= 0x040103ff )
-    self->img->base.itype = TSK_IMG_TYPE_EXTERNAL;
-#else
-    img->base.itype = TSK_IMG_TYPE_RAW_SING;
-#endif
-
-    return img;
-}
-
 uint64_t Img_Info_get_size(Img_Info self) {
     if(self == NULL) {
         RaiseError(EInvalidParameter, "Invalid parameter: self.");
@@ -187,7 +154,6 @@ VIRTUAL(Img_Info, Object) {
     VMETHOD(Con) = Img_Info_Con;
     VMETHOD(read) = Img_Info_read;
     VMETHOD(close) = Img_Info_close;
-    VMETHOD(get_img_info) = Img_Info_get_img_info;
     VMETHOD(get_size) = Img_Info_get_size;
 } END_VIRTUAL
 
@@ -216,8 +182,10 @@ int FS_Info_dest(FS_Info self) {
 
     self->info = NULL;
 
+#ifdef TODO
     // The extended_img_info was allocated in a separate talloc context.
     talloc_free(self->extended_img_info);
+#endif
     self->extended_img_info = NULL;
 
     return 0;
@@ -235,32 +203,21 @@ static FS_Info FS_Info_Con(FS_Info self, Img_Info img, TSK_OFF_T offset,
         RaiseError(EInvalidParameter, "Invalid parameter: img.");
         return NULL;
     }
-    // TODO: why is a new instance of img_info necessary here?
-    self->extended_img_info = img->get_img_info(img);
+    self->extended_img_info = img->img;
 
-    if(self->extended_img_info == NULL) {
-        RaiseError(EInvalidParameter, "Invalid self->extended_img_info");
-        goto on_error;
-    }
     self->info = tsk_fs_open_img((TSK_IMG_INFO *) self->extended_img_info, offset, type);
 
     if(!self->info) {
         RaiseError(EIOError, "Unable to open the image as a filesystem: %s",
                    tsk_error_get());
         tsk_error_reset();
-        goto on_error;
+        return NULL;
     }
     // Make sure that the filesystem is properly closed when we get freed
     talloc_set_destructor((void *) self, (int(*)(void *)) &FS_Info_dest);
 
     return self;
-
-on_error:
-    if(self->extended_img_info != NULL) {
-        talloc_free(self->extended_img_info);
-    }
-    return NULL;
-};
+}
 
 static Directory FS_Info_open_dir(FS_Info self, ZString path, TSK_INUM_T inode) {
     Directory object = NULL;
@@ -310,10 +267,9 @@ static File FS_Info_open(FS_Info self, ZString path) {
         if(CONSTRUCT_INITIALIZE(File, File, Con, object, self, info) == NULL) {
             goto on_error;
         }
+        // Tell the File object to manage info.
+        object->info_is_internal = 1;
     }
-    // Tell the File object to manage info.
-    object->info_is_internal = 1;
-
     return object;
 
 on_error:
@@ -349,10 +305,9 @@ static File FS_Info_open_meta(FS_Info self, TSK_INUM_T inode) {
         if(CONSTRUCT_INITIALIZE(File, File, Con, object, self, info) == NULL) {
             goto on_error;
         }
+        // Tell the File object to manage info.
+        object->info_is_internal = 1;
     }
-    // Tell the File object to manage info.
-    object->info_is_internal = 1;
-
     return object;
 
 on_error:
@@ -455,10 +410,9 @@ static File Directory_next(Directory self) {
         if(CONSTRUCT_INITIALIZE(File, File, Con, object, self->fs, info) == NULL) {
             goto on_error;
         }
+        // Tell the File object to manage info.
+        object->info_is_internal = 1;
     }
-    // Tell the File object to manage info.
-    object->info_is_internal = 1;
-
     self->current++;
 
     return object;
