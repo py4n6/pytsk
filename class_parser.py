@@ -289,8 +289,7 @@ class Module:
             "\n"
             "talloc_set_log_fn((void (*)(const char *)) printf);\n"
             "// DEBUG: talloc_enable_leak_report();\n"
-            "// DEBUG: talloc_enable_leak_report_full();\n"
-            "talloc_enable_leak_report_full();\n")
+            "// DEBUG: talloc_enable_leak_report_full();\n")
 
         for cls in self.classes.values():
             if cls.is_active():
