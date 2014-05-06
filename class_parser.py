@@ -234,7 +234,7 @@ import sys
 DEBUG = 0
 
 # The pytsk3 version
-VERSION = "20140320"
+VERSION = "20140506"
 
 # These functions are used to manage library memory
 FREE = "aff4_free"
@@ -2140,8 +2140,9 @@ class ConstructorMethod(Method):
         out.write((
            "    self->python_object1 = NULL;\n"
            "    self->python_object2 = NULL;\n"
-           "    // TODO: initialise does not appear to be used, remove?\n"
-           "    // self->initialise = (void *) py%(class_name)s_initialize_proxies;\n"
+           "    // Initialise is used to keep a reference on the object?\n"
+           "    // If not called no longer valid warnings have been seen on Windows.\n"
+           "    self->initialise = (void *) py%(class_name)s_initialize_proxies;\n"
            "\n") % dict(class_name=self.class_name))
 
         # Precall preparations
