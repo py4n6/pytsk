@@ -2278,28 +2278,29 @@ class GetattrMethod(Method):
         out.write(
             "    if(strcmp(name, \"__members__\") == 0) {\n"
             "        PyObject *result = PyList_New(0);\n"
-            "        PyObject *tmp;\n"
-            "        PyMethodDef *i;\n"
+            "        PyObject *tmp = NULL;\n"
+            "        PyMethodDef *i = NULL;\n"
             "\n"
-            "        if(!result) goto on_error;\n")
+            "        if(result == NULL) goto on_error;\n"
+            "\n")
 
         # Add attributes
         for class_name, attr in self.get_attributes():
             out.write((
-                "    tmp = PyString_FromString(\"%(name)s\");\n"
-                "    PyList_Append(result, tmp); Py_DecRef(tmp);\n") % dict(name=attr.name))
+                "        tmp = PyString_FromString(\"%(name)s\");\n"
+                "        PyList_Append(result, tmp);\n"
+                "        Py_DecRef(tmp);\n") % dict(name=attr.name))
 
         # Add methods
-        out.write("""
-
-    for(i=%s_methods; i->ml_name; i++) {
-        tmp = PyString_FromString(i->ml_name);
-        PyList_Append(result, tmp);
-        Py_DecRef(tmp);
-    }""" % self.class_name)
+        out.write((
+            "\n"
+            "        for(i=%s_methods; i->ml_name; i++) {\n"
+            "            tmp = PyString_FromString(i->ml_name);\n"
+            "            PyList_Append(result, tmp);\n"
+            "            Py_DecRef(tmp);\n"
+            "        }\n") % self.class_name)
 
         out.write(
-            "\n"
             "        return result;\n"
             "    }\n")
 
