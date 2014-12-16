@@ -70,7 +70,7 @@ class Mingw32CCompiler(cygwinccompiler.CygwinCCompiler):
     compiler_so = os.environ.get('CC', 'gcc') + ' -mno-cygwin -mdll -O -g -Wall'
     compiler_cxx = os.environ.get('CC', 'gcc') + ' -mno-cygwin -O -g -Wall'
     linker_exe = os.environ.get('CC', 'gcc') + ' -mno-cygwin'
-    linker_so = '%s -mno-cygwin -g %s %s' % (
+    linker_so = '{0:s} -mno-cygwin -g {1:s} {2:s}'.format(
         os.environ.get('CC', self.linker_dll), shared_option, entry_point)
 
     self.set_executables(
@@ -119,7 +119,7 @@ if not TSK_HEADERS_PATH or not os.path.exists(TSK_HEADERS_PATH):
 # Remove the headers sub directory from the headers path.
 TSK_HEADERS_PATH = os.path.dirname(TSK_HEADERS_PATH)
 
-print 'Sleuthkit headers found in: %s' % TSK_HEADERS_PATH
+print('Sleuthkit headers found in: {0:s}'.format(TSK_HEADERS_PATH))
 
 # Determine the SleuthKit version from base/tsk_base.h,
 # from: #define TSK_VERSION_STR "4.1.0"
@@ -138,7 +138,7 @@ file_object.close()
 if not TSK_VERSION:
   raise EnvironmentError('Unable to determine SleuthKit version.')
 
-print 'Sleuthkit version found: %s' % TSK_VERSION
+print('Sleuthkit version found: {0:s}'.format(TSK_VERSION))
 
 PYTSK_VERSION = None
 
@@ -155,7 +155,7 @@ file_object.close()
 if not PYTSK_VERSION:
   raise EnvironmentError('Unable to determine pytsk version.')
 
-print 'Pytsk version found: %s' % PYTSK_VERSION
+print('Pytsk version found: {0:s}'.format(PYTSK_VERSION))
 
 # Command bdist_msi does not support the SleuthKit version followed by
 # the pytsk version.
@@ -191,17 +191,18 @@ if platform.system() == 'Windows':
 
   # Find the SleuthKit libraries path.
   results = glob.glob(os.path.join(
-      TSK_HEADERS_PATH, 'win32', 'Release', '%s.lib' % CONFIG['LIBRARIES'][0]))
+      TSK_HEADERS_PATH, 'win32', 'Release',
+      '{0:s}.lib'.format(CONFIG['LIBRARIES'][0])))
 
   if len(results) == 0:
     results = glob.glob(os.path.join(
         TSK_HEADERS_PATH, 'win32', 'x64', 'Release',
-        '%s.lib' % CONFIG['LIBRARIES'][0]))
+        '{0:s}.lib'.format(CONFIG['LIBRARIES'][0])))
 
   if len(results) == 0:
     results = glob.glob(os.path.join(
         TSK_HEADERS_PATH, 'vs2008', 'Release',
-        '%s.lib' % CONFIG['LIBRARIES'][0]))
+        '{0:s}.lib'.format(CONFIG['LIBRARIES'][0])))
 
   if len(results) == 1:
     TSK_LIBRARIES_PATH = os.path.dirname(results[0])
@@ -246,7 +247,7 @@ else:
 
 # Used by MinGW/Wine cross compilation.
 PYTHON_VERSION = '27'
-PYTHON_HOME = '%s/.wine/drive_c/Python%s/' % (
+PYTHON_HOME = '{0:s}/.wine/drive_c/Python{1:s}/'.format(
     os.environ.get('HOME', ''), PYTHON_VERSION)
 
 # This is so horrible but less horrible than interfering with distutils.
@@ -256,7 +257,7 @@ if len(sys.argv) > 1 and sys.argv[1] == 'mingw-xcompile':
   sysconfig._init_nt()
   CONFIG['HEADERS'].append(PYTHON_HOME + '/include')
   CONFIG['LIBRARY_DIRS'].append(PYTHON_HOME + 'libs')
-  CONFIG['LIBRARIES'].append('python%s' % PYTHON_VERSION)
+  CONFIG['LIBRARIES'].append('python{0:s}'.format(PYTHON_VERSION))
   os.environ['CC'] = 'i586-mingw32msvc-gcc'
 
   # Monkeypatch this:

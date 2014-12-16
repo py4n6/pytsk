@@ -73,7 +73,7 @@ class Lexer(object):
         error = self.error,
     )
     if self.verbose > 1:
-      print "Saving state %s" % self.processed
+      print("Saving state {0:s}".format(self.processed))
 
   def restore_state(self):
     state = self.saved_state
@@ -90,7 +90,7 @@ class Lexer(object):
     self.error = state['error']
 
     if self.verbose > 1:
-      print "Restoring state to offset %s" % self.processed
+      print("Restoring state to offset {0:s}".format(self.processed))
 
   def next_token(self, end=True):
     ## Now try to match any of the regexes in order:
@@ -99,12 +99,13 @@ class Lexer(object):
       ## Does the rule apply for us now?
       if state.match(current_state):
         if self.verbose > 2:
-          print "%s: Trying to match %r with %r" % (
-              self.state, self.buffer[:10], re_str)
+          print("{0:s}: Trying to match {1:s} with {2:s}".format(
+              self.state, repr(self.buffer[:10]), repr(re_str)))
         match = regex.match(self.buffer)
         if match:
           if self.verbose > 3:
-            print "%s matched %s" % (re_str, match.group(0).encode("utf8"))
+            print("{0:s} matched {1:s}".format(
+                re_str, match.group(0).encode("utf8")))
 
           ## The match consumes the data off the buffer (the
           ## handler can put it back if it likes)
@@ -116,8 +117,8 @@ class Lexer(object):
           for t in token.split(','):
             try:
               if self.verbose > 0:
-                print "0x%X: Calling %s %r" % (
-                    self.processed, t, match.group(0))
+                print("0x{0:X}: Calling {1:s} {2:s}".format(
+                    self.processed, t, repr(match.group(0))))
               cb = getattr(self, t, self.default_handler)
             except AttributeError:
               continue
@@ -141,8 +142,9 @@ class Lexer(object):
     if end and len(self.buffer) > 0 or len(self.buffer) > 1024:
       self.processed_buffer += self.buffer[:1]
       self.buffer = self.buffer[1:]
-      self.ERROR("Lexer Stuck, discarding 1 byte (%r) - state %s" % (
-          self.buffer[:10], self.state))
+      self.ERROR(
+          "Lexer Stuck, discarding 1 byte ({0:s}) - state {1:s}".format(
+              repr(self.buffer[:10]), self.state))
       return "ERROR"
 
     ## No token were found
@@ -156,17 +158,18 @@ class Lexer(object):
 
   def default_handler(self, token, match):
     if self.verbose > 2:
-      print "Default handler: %s with %r" % (token, match.group(0))
+      print("Default handler: {0:s} with {1:s}".format(
+          token, repr(match.group(0))))
 
   def ERROR(self, message = None, weight =1):
     if self.verbose > 0 and message:
-      print "Error(%s): %s" % (weight, message)
+      print("Error({0:s}): {1:s}".format(weight, message))
 
     self.error += weight
 
   def PUSH_STATE(self, dummy_token=None, dummy_match=None):
     if self.verbose > 1:
-      print "Storing state %s" % self.state
+      print("Storing state {0:s}".format(self.state))
 
     self.state_stack.append(self.state)
 
@@ -174,9 +177,9 @@ class Lexer(object):
     try:
       state = self.state_stack.pop()
       if self.verbose > 1:
-        print "Returned state to %s" % state
+        print("Returned state to {0:s}".format(state))
     except IndexError:
-      print "Tried to pop the state but failed - possible recursion error"
+      print("Tried to pop the state but failed - possible recursion error")
       state = None
     return state
 

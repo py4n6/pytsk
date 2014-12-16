@@ -24,9 +24,9 @@ import class_parser
 
 def generate_bindings(
     target, source_files, env = None, initialization='', free='talloc_free'):
-  """ Generated the python bindings """
+  """ Generated the Python bindings """
   module_name = os.path.splitext(os.path.basename(target))[0]
-  print("Generating automatic python bindings for module %s" % module_name)
+  print("Generating Python bindings for module %s" % module_name)
 
   env = env or dict(V = 0)
 
@@ -42,7 +42,7 @@ def generate_bindings(
 
 if __name__ == '__main__':
   if len(sys.argv) != 2:
-    print "Usage: ./generate_pytsk3.py path_to_source"
+    print("Usage: ./generate_bindings.py path_to_source")
     sys.exit(1)
 
   tsk_source_path = sys.argv[1]
@@ -53,7 +53,7 @@ if __name__ == '__main__':
     include_base = "tsk"
 
   if not os.path.exists(os.path.join(tsk_source_path, include_base)):
-    print "Unable to find sleuthkit include headers."
+    print("Unable to find sleuthkit include headers.")
     sys.exit(1)
 
   sources = [
