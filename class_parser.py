@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Documentation regarding the python bounded code.
+Documentation regarding the Python bounded code.
 
 This code originally released as part of the AFF4 project
 (http://code.google.com/p/aff4/).
@@ -23,7 +23,7 @@ Memory Management
 =================
 
 AFF4 uses a reference count system for memory management similar in
-many ways to the native python system. The basic idea is that memory
+many ways to the native Python system. The basic idea is that memory
 returned by the library always carries a new reference. When the
 caller is done with the memory, they must call aff4_free() on the
 memory, afterwhich the memory is considered invalid. The memory may
@@ -37,7 +37,7 @@ number of aff4_free() calls are made to it.
 
 This idea is important for example in the following sequence:
 
-FileLikeObject fd = resolver->create(resolver, 'w');
+FileLikeObject fd = resolver->create(resolver, "w");
 RDFURN uri = fd->urn;
 
 Now uri hold a reference to the urn attribute of fd, but that
@@ -49,7 +49,7 @@ fd->close(fd);
 Now the uri object is dangling. To prevent fd->urn from disappearing
 when fd is freed, we need to take another reference to it:
 
-FileLikeObject fd = resolver->create(resolver, 'w');
+FileLikeObject fd = resolver->create(resolver, "w");
 RDFURN uri = fd->urn;
 aff4_incref(uri);
 
@@ -64,12 +64,12 @@ aff4_free(uri);
 Python Integration
 ------------------
 
-For every AFF4 object, we create a python wrapper object of the
-corresponding type. The wrapper object contains python wrapper methods
+For every AFF4 object, we create a Python wrapper object of the
+corresponding type. The wrapper object contains Python wrapper methods
 to allow access to the AFF4 object methods, as well as getattr methods
-for attributes. It is very important to allow python to inherit from C
+for attributes. It is very important to allow Python to inherit from C
 classes directly - this requires every internal C method call to be
-diverted to the python object.
+diverted to the Python object.
 
 The C object looks like this normally:
 
@@ -88,25 +88,25 @@ dereferenced to find the location of the function handling it, the
 object is stuffed into the first arg, and the parameters are stuffed
 into following args.
 
-Directing python calls
+Directing Python calls
 ----------------------
 
-The python object which is created is a proxy for the c object. When
-python methods are called in the python object, they need to be
+The Python object which is created is a proxy for the c object. When
+Python methods are called in the Python object, they need to be
 directed into the C structure and a C call must be made, then the
-return value must be reconverted into python objects and returned into
-python. This occurs automatically by the wrapper:
+return value must be reconverted into Python objects and returned into
+Python. This occurs automatically by the wrapper:
 
 struct PythonWrapper {
       PyObject_HEAD
       void *base;
 };
 
-When a python method is called on this new python type this is what happens:
+When a Python method is called on this new Python type this is what happens:
 
  1) The method name is looked up in the PyMethodDef struct as per normal.
 
- 2) If the method is recognised as a valid method the python wrapper
+ 2) If the method is recognised as a valid method the Python wrapper
     function is called (pyCLASSNAME_method)
 
  3) This method is broken into the general steps:
@@ -122,38 +122,39 @@ PyObject *pyCLASSNAME_method(PythonWrapper self, PyObject *args, PyObject *kwds)
 
     Post call processing of the returned value (check for errors etc)
 
-    Convert the return value to a python object using return_type.to_python_object()
+    Convert the return value to a Python object using:
+    return_type.to_Python_object()
 
-    return the python object or raise an exception
+    return the Python object or raise an exception
 };
 
-So the aim of the wrapper function is to convert python args to C
+So the aim of the wrapper function is to convert Python args to C
 args, find the C method corresponding to the method name by
 dereferencing the c object and then call it.
 
 
 The problem now is what happens when a C method internally calls
 another method. This is a problem because the C method has no idea its
-running within python and so will just call the regular C method that
+running within Python and so will just call the regular C method that
 was there already. This makes it impossible to subclass the class and
-update the C method with a python method. What we really want is when
-a C method is called internally, we want to end up calling the python
-object instead to allow a purely python implementation to override the
+update the C method with a Python method. What we really want is when
+a C method is called internally, we want to end up calling the Python
+object instead to allow a purely Python implementation to override the
 C method.
 
 This happens by way of a ProxiedMethod - A proxied method is in a
 sense the reverse of the wrapper method:
 
 return_type ProxyCLASSNAME_method(CLASSNAME self, ....) {
-   Take all C args and create python objects from them
+   Take all C args and create Python objects from them
 
    Dereference the object extension ((Object) self)->extension to
    obtain the Python object which wraps this class.
 
    If an extension does not exist, just call the method as normal,
-   otherwise make a python call on the wrapper object.
+   otherwise make a Python call on the wrapper object.
 
-   Convert the returned python object to a C type and return it.
+   Convert the returned Python object to a C type and return it.
 };
 
 To make all this work we have the following structures:
@@ -165,13 +166,13 @@ struct PythonWrapper {
          pointing at proxy functions. We can always get the original C
          function pointers through base->__class__
 
-       - We also set the base object extension to be the python
+       - We also set the base object extension to be the Python
          object: ((Object) base)->extension = PythonWrapper. This
-         allows us to get back the python object from base.
+         allows us to get back the Python object from base.
 };
 
 
-When a python method is invoked, we use cbase to find the C method
+When a Python method is invoked, we use cbase to find the C method
 pointer, but we pass to it base:
 
 self->base->__class__->method(self->base, ....)
@@ -179,21 +180,21 @@ self->base->__class__->method(self->base, ....)
 base is a proper C object which had its methods dynamically replaced
 with proxies. Now if an internal C method is called, the method will
 dereference base and retrieve the proxied method. Calling the
-proxied method will retreive the original python object from the
-object extension and make a python call.
+proxied method will retreive the original Python object from the
+object extension and make a Python call.
 
-In the case where a method is not overridden by python, internal C
-method calls will generate an unnecessary conversion from C to python
+In the case where a method is not overridden by Python, internal C
+method calls will generate an unnecessary conversion from C to Python
 and then back to C.
 
-Memory management in python extension
+Memory management in Python extension
 -------------------------------------
 
 When calling a method which returns a new reference, we just store the
-reference in the "base" member of the python object. When python
-garbage collects our python object, we call aff4_free() on it.
+reference in the "base" member of the Python object. When Python
+garbage collects our Python object, we call aff4_free() on it.
 
-The getattr method creates a new python wrapper object of the correct
+The getattr method creates a new Python wrapper object of the correct
 type, and sets its base attribute to point at the target AFF4
 object. We then aff4_incref() the target to ensure that it does not
 get freed until we are finished with it.
@@ -223,13 +224,13 @@ get freed until we are finished with it.
              reference count using aff4_incref();
 """
 
-import lexer
 import os
 import pdb
 import re
 import StringIO
 import sys
 
+import lexer
 
 DEBUG = 0
 
@@ -277,13 +278,13 @@ class Module:
 
         l = list(self.constants)
         l.sort()
-        result += 'Constants:\n'
+        result += "Constants:\n"
         for attr, type in l:
             result += " {0:s}\n".format(attr)
 
         return result
 
-    init_string = ''
+    init_string = ""
     def initialization(self):
         result = self.init_string + (
             "\n"
@@ -305,35 +306,39 @@ class Module:
         self.classes[cls.class_name] = cls
 
         # Make a wrapper in the type dispatcher so we can handle
-        # passing this class from/to python
+        # passing this class from/to Python
         type_dispatcher[cls.class_name] = handler
 
     def private_functions(self):
-        """ Emits hard coded private functions for doing various things """
+        """Emits hard coded private functions for doing various things"""
+        values_dict = {
+            "classes_length": len(self.classes) + 1,
+            "get_current_error": CURRENT_ERROR_FUNCTION}
+
         return """
 /* The following is a static array mapping CLASS() pointers to their
-python wrappers. This is used to allow the correct wrapper to be
-chosen depending on the object type found - regardless of the
-prototype.
-
-This is basically a safer way for us to cast the correct python type
-depending on context rather than assuming a type based on the .h
-definition. For example consider the function
-
-AFFObject Resolver.open(uri, mode)
-
-The .h file implies that an AFFObject object is returned, but this is
-not true as most of the time an object of a derived class will be
-returned. In C we cast the returned value to the correct type. In the
-python wrapper we just instantiate the correct python object wrapper
-at runtime depending on the actual returned type. We use this lookup
-table to do so.
-*/
+ * Python wrappers. This is used to allow the correct wrapper to be
+ * chosen depending on the object type found - regardless of the
+ * prototype.
+ * 
+ * This is basically a safer way for us to cast the correct Python type
+ * depending on context rather than assuming a type based on the .h
+ * definition. For example consider the function
+ * 
+ * AFFObject Resolver.open(uri, mode)
+ * 
+ * The .h file implies that an AFFObject object is returned, but this is
+ * not true as most of the time an object of a derived class will be
+ * returned. In C we cast the returned value to the correct type. In the
+ * Python wrapper we just instantiate the correct Python object wrapper
+ * at runtime depending on the actual returned type. We use this lookup
+ * table to do so.
+ */
 static int TOTAL_CLASSES=0;
 
 /* This is a global reference to this module so classes can call each
-   other.
-*/
+ * other.
+ */
 static PyObject *g_module = NULL;
 
 #define CONSTRUCT_INITIALIZE(class, virt_class, constructor, object, ...) \\
@@ -353,9 +358,9 @@ static PyObject *g_module = NULL;
 #endif /* !defined( PyMODINIT_FUNC ) */
 
 #if !defined( PyVarObject_HEAD_INIT )
-#define PyVarObject_HEAD_INIT( type, size ) \
-	PyObject_HEAD_INIT( type ) \
-	size,
+#define PyVarObject_HEAD_INIT( type, size ) \\
+    PyObject_HEAD_INIT( type ) \\
+    size,
 
 #endif /* !defined( PyVarObject_HEAD_INIT ) */
 
@@ -364,15 +369,15 @@ static PyObject *g_module = NULL;
 #endif
 
 #if !defined( Py_TYPE )
-#define Py_TYPE( object ) \
-	( ( (PyObject *) object )->ob_type )
+#define Py_TYPE( object ) \\
+    ( ( (PyObject *) object )->ob_type )
 
 #endif /* !defined( Py_TYPE ) */
 
 /* Generic wrapper type
  */
 typedef struct Gen_wrapper_t *Gen_wrapper;
-struct Gen_wrapper_t {
+struct Gen_wrapper_t {{
     PyObject_HEAD
 
     void *base;
@@ -387,33 +392,33 @@ struct Gen_wrapper_t {
 
     PyObject *python_object1;
     PyObject *python_object2;
-};
+}};
 
-static struct python_wrapper_map_t {
+static struct python_wrapper_map_t {{
     Object class_ref;
     PyTypeObject *python_type;
     void (*initialize_proxies)(Gen_wrapper self, void *item);
-} python_wrappers[%(classes_length)s];
+}} python_wrappers[{classes_length:d}];
 
 /* Create the relevant wrapper from the item based on the lookup table.
  */
-Gen_wrapper new_class_wrapper(Object item, int item_is_python_object) {
+Gen_wrapper new_class_wrapper(Object item, int item_is_python_object) {{
     Gen_wrapper result = NULL;
     Object cls = NULL;
     struct python_wrapper_map_t *python_wrapper = NULL;
     int cls_index = 0;
 
     // Return a Py_None object for a NULL pointer
-    if(item == NULL) {
+    if(item == NULL) {{
         Py_IncRef((PyObject *) Py_None);
         return (Gen_wrapper) Py_None;
-    }
+    }}
     // Search for subclasses
-    for(cls = (Object) item->__class__; cls != cls->__super__; cls = cls->__super__) {
-        for(cls_index = 0; cls_index < TOTAL_CLASSES; cls_index++) {
+    for(cls = (Object) item->__class__; cls != cls->__super__; cls = cls->__super__) {{
+        for(cls_index = 0; cls_index < TOTAL_CLASSES; cls_index++) {{
             python_wrapper = &(python_wrappers[cls_index]);
 
-            if(python_wrapper->class_ref == cls) {
+            if(python_wrapper->class_ref == cls) {{
                 PyErr_Clear();
 
                 result = (Gen_wrapper) _PyObject_New(python_wrapper->python_type);
@@ -426,18 +431,18 @@ Gen_wrapper new_class_wrapper(Object item, int item_is_python_object) {
                 python_wrapper->initialize_proxies(result, (void *) item);
 
                 return result;
-            }
-        }
-    }
-    PyErr_Format(PyExc_RuntimeError, "Unable to find a wrapper for object %%s", NAMEOF(item));
+            }}
+        }}
+    }}
+    PyErr_Format(PyExc_RuntimeError, "Unable to find a wrapper for object %s", NAMEOF(item));
 
     return NULL;
-}
+}}
 
-static PyObject *resolve_exception(char **error_buff) {
-    int *type = (int *)%(get_current_error)s(error_buff);
+static PyObject *resolve_exception(char **error_buff) {{
+    int *type = (int *){get_current_error:s}(error_buff);
 
-    switch(*type) {
+    switch(*type) {{
         case EProgrammingError:
             return PyExc_SystemError;
         case EKeyError:
@@ -452,40 +457,40 @@ static PyObject *resolve_exception(char **error_buff) {
             return PyExc_IOError;
         default:
             return PyExc_RuntimeError;
-    }
-}
+    }}
+}}
 
-static int type_check(PyObject *obj, PyTypeObject *type) {
+static int type_check(PyObject *obj, PyTypeObject *type) {{
     PyTypeObject *tmp = NULL;
 
     // Recurse through the inheritance tree and check if the types are expected
-    if(obj) {
+    if(obj) {{
         for(tmp = Py_TYPE(obj);
             tmp && tmp != &PyBaseObject_Type;
-            tmp = tmp->tp_base) {
+            tmp = tmp->tp_base) {{
             if(tmp == type) return 1;
-        }
-    }
+        }}
+    }}
     return 0;
-}
+}}
 
-static int check_error() {
+static int check_error() {{
    char *buffer = NULL;
    int *error_type = (int *)aff4_get_current_error(&buffer);
 
-   if(*error_type != EZero) {
+   if(*error_type != EZero) {{
          PyObject *exception = resolve_exception(&buffer);
 
-         if(buffer != NULL) {
-           PyErr_Format(exception, "%%s", buffer);
-         } else {
+         if(buffer != NULL) {{
+           PyErr_Format(exception, "%s", buffer);
+         }} else {{
            PyErr_Format(exception, "Unable to retrieve exception reason.");
-         }
+         }}
          ClearError();
          return 1;
-   }
+   }}
    return 0;
-}
+}}
 
 /* This function checks if a method was overridden in self over a
  * method defined in type. This is used to determine if a python class is
@@ -498,7 +503,7 @@ static int check_error() {
  * We basically just iterate over the MRO and determine if a method is
  * defined in each level until we reach the base class.
  */
-static int check_method_override(PyObject *self, PyTypeObject *type, char *method) {
+static int check_method_override(PyObject *self, PyTypeObject *type, char *method) {{
     struct _typeobject *ob_type = NULL;
     PyObject *mro = NULL;
     PyObject *py_method = NULL;
@@ -509,9 +514,9 @@ static int check_method_override(PyObject *self, PyTypeObject *type, char *metho
     int found = 0;
 
     ob_type = Py_TYPE(self);
-    if(ob_type == NULL ) {
+    if(ob_type == NULL ) {{
       return 0;
-    }
+    }}
     mro = ob_type->tp_mro;
 
 #if PY_MAJOR_VERSION >= 3
@@ -521,38 +526,36 @@ static int check_method_override(PyObject *self, PyTypeObject *type, char *metho
 #endif
     number_of_items = PySequence_Size(mro);
 
-    for(item_index = 0; item_index < number_of_items; item_index++) {
+    for(item_index = 0; item_index < number_of_items; item_index++) {{
         item_object = PySequence_GetItem(mro, item_index);
 
         // Ok - we got to the base class - finish up
-        if(item_object == (PyObject *) type) {
+        if(item_object == (PyObject *) type) {{
             Py_DecRef(item_object);
             break;
-        }
+        }}
         /* Extract the dict and check if it contains the method (the
          * dict is not a real dictionary so we can not use
          * PyDict_Contains).
          */
         dict = PyObject_GetAttrString(item_object, "__dict__");
-        if(dict != NULL && PySequence_Contains(dict, py_method)) {
+        if(dict != NULL && PySequence_Contains(dict, py_method)) {{
             found = 1;
-        }
+        }}
         Py_DecRef(dict);
         Py_DecRef(item_object);
 
-        if(found != 0) {
+        if(found != 0) {{
             break;
-        }
-    }
+        }}
+    }}
     Py_DecRef(py_method);
     PyErr_Clear();
 
     return found;
-}
+}}
 
-""" % dict(
-    classes_length=(len(self.classes) + 1),
-    get_current_error=CURRENT_ERROR_FUNCTION)
+""".format(**values_dict)
 
     def initialise_class(self, class_name, out, done = None):
         if done and class_name in done: return
@@ -560,7 +563,7 @@ static int check_method_override(PyObject *self, PyTypeObject *type, char *metho
         done.add(class_name)
 
         cls = self.classes[class_name]
-        """ Write out class initialisation code into the main init function. """
+        """Write out class initialisation code into the main init function."""
         if cls.is_active():
             base_class = self.classes.get(cls.base_class_name)
 
@@ -574,25 +577,25 @@ static int check_method_override(PyObject *self, PyTypeObject *type, char *metho
                     "    {0:s}_Type.tp_base = &{1:s}_Type;".format(
                         cls.class_name, cls.base_class_name))
 
-            out.write("""
-    %(name)s_Type.tp_new = PyType_GenericNew;
-    if (PyType_Ready(&%(name)s_Type) < 0) {
-        return;
-    }
-    Py_IncRef((PyObject *)&%(name)s_Type);
-    PyModule_AddObject(m, "%(name)s", (PyObject *)&%(name)s_Type);
-""" % {'name': cls.class_name})
+            values_dict = {
+                "name": cls.class_name}
+            out.write((
+                "    {name:s}_Type.tp_new = PyType_GenericNew;\n"
+                "    if (PyType_Ready(&{name:s}_Type) < 0) {{\n"
+                "        return;\n"
+                "    }}\n"
+                "    Py_IncRef((PyObject *)&{name:s}_Type);\n"
+                "    PyModule_AddObject(m, \"{name:s}\", (PyObject *)&{name:s}_Type);\n").format(**values_dict))
 
     def write(self, out):
         # Write the headers
         if self.public_api:
-            self.public_api.write('''
-#ifdef BUILDING_DLL
-#include "misc.h"
-#else
-#include "aff4_public.h"
-#endif
-''')
+            self.public_api.write(
+                "#ifdef BUILDING_DLL\n"
+                "#include \"misc.h\"\n"
+                "#else\n"
+                "#include \"aff4_public.h\"\n"
+                "#endif\n")
 
         # Prepare all classes
         for cls in self.classes.values():
@@ -607,7 +610,9 @@ This module was autogenerated from the following files:
         for filename in self.files:
             out.write("{0:s}\n".format(filename))
 
-        out.write("\nThis module implements the following classes:\n")
+        out.write(
+            "\n"
+            "This module implements the following classes:\n")
         out.write(self.__str__())
         out.write(
             "***********************************************************************/\n")
@@ -654,7 +659,7 @@ This module was autogenerated from the following files:
             "\n"
             "    {NULL}  /* Sentinel */\n"
             "};\n"
-            "\n") % {'module': self.name, 'version': VERSION, 'version_length': len(VERSION) })
+            "\n") % {"module": self.name, "version": VERSION, "version_length": len(VERSION) })
 
         out.write((
             "/* Declarations for DLL import/export\n"
@@ -680,7 +685,7 @@ This module was autogenerated from the following files:
             "    PyEval_InitThreads();\n"
             "    gstate = PyGILState_Ensure();\n"
             "\n"
-            "    g_module = m;\n") % {'module': self.name})
+            "    g_module = m;\n") % {"module": self.name})
 
         # The trick is to initialise the classes in order of their
         # inheritance. The following code will order initializations
@@ -691,10 +696,10 @@ This module was autogenerated from the following files:
 
         # Add the constants in here
         for constant, type in self.constants:
-            if type == 'integer':
+            if type == "integer":
                 out.write(
                    "    tmp = PyLong_FromUnsignedLongLong((uint64_t) %s);\n" % constant)
-            elif type == 'string':
+            elif type == "string":
                 out.write((
                     "#if PY_MAJOR_VERSION >= 3\n"
                     "    tmp = PyBytes_FromString((char *)%s);\n"
@@ -719,8 +724,8 @@ This module was autogenerated from the following files:
 
 class Type:
     interface = None
-    buildstr = 'O'
-    sense = 'IN'
+    buildstr = "O"
+    sense = "IN"
     error_value = "return 0;"
     active = True
 
@@ -730,42 +735,48 @@ class Type:
         self.attributes = set()
 
     def comment(self):
-        return "%s %s " % (self.type, self.name)
+        return "{0:s} {1:s} ".format(self.type, self.name)
 
     def python_name(self):
         return self.name
 
     def python_proxy_post_call(self):
-        """ This is called after a proxy call """
-        return ''
+        """This is called after a proxy call"""
+        return ""
 
     def returned_python_definition(self, *arg, **kw):
         return self.definition(*arg, **kw)
 
     def definition(self, default=None, **kw):
         if default:
-            return "%s %s=%s;\n" % (self.type, self.name, default)
+            return "{0:s} {1:s}={2:s};\n".format(
+                self.type, self.name, default)
         else:
-            return "%s UNUSED %s;\n" % (self.type, self.name)
+            return "{0:s} UNUSED {1:s};\n".format(
+                self.type, self.name)
 
     def local_definition(self, default = None, **kw):
-        return ''
+        return ""
 
     def byref(self):
-        return "&%s" % self.name
+        return "&{0:s}".format(self.name)
 
     def call_arg(self):
         return self.name
 
     def passthru_call(self):
-        """ Returns how we should call the function when simply passing args directly """
+        """Returns how we should call the function when simply passing args directly"""
         return self.call_arg()
 
     def pre_call(self, method, **kw):
-        return ''
+        return ""
 
     def assign(self, call, method, target=None, **kwargs):
-        return "Py_BEGIN_ALLOW_THREADS\n%s = %s;\nPy_END_ALLOW_THREADS\n" % (target or self.name, call)
+        return (
+            "Py_BEGIN_ALLOW_THREADS\n"
+            "{0:s} = {1:s};\n"
+            "Py_END_ALLOW_THREADS\n").format(
+                target or self.name, call)
 
     def post_call(self, method):
         # Check for errors
@@ -777,34 +788,34 @@ class Type:
         return result
 
     def from_python_object(self, source, destination, method, **kw):
-        return ''
+        return ""
 
     def return_value(self, value):
-        return "return %s;" % value
+        return "return {0!s};".format(value)
 
     def __str__(self):
-        if self.name == 'func_return':
+        if self.name == "func_return":
             return self.type
-        if 'void' in self.type:
-            return ''
+        if "void" in self.type:
+            return ""
 
-        result = "%s : %s" % (self.type, self.name)
+        result = "{0:s} : {1:s}".format(self.type, self.name)
 
         return result
 
 class String(Type):
-    interface = 'string'
-    buildstr = 's'
+    interface = "string"
+    buildstr = "s"
     error_value = "return NULL;"
 
     def __init__(self, name, type):
         Type.__init__(self, name, type)
-        self.length = "strlen(%s)" % name
+        self.length = "strlen({0:s})".format(name)
 
     def byref(self):
-        return "&%s" % self.name
+        return "&{0:s}".format(self.name)
 
-    def to_python_object(self, name=None, result='Py_result',**kw):
+    def to_python_object(self, name=None, result="Py_result", **kw):
         name = name or self.name
 
         result = (
@@ -822,12 +833,12 @@ class String(Type):
             "        if(!%(result)s) goto on_error;\n"
             "    };\n") % dict(name=name, result=result,length=self.length)
 
-        if "BORROWED" not in self.attributes and 'BORROWED' not in kw:
+        if "BORROWED" not in self.attributes and "BORROWED" not in kw:
             result += "talloc_unlink(NULL, %s);\n" % name
 
         return result
 
-    def from_python_object(self, source, destination, method, context='NULL'):
+    def from_python_object(self, source, destination, method, context="NULL"):
         method.error_set = True
         return """
 {
@@ -850,10 +861,10 @@ class String(Type):
 """ % dict(source = source, destination = destination, context =context)
 
 class ZString(String):
-    interface = 'null_terminated_string'
+    interface = "null_terminated_string"
 
 class BorrowedString(String):
-    def to_python_object(self, name=None, result='Py_result', **kw):
+    def to_python_object(self, name=None, result="Py_result", **kw):
         name = name or self.name
         return((
             "PyErr_Clear();\n"
@@ -864,8 +875,8 @@ class BorrowedString(String):
             "#endif\n") % dict(name=name, length=self.length, result=result))
 
 class Char_and_Length(Type):
-    interface = 'char_and_length'
-    buildstr = 's#'
+    interface = "char_and_length"
+    buildstr = "s#"
     error_value = "return NULL;"
 
     def __init__(self, data, data_type, length, length_type):
@@ -877,54 +888,63 @@ class Char_and_Length(Type):
         self.length_type = length_type
 
     def comment(self):
-        return "%s %s, %s %s" % (self.data_type, self.name,
-                                 self.length_type, self.length)
+        return "{0:s} {1:s}, {2:s} {3:s}".format(
+            self.data_type, self.name, self.length_type, self.length)
 
-    def definition(self, default = '""', **kw):
-        return "char *%s=%s; Py_ssize_t %s=strlen(%s);\n" % (
-            self.name, default,
-            self.length, default)
+    def definition(self, default = "\"\"", **kw):
+        return (
+            "char *{0:s}={1:s};\n"
+            "Py_ssize_t {2:s}=strlen({3:s});\n").format(
+                self.name, default, self.length, default)
 
     def byref(self):
-        return "&%s, &%s" % (self.name, self.length)
+        return "&{0:s}, &{1:s}".format(self.name, self.length)
 
     def call_arg(self):
-        return "(%s)%s, (%s)%s" % (self.data_type, self.name, self.length_type,
-                                   self.length)
+        return "({0:s}){1:s}, ({2:s}){3:s}".format(
+            self.data_type, self.name, self.length_type, self.length)
 
-    def to_python_object(self, name=None, result='Py_result', **kw):
-        return((
+    def to_python_object(self, name=None, result="Py_result", **kw):
+        values_dict = {
+            "length": self.length,
+            "name": self.name,
+            "result": result}
+
+        return (
             "PyErr_Clear();\n"
             "#if PY_MAJOR_VERSION >= 3\n"
-            "%s = PyBytes_FromStringAndSize((char *)%s, %s);\n"
+            "{result:s} = PyBytes_FromStringAndSize((char *){name:s}, {length:s});\n"
             "#else\n"
-            "%s = PyString_FromStringAndSize((char *)%s, %s);\n"
+            "{result:s} = PyString_FromStringAndSize((char *){name:s}, {length:s});\n"
             "#endif\n"
             "\n"
-            "if(!%s) goto on_error;\n") % (
-                result, self.name, self.length, result))
+            "if(!{result:s}) {{\n"
+            "    goto on_error;\n"
+            "}}\n").format(**values_dict)
 
 
 class Integer(Type):
-    interface = 'integer'
-    buildstr = 'i'
-    int_type = 'int'
+    interface = "integer"
+    buildstr = "i"
+    int_type = "int"
 
     def __init__(self, name, type):
         Type.__init__(self, name, type)
         self.type = self.int_type
         self.original_type = type
 
-    def to_python_object(self, name=None, result='Py_result', **kw):
-        name = name or self.name
-        return((
+    def to_python_object(self, name=None, result="Py_result", **kw):
+        values_dict = {
+            "name": name or self.name,
+            "result": result}
+
+        return (
             "PyErr_Clear();\n"
             "#if PY_MAJOR_VERSION >= 3\n"
-            "%(result)s = PyLong_FromLong(%(name)s);\n"
+            "{result:s} = PyLong_FromLong({name:s});\n"
             "#else\n"
-            "%(result)s = PyInt_FromLong(%(name)s);\n"
-            "#endif\n") % (
-                dict(result=result, name=name)))
+            "{result:s} = PyInt_FromLong({name:s});\n"
+            "#endif\n").format(**values_dict)
 
     def from_python_object(self, source, destination, method, **kw):
         return((
@@ -937,14 +957,14 @@ class Integer(Type):
                 dict(source=source, destination=destination)))
 
     def comment(self):
-        return "%s %s " % (self.original_type, self.name)
+        return "{0:s} {1:s} ".format(self.original_type, self.name)
 
 
 class IntegerUnsigned(Integer):
-    buildstr = 'I'
-    int_type = 'unsigned int '
+    buildstr = "I"
+    int_type = "unsigned int"
 
-    def to_python_object(self, name=None, result='Py_result', **kw):
+    def to_python_object(self, name=None, result="Py_result", **kw):
         name = name or self.name
         return((
             "PyErr_Clear();\n"
@@ -967,34 +987,34 @@ class IntegerUnsigned(Integer):
 
 
 class Integer8(Integer):
-    int_type = 'int8_t '
+    int_type = "int8_t"
 
 
 class Integer8Unsigned(IntegerUnsigned):
-    int_type = 'uint8_t '
+    int_type = "uint8_t"
 
 
 class Integer16(Integer):
-    int_type = 'int16_t '
+    int_type = "int16_t"
 
 
 class Integer16Unsigned(IntegerUnsigned):
-    int_type = 'uint16_t '
+    int_type = "uint16_t"
 
 
 class Integer32(Integer):
-    int_type = 'int32_t '
+    int_type = "int32_t"
 
 
 class Integer32Unsigned(IntegerUnsigned):
-    int_type = 'uint32_t '
+    int_type = "uint32_t"
 
 
 class Integer64(Integer):
-    buildstr = 'L'
-    int_type = 'int64_t '
+    buildstr = "L"
+    int_type = "int64_t"
 
-    def to_python_object(self, name=None, result='Py_result', **kw):
+    def to_python_object(self, name=None, result="Py_result", **kw):
         name = name or self.name
         return((
             "PyErr_Clear();\n"
@@ -1024,10 +1044,10 @@ class Integer64(Integer):
 
 
 class Integer64Unsigned(Integer):
-    buildstr = 'K'
-    int_type = 'uint64_t '
+    buildstr = "K"
+    int_type = "uint64_t"
 
-    def to_python_object(self, name=None, result='Py_result', **kw):
+    def to_python_object(self, name=None, result="Py_result", **kw):
         name = name or self.name
         return((
             "PyErr_Clear();\n"
@@ -1057,10 +1077,10 @@ class Integer64Unsigned(Integer):
 
 
 class Long(Integer):
-    buildstr = 'l'
-    int_type = 'long '
+    buildstr = "l"
+    int_type = "long"
 
-    def to_python_object(self, name=None, result='Py_result', **kw):
+    def to_python_object(self, name=None, result="Py_result", **kw):
         name = name or self.name
         return((
             "PyErr_Clear();\n"
@@ -1075,10 +1095,10 @@ class Long(Integer):
 
 
 class LongUnsigned(Integer):
-    buildstr = 'k'
-    int_type = 'unsigned long '
+    buildstr = "k"
+    int_type = "unsigned long"
 
-    def to_python_object(self, name=None, result='Py_result', **kw):
+    def to_python_object(self, name=None, result="Py_result", **kw):
         name = name or self.name
         return((
             "PyErr_Clear();\n"
@@ -1131,14 +1151,14 @@ class Char(Integer):
 
 
 class StringOut(String):
-    sense = 'OUT'
+    sense = "OUT"
 
 
 class IntegerOut(Integer):
     """ Handle Integers pushed out through OUT int *result """
-    sense = 'OUT_DONE'
-    buildstr = ''
-    int_type ='int *'
+    sense = "OUT_DONE"
+    buildstr = ""
+    int_type = "int *"
 
     def definition(self, default = 0, **kw):
         # We need to make static storage for the pointers
@@ -1146,7 +1166,7 @@ class IntegerOut(Integer):
         bare_type = self.type.split()[0]
         return "%s %s=0;\n%s" % (bare_type, storage, Type.definition(self, "&%s" % storage))
 
-    def to_python_object(self, name=None, result='Py_result', **kw):
+    def to_python_object(self, name=None, result="Py_result", **kw):
         name = name or self.name
         return "PyErr_Clear();\n%s = PyLong_FromLongLong(*%s);\n" % (result, name)
 
@@ -1164,18 +1184,18 @@ class IntegerOut(Integer):
 
 
 class PInteger32UnsignedOut(IntegerOut):
-    buildstr = ''
-    int_type = 'uint32_t *'
+    buildstr = ""
+    int_type = "uint32_t *"
 
 
 class PInteger64UnsignedOut(IntegerOut):
-    buildstr = ''
-    int_type = 'uint64_t *'
+    buildstr = ""
+    int_type = "uint64_t *"
 
 
 class Char_and_Length_OUT(Char_and_Length):
-    sense = 'OUT_DONE'
-    buildstr = 'l'
+    sense = "OUT_DONE"
+    buildstr = "l"
 
     def definition(self, default = 0, **kw):
         return((
@@ -1220,12 +1240,12 @@ class Char_and_Length_OUT(Char_and_Length):
                 self.name, self.name, self.length,
                 self.name, self.name, self.length))
 
-    def to_python_object(self, name=None, result='Py_result', sense='in', **kw):
+    def to_python_object(self, name=None, result="Py_result", sense="in", **kw):
         name = name or self.name
-        if 'results' in kw:
-            kw['results'].pop(0)
+        if "results" in kw:
+            kw["results"].pop(0)
 
-        if sense == 'proxied':
+        if sense == "proxied":
             return "py_%s = PyLong_FromLong(%s);\n" % (self.name, self.length)
 
         return """
@@ -1246,7 +1266,7 @@ class Char_and_Length_OUT(Char_and_Length):
     %(result)s = tmp_%(name)s;\n""" % (
            dict(name= name, result= result, length=self.length))
 
-    def python_proxy_post_call(self, result='Py_result'):
+    def python_proxy_post_call(self, result="Py_result"):
         return """
 {
     char *tmp_buff; Py_ssize_t tmp_len;
@@ -1282,7 +1302,7 @@ class TDB_DATA_P(Char_and_Length_OUT):
     def call_arg(self):
         return Type.call_arg(self)
 
-    def to_python_object(self, name=None,result='Py_result', **kw):
+    def to_python_object(self, name=None,result="Py_result", **kw):
         name = name or self.name
         return (
             "PyErr_Clear();\n"
@@ -1348,7 +1368,7 @@ Py_DecRef(%(source)s);
 """ % dict(source = source, destination = destination,
            bare_type = self.bare_type)
 
-    def to_python_object(self, name = None, result='Py_result', **kw):
+    def to_python_object(self, name = None, result="Py_result", **kw):
         name = name or self.name
 
         return (
@@ -1360,20 +1380,20 @@ Py_DecRef(%(source)s);
             "#endif\n") % (result, name, name)
 
 class Void(Type):
-    buildstr = ''
+    buildstr = ""
     error_value = "return;"
-    original_type = ''
+    original_type = ""
 
-    def __init__(self, name, type = 'void', *args):
+    def __init__(self, name, type = "void", *args):
         Type.__init__(self, name, type)
 
     def comment(self):
-        return 'void *ctx'
+        return "void *ctx"
 
     def definition(self, default = None, **kw):
-        return ''
+        return ""
 
-    def to_python_object(self, name=None, result = 'Py_result', **kw):
+    def to_python_object(self, name=None, result = "Py_result", **kw):
         return(
             "Py_IncRef(Py_None);\n"
             "Py_result = Py_None;\n")
@@ -1395,12 +1415,12 @@ class Void(Type):
         return "return;"
 
 class PVoid(Void):
-    def __init__(self, name, type = 'void *', *args):
+    def __init__(self, name, type = "void *", *args):
         Type.__init__(self, name, type)
 
 class StringArray(String):
-    interface = 'array'
-    buildstr = 'O'
+    interface = "array"
+    buildstr = "O"
 
     def definition(self, default = '""', **kw):
         return "char **%s=NULL; PyObject *py_%s=NULL;\n" % (
@@ -1409,7 +1429,7 @@ class StringArray(String):
     def byref(self):
         return "&py_%s" % (self.name)
 
-    def from_python_object(self, source, destination, method, context='NULL'):
+    def from_python_object(self, source, destination, method, context="NULL"):
         method.error_set = True
         return """{
     Py_ssize_t i = 0;
@@ -1452,7 +1472,7 @@ class StringArray(String):
 
 class Wrapper(Type):
     """This class represents a wrapped C type """
-    sense = 'IN'
+    sense = "IN"
     error_value = "return NULL;"
 
     def from_python_object(self, source, destination, method, **kw):
@@ -1472,7 +1492,7 @@ class Wrapper(Type):
             "\n") % dict(source=source, destination=destination, type=self.type))
 
     def to_python_object(self, **kw):
-        return ''
+        return ""
 
     def returned_python_definition(self, default="NULL", sense="in", **kw):
         return "%s %s = %s;\n" % (self.type, self.name, default)
@@ -1484,7 +1504,7 @@ class Wrapper(Type):
         result = (
             "    Gen_wrapper wrapped_%s UNUSED = %s;\n") % (self.name, default)
 
-        if sense == 'in' and not 'OUT' in self.attributes:
+        if sense == "in" and not "OUT" in self.attributes:
             result += "    %s UNUSED %s;\n" % (self.type, self.name)
 
         return result
@@ -2741,45 +2761,47 @@ class StructConstructor(ConstructorMethod):
         allocated in some proprietary way and we cant just call free
         on it when done.
         """
+        values_dict = {
+            "class_name": self.class_name}
         out.write((
-            "static void %(class_name)s_dealloc(py%(class_name)s *self) {\n"
+            "static void {class_name:s}_dealloc(py{class_name:s} *self) {{\n"
             "    struct _typeobject *ob_type = NULL;\n"
             "\n"
-            "    if(self != NULL) {\n"
-            "        if(self->base != NULL) {\n"
+            "    if(self != NULL) {{\n"
+            "        if(self->base != NULL) {{\n"
             "            self->base = NULL;\n"
-            "            // talloc_free(self->base);\n"
-            "            // PyMem_Free(self->base);\n"
-            "        }\n"
+            "        }}\n"
             "        ob_type = Py_TYPE(self);\n"
-            "        if(ob_type != NULL && ob_type->tp_free != NULL) {\n"
+            "        if(ob_type != NULL && ob_type->tp_free != NULL) {{\n"
             "            ob_type->tp_free((PyObject*) self);\n"
-            "        }\n"
-            "    }\n"
-            "}\n"
-            "\n") % dict(class_name=self.class_name))
+            "        }}\n"
+            "    }}\n"
+            "}}\n"
+            "\n").format(**values_dict))
 
     def write_definition(self, out):
+        values_dict = {
+            "class_name": self.class_name}
         out.write((
-            "static int py%(class_name)s_init(py%(class_name)s *self, PyObject *args, PyObject *kwds) {\n"
+            "static int py{class_name:s}_init(py{class_name:s} *self, PyObject *args, PyObject *kwds) {{\n"
             "    // Base is borrowed from another object.\n"
             "    self->base = NULL;\n"
-            "    // self->base = talloc_zero(NULL, %(class_name)s);\n"
-            "    // self->base = (%(class_name)s *) PyMem_Malloc(sizeof(%(class_name)s));\n"
             "    return 0;\n"
-            "}\n"
-            "\n") % dict(method=self.name, class_name=self.class_name))
+            "}}\n"
+            "\n").format(**values_dict))
 
 class EmptyConstructor(ConstructorMethod):
     def prototype(self, out):
         return Method.prototype(self, out)
 
     def write_definition(self, out):
+        values_dict = {
+            "class_name": self.class_name}
         out.write(
-            "static int py%(class_name)s_init(py%(class_name)s *self, PyObject *args, PyObject *kwds) {\n"
+            "static int py{class_name:s}_init(py{class_name:s} *self, PyObject *args, PyObject *kwds) {{\n"
             "    return 0;\n"
-            "}\n"
-            "\n" % dict(method=self.name, class_name=self.class_name))
+            "}}\n"
+            "\n".format(**values_dict))
 
 class ClassGenerator:
     docstring = ""
@@ -2807,14 +2829,17 @@ class ClassGenerator:
         pass
 
     def __str__(self):
-        result = "#%s\n" % self.docstring
+        result = (
+            "#{0:s}\n"
+            "Class {1:s}({2:s}):\n"
+            "    Constructor:{3:s}\n"
+            "    Attributes:\n{4:s}\n"
+            "    Methods:\n").format(
+                self.docstring, self.class_name, self.base_class_name,
+                self.constructor, self.attributes)
 
-        result += "Class %s(%s):\n" % (self.class_name, self.base_class_name)
-        result += " Constructor:%s\n" % self.constructor
-        result += " Attributes:\n%s\n" % self.attributes
-        result += " Methods:\n"
-        for a in self.methods:
-            result += "    %s\n" % a.__str__()
+        for method in self.methods:
+            result += "        {0:s}\n".format(method.__str__())
 
         return result
 
@@ -2902,11 +2927,13 @@ class ClassGenerator:
                 method.proxied.write_definition(out)
 
     def initialise(self):
+        values_dict = {
+            "class_name": self.class_name}
         result = (
-            "python_wrappers[TOTAL_CLASSES].class_ref = (Object)&__%(class_name)s;\n"
-            "python_wrappers[TOTAL_CLASSES].python_type = &%(class_name)s_Type;\n") % self.__dict__
+            "python_wrappers[TOTAL_CLASSES].class_ref = (Object)&__{class_name:s};\n"
+            "python_wrappers[TOTAL_CLASSES].python_type = &{class_name:s}_Type;\n").format(**values_dict)
 
-        func_name = "py%(class_name)s_initialize_proxies" % self.__dict__
+        func_name = "py{class_name:s}_initialize_proxies".format(**values_dict)
         if func_name in self.module.function_definitions:
             result += (
                 "python_wrappers[TOTAL_CLASSES].initialize_proxies = (void (*)(Gen_wrapper, void *)) &{0:s};\n").format(
@@ -3408,80 +3435,80 @@ class EnumType(Integer):
 
 class HeaderParser(lexer.SelfFeederMixIn):
     tokens = [
-        [ 'INITIAL', r'#define\s+', 'PUSH_STATE', 'DEFINE' ],
-        [ 'DEFINE', r'([A-Za-z_0-9]+)\s+[^\n]+', 'DEFINE,POP_STATE', None ],
-        [ 'DEFINE', r'\n', 'POP_STATE', None],
+        [ "INITIAL", r"#define\s+", "PUSH_STATE", "DEFINE" ],
+        [ "DEFINE", r"([A-Za-z_0-9]+)\s+[^\n]+", "DEFINE,POP_STATE", None ],
+        [ "DEFINE", r"\n", "POP_STATE", None],
         # Ignore macros with args
-        [ 'DEFINE', r'\([^\n]+', 'POP_STATE', None],
+        [ "DEFINE", r"\([^\n]+", "POP_STATE", None],
 
         # Recognize ansi c comments
-        [ '.', r'/\*(.)', 'PUSH_STATE', 'COMMENT' ],
-        [ 'COMMENT', r'(.+?)\*/\s+', 'COMMENT_END,POP_STATE', None],
-        [ 'COMMENT', r'(.+)', 'COMMENT', None],
+        [ ".", r"/\*(.)", "PUSH_STATE", "COMMENT" ],
+        [ "COMMENT", r"(.+?)\*/\s+", "COMMENT_END,POP_STATE", None],
+        [ "COMMENT", r"(.+)", "COMMENT", None],
 
         # And c++ comments
-        [ '.', r'//([^\n]+)', 'COMMENT', None],
+        [ ".", r"//([^\n]+)", "COMMENT", None],
 
         # An empty line clears the current comment
-        [ '.', r'\r?\n\r?\n', 'CLEAR_COMMENT', None],
+        [ ".", r"\r?\n\r?\n", "CLEAR_COMMENT", None],
 
         # Ignore whitespace
-        [ '.', r'\s+', 'SPACE', None ],
-        [ '.', r'\\\n', 'SPACE', None ],
+        [ ".", r"\s+", "SPACE", None ],
+        [ ".", r"\\\n", "SPACE", None ],
 
         # Recognize CLASS() definitions
-        [ 'INITIAL', r"^([A-Z]+)?\s*CLASS\(([A-Z_a-z0-9]+)\s*,\s*([A-Z_a-z0-9]+)\)",
-                     'PUSH_STATE,CLASS_START', 'CLASS'],
+        [ "INITIAL", r"^([A-Z]+)?\s*CLASS\(([A-Z_a-z0-9]+)\s*,\s*([A-Z_a-z0-9]+)\)",
+                     "PUSH_STATE,CLASS_START", "CLASS"],
 
-        [ 'CLASS', r"^\s*(FOREIGN|ABSTRACT|PRIVATE)?([0-9A-Z_a-z ]+( |\*))METHOD\(([A-Z_a-z0-9]+),\s*([A-Z_a-z0-9]+),?",
+        [ "CLASS", r"^\s*(FOREIGN|ABSTRACT|PRIVATE)?([0-9A-Z_a-z ]+( |\*))METHOD\(([A-Z_a-z0-9]+),\s*([A-Z_a-z0-9]+),?",
                      "PUSH_STATE,METHOD_START", "METHOD"],
-        [ 'METHOD', r"\s*([0-9A-Z a-z_]+\s+\*?\*?)([0-9A-Za-z_]+),?", "METHOD_ARG", None ],
-        [ 'METHOD', r'\);', 'POP_STATE,METHOD_END', None],
+        [ "METHOD", r"\s*([0-9A-Z a-z_]+\s+\*?\*?)([0-9A-Za-z_]+),?", "METHOD_ARG", None ],
+        [ "METHOD", r"\);", "POP_STATE,METHOD_END", None],
 
-        [ 'CLASS', r"^\s*(FOREIGN|ABSTRACT)?([0-9A-Z_a-z ]+\s+\*?)\s*([A-Z_a-z0-9]+)\s*;",
-                   'CLASS_ATTRIBUTE', None],
-        [ 'CLASS', "END_CLASS", 'END_CLASS,POP_STATE', None],
+        [ "CLASS", r"^\s*(FOREIGN|ABSTRACT)?([0-9A-Z_a-z ]+\s+\*?)\s*([A-Z_a-z0-9]+)\s*;",
+                   "CLASS_ATTRIBUTE", None],
+        [ "CLASS", "END_CLASS", "END_CLASS,POP_STATE", None],
 
         # Recognize struct definitions (With name)
-        [ 'INITIAL', "([A-Z_a-z0-9 ]+)?struct\s+([A-Z_a-z0-9]+)\s+{",
-                     'PUSH_STATE,STRUCT_START', 'STRUCT'],
+        [ "INITIAL", "([A-Z_a-z0-9 ]+)?struct\s+([A-Z_a-z0-9]+)\s+{",
+                     "PUSH_STATE,STRUCT_START", "STRUCT"],
 
         # Without name (using typedef)
-        [ 'INITIAL', "typedef\s+struct\s+{",
-                     'PUSH_STATE,TYPEDEF_STRUCT_START', 'STRUCT'],
+        [ "INITIAL", "typedef\s+struct\s+{",
+                     "PUSH_STATE,TYPEDEF_STRUCT_START", "STRUCT"],
 
-        [ 'STRUCT', r"^\s*([0-9A-Z_a-z ]+\s+\*?)\s*([A-Z_a-z0-9]+)\s*;",
-                     'STRUCT_ATTRIBUTE', None],
+        [ "STRUCT", r"^\s*([0-9A-Z_a-z ]+\s+\*?)\s*([A-Z_a-z0-9]+)\s*;",
+                     "STRUCT_ATTRIBUTE", None],
 
-        [ 'STRUCT', r"^\s*([0-9A-Z_a-z ]+)\*\s+([A-Z_a-z0-9]+)\s*;",
-                     'STRUCT_ATTRIBUTE_PTR', None],
+        [ "STRUCT", r"^\s*([0-9A-Z_a-z ]+)\*\s+([A-Z_a-z0-9]+)\s*;",
+                     "STRUCT_ATTRIBUTE_PTR", None],
 
         # Struct ended with typedef
-        [ 'STRUCT', '}\s+([0-9A-Za-z_]+);', 'POP_STATE,TYPEDEF_STRUCT_END', None],
-        [ 'STRUCT', '}', 'POP_STATE,STRUCT_END', None],
+        [ "STRUCT", "}\s+([0-9A-Za-z_]+);", "POP_STATE,TYPEDEF_STRUCT_END", None],
+        [ "STRUCT", "}", "POP_STATE,STRUCT_END", None],
 
         # Handle recursive struct or union definition (At the moment
         # we cant handle them at all)
-        [ '(RECURSIVE_)?STRUCT', '(struct|union)\s+([_A-Za-z0-9]+)?\s*{', 'PUSH_STATE', 'RECURSIVE_STRUCT'],
-        [ 'RECURSIVE_STRUCT', '}\s+[0-9A-Za-z]+', 'POP_STATE', None],
+        [ "(RECURSIVE_)?STRUCT", "(struct|union)\s+([_A-Za-z0-9]+)?\s*{", "PUSH_STATE", "RECURSIVE_STRUCT"],
+        [ "RECURSIVE_STRUCT", "}\s+[0-9A-Za-z]+", "POP_STATE", None],
 
         # Process enums (2 forms - named and typedefed)
-        [ 'INITIAL', r'enum\s+([0-9A-Za-z_]+)\s+{', 'PUSH_STATE,ENUM_START', 'ENUM' ],
+        [ "INITIAL", r"enum\s+([0-9A-Za-z_]+)\s+{", "PUSH_STATE,ENUM_START", "ENUM" ],
         # Unnamed
-        [ 'INITIAL', r'typedef\s+enum\s+{', 'PUSH_STATE,TYPEDEF_ENUM_START', 'ENUM' ],
-        [ 'ENUM', r'([0-9A-Za-z_]+)\s+=[^\n]+', 'ENUM_VALUE', None],
+        [ "INITIAL", r"typedef\s+enum\s+{", "PUSH_STATE,TYPEDEF_ENUM_START", "ENUM" ],
+        [ "ENUM", r"([0-9A-Za-z_]+)\s+=[^\n]+", "ENUM_VALUE", None],
 
         # Typedefed ending
-        [ 'ENUM', r'}\s+([0-9A-Za-z_]+);', 'POP_STATE,TYPEDEFED_ENUM_END', None],
-        [ 'ENUM', r'}', 'POP_STATE,ENUM_END', None],
+        [ "ENUM", r"}\s+([0-9A-Za-z_]+);", "POP_STATE,TYPEDEFED_ENUM_END", None],
+        [ "ENUM", r"}", "POP_STATE,ENUM_END", None],
 
-        [ 'INITIAL', r'BIND_STRUCT\(([0-9A-Za-z_ \*]+)\)', 'BIND_STRUCT', None],
+        [ "INITIAL", r"BIND_STRUCT\(([0-9A-Za-z_ \*]+)\)", "BIND_STRUCT", None],
 
         # A simple typedef of one type for another type:
-        [ 'INITIAL', r"typedef ([A-Za-z_0-9]+) +([^;]+);", 'SIMPLE_TYPEDEF', None],
+        [ "INITIAL", r"typedef ([A-Za-z_0-9]+) +([^;]+);", "SIMPLE_TYPEDEF", None],
 
         # Handle proxied directives
-        [ 'INITIAL', r"PXXROXY_CLASS\(([A-Za-z0-9_]+)\)", 'PROXY_CLASS', None],
+        [ "INITIAL", r"PXXROXY_CLASS\(([A-Za-z0-9_]+)\)", "PROXY_CLASS", None],
 
         ]
 
