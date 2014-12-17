@@ -804,10 +804,10 @@ class Type:
         """This is called after a proxy call"""
         return ""
 
-    def returned_python_definition(self, *arg, **kw):
-        return self.definition(*arg, **kw)
+    def returned_python_definition(self, *arg, **kwargs):
+        return self.definition(*arg, **kwargs)
 
-    def definition(self, default=None, **kw):
+    def definition(self, default=None, **kwargs):
         if default:
             return "{0:s} {1:s}={2:s};\n".format(
                 self.type, self.name, default)
@@ -815,7 +815,7 @@ class Type:
             return "{0:s} UNUSED {1:s};\n".format(
                 self.type, self.name)
 
-    def local_definition(self, default = None, **kw):
+    def local_definition(self, default = None, **kwargs):
         return ""
 
     def byref(self):
@@ -828,7 +828,7 @@ class Type:
         """Returns how we should call the function when simply passing args directly"""
         return self.call_arg()
 
-    def pre_call(self, method, **kw):
+    def pre_call(self, method, **kwargs):
         return ""
 
     def assign(self, call, method, target=None, **kwargs):
@@ -847,7 +847,7 @@ class Type:
 
         return result
 
-    def from_python_object(self, source, destination, method, **kw):
+    def from_python_object(self, source, destination, method, **kwargs):
         return ""
 
     def return_value(self, value):
@@ -875,7 +875,7 @@ class String(Type):
     def byref(self):
         return "&{0:s}".format(self.name)
 
-    def to_python_object(self, name=None, result="Py_result", **kw):
+    def to_python_object(self, name=None, result="Py_result", **kwargs):
 
         values_dict = {
             "length": self.length,
@@ -899,7 +899,7 @@ class String(Type):
             "        }}\n"
             "    }}\n").format(**values_dict)
 
-        if "BORROWED" not in self.attributes and "BORROWED" not in kw:
+        if "BORROWED" not in self.attributes and "BORROWED" not in kwargs:
             result += "talloc_unlink(NULL, {0:s});\n".format(name)
 
         return result
@@ -935,7 +935,7 @@ class ZString(String):
     interface = "null_terminated_string"
 
 class BorrowedString(String):
-    def to_python_object(self, name=None, result="Py_result", **kw):
+    def to_python_object(self, name=None, result="Py_result", **kwargs):
         values_dict = {
             "length": self.length,
             "name": name or self.name,
@@ -966,7 +966,7 @@ class Char_and_Length(Type):
         return "{0:s} {1:s}, {2:s} {3:s}".format(
             self.data_type, self.name, self.length_type, self.length)
 
-    def definition(self, default = "\"\"", **kw):
+    def definition(self, default = "\"\"", **kwargs):
         return (
             "char *{0:s}={1:s};\n"
             "Py_ssize_t {2:s}=strlen({3:s});\n").format(
@@ -979,7 +979,7 @@ class Char_and_Length(Type):
         return "({0:s}){1:s}, ({2:s}){3:s}".format(
             self.data_type, self.name, self.length_type, self.length)
 
-    def to_python_object(self, name=None, result="Py_result", **kw):
+    def to_python_object(self, name=None, result="Py_result", **kwargs):
         values_dict = {
             "length": self.length,
             "name": self.name,
@@ -1008,7 +1008,7 @@ class Integer(Type):
         self.type = self.int_type
         self.original_type = type
 
-    def to_python_object(self, name=None, result="Py_result", **kw):
+    def to_python_object(self, name=None, result="Py_result", **kwargs):
         values_dict = {
             "name": name or self.name,
             "result": result}
@@ -1021,7 +1021,7 @@ class Integer(Type):
             "    {result:s} = PyInt_FromLong({name:s});\n"
             "#endif\n").format(**values_dict)
 
-    def from_python_object(self, source, destination, method, **kw):
+    def from_python_object(self, source, destination, method, **kwargs):
         values_dict = {
             "destination": destination,
             "source": source}
@@ -1042,7 +1042,7 @@ class IntegerUnsigned(Integer):
     buildstr = "I"
     int_type = "unsigned int"
 
-    def to_python_object(self, name=None, result="Py_result", **kw):
+    def to_python_object(self, name=None, result="Py_result", **kwargs):
         values_dict = {
             "name": name or self.name,
             "result": result}
@@ -1055,7 +1055,7 @@ class IntegerUnsigned(Integer):
             "    {result:s} = PyInt_FromLong((long) {name:s});\n"
             "#endif\n").format(**values_dict)
 
-    def from_python_object(self, source, destination, method, **kw):
+    def from_python_object(self, source, destination, method, **kwargs):
         values_dict = {
             "destination": destination,
             "source": source}
@@ -1097,7 +1097,7 @@ class Integer64(Integer):
     buildstr = "L"
     int_type = "int64_t"
 
-    def to_python_object(self, name=None, result="Py_result", **kw):
+    def to_python_object(self, name=None, result="Py_result", **kwargs):
         values_dict = {
             "name": name or self.name,
             "result": result}
@@ -1110,7 +1110,7 @@ class Integer64(Integer):
             "    {result:s} = PyLong_FromLong({name:s});\n"
             "#endif\n").format(**values_dict)
 
-    def from_python_object(self, source, destination, method, **kw):
+    def from_python_object(self, source, destination, method, **kwargs):
         values_dict = {
             "destination": destination,
             "source": source}
@@ -1136,7 +1136,7 @@ class Integer64Unsigned(Integer):
     buildstr = "K"
     int_type = "uint64_t"
 
-    def to_python_object(self, name=None, result="Py_result", **kw):
+    def to_python_object(self, name=None, result="Py_result", **kwargs):
         values_dict = {
             "name": name or self.name,
             "result": result}
@@ -1149,7 +1149,7 @@ class Integer64Unsigned(Integer):
             "    {result:s} = PyLong_FromUnsignedLong({name:s});\n"
             "#endif\n").format(**values_dict)
 
-    def from_python_object(self, source, destination, method, **kw):
+    def from_python_object(self, source, destination, method, **kwargs):
         values_dict = {
             "destination": destination,
             "source": source}
@@ -1175,7 +1175,7 @@ class Long(Integer):
     buildstr = "l"
     int_type = "long"
 
-    def to_python_object(self, name=None, result="Py_result", **kw):
+    def to_python_object(self, name=None, result="Py_result", **kwargs):
         values_dict = {
             "name": name or self.name,
             "result": result}
@@ -1185,7 +1185,7 @@ class Long(Integer):
             "{result:s} = PyLong_FromLongLong({name:s});\n").format(
                 **values_dict)
 
-    def from_python_object(self, source, destination, method, **kw):
+    def from_python_object(self, source, destination, method, **kwargs):
         values_dict = {
             "destination": destination,
             "source": source}
@@ -1200,7 +1200,7 @@ class LongUnsigned(Integer):
     buildstr = "k"
     int_type = "unsigned long"
 
-    def to_python_object(self, name=None, result="Py_result", **kw):
+    def to_python_object(self, name=None, result="Py_result", **kwargs):
         values_dict = {
             "name": name or self.name,
             "result": result}
@@ -1210,7 +1210,7 @@ class LongUnsigned(Integer):
             "{result:s} = PyLong_FromUnsignedLong({name:s});\n").format(
                 **values_dict)
 
-    def from_python_object(self, source, destination, method, **kw):
+    def from_python_object(self, source, destination, method, **kwargs):
         values_dict = {
             "destination": destination,
             "source": source}
@@ -1225,7 +1225,7 @@ class Char(Integer):
     buildstr = "s"
     interface = "small_integer"
 
-    def to_python_object(self, name=None, result="Py_result", **kw):
+    def to_python_object(self, name=None, result="Py_result", **kwargs):
         # We really want to return a string here
         values_dict = {
             "name": name or self.name,
@@ -1246,7 +1246,7 @@ class Char(Integer):
             "        goto on_error;\n"
             "}}\n").format(**values_dict)
 
-    def definition(self, default = '"\\x0"', **kw):
+    def definition(self, default = '"\\x0"', **kwargs):
         # Shut up unused warnings
         return (
             "char {0:s} UNUSED=0;\n"
@@ -1256,7 +1256,7 @@ class Char(Integer):
     def byref(self):
         return "&str_{0:s}".format(self.name)
 
-    def pre_call(self, method, **kw):
+    def pre_call(self, method, **kwargs):
         method.error_set = True
 
         values_dict = {
@@ -1282,7 +1282,7 @@ class IntegerOut(Integer):
     buildstr = ""
     int_type = "int *"
 
-    def definition(self, default = 0, **kw):
+    def definition(self, default = 0, **kwargs):
         # We need to make static storage for the pointers
         storage = "storage_{0:s}".format(self.name)
         bare_type = self.type.split()[0]
@@ -1294,7 +1294,7 @@ class IntegerOut(Integer):
             "{2:s}\n").format(
                 bare_type, storage, type_definition)
 
-    def to_python_object(self, name=None, result="Py_result", **kw):
+    def to_python_object(self, name=None, result="Py_result", **kwargs):
         values_dict = {
             "name": name or self.name,
             "result": result}
@@ -1331,7 +1331,7 @@ class Char_and_Length_OUT(Char_and_Length):
     sense = "OUT_DONE"
     buildstr = "l"
 
-    def definition(self, default=0, **kw):
+    def definition(self, default=0, **kwargs):
         values_dict = {
             "default": default,
             "length": self.length,
@@ -1358,72 +1358,82 @@ class Char_and_Length_OUT(Char_and_Length):
     def byref(self):
         return "&{0:s}".format(self.length)
 
-    def pre_call(self, method, **kw):
-        return((
+    def pre_call(self, method, **kwargs):
+        values_dict = {
+            "length": self.length,
+            "name": self.name}
+
+        return (
             "    PyErr_Clear();\n"
             "\n"
             "#if PY_MAJOR_VERSION >= 3\n"
-            "    tmp_%s = PyBytes_FromStringAndSize(NULL, %s);\n"
+            "    tmp_{name:s} = PyBytes_FromStringAndSize(NULL, {length:s});\n"
             "#else\n"
-            "    tmp_%s = PyString_FromStringAndSize(NULL, %s);\n"
+            "    tmp_{name:s} = PyString_FromStringAndSize(NULL, {length:s});\n"
             "#endif\n"
-            "    if(!tmp_%s) {\n"
+            "    if(!tmp_{name:s}) {{\n"
             "        goto on_error;\n"
-            "    }\n"
+            "    }}\n"
             "\n"
             "#if PY_MAJOR_VERSION >= 3\n"
-            "    PyBytes_AsStringAndSize(tmp_%s, &%s, (Py_ssize_t *)&%s);\n"
+            "    PyBytes_AsStringAndSize(tmp_{name:s}, &{name:s}, (Py_ssize_t *)&{length:s});\n"
             "#else\n"
-            "    PyString_AsStringAndSize(tmp_%s, &%s, (Py_ssize_t *)&%s);\n"
-            "#endif\n") % (
-                self.name, self.length,
-                self.name, self.length,
-                self.name,
-                self.name, self.name, self.length,
-                self.name, self.name, self.length))
+            "    PyString_AsStringAndSize(tmp_{name:s}, &{name:s}, (Py_ssize_t *)&{length:s});\n"
+            "#endif\n").format(**values_dict)
 
-    def to_python_object(self, name=None, result="Py_result", sense="in", **kw):
-        name = name or self.name
-        if "results" in kw:
-            kw["results"].pop(0)
+    def to_python_object(self, name=None, result="Py_result", sense="in", **kwargs):
+        if "results" in kwargs:
+            kwargs["results"].pop(0)
 
         if sense == "proxied":
-            return "py_%s = PyLong_FromLong(%s);\n" % (self.name, self.length)
+            return "py_{0:s} = PyLong_FromLong({1:s});\n".format(
+                self.name, self.length)
 
-        return """
-    // NOTE - this should never happen - it might indicate an overflow condition.
-    if(func_return > %(length)s) {
-        printf(\"Programming Error - possible overflow!!\\n\");
-        abort();
+        values_dict = {
+            "length": self.length,
+            "name": name or self.name,
+            "result": result}
 
-    // Do we need to truncate the buffer for a short read?
-    } else if(func_return < %(length)s) {
-#if PY_MAJOR_VERSION >= 3
-        _PyBytes_Resize(&tmp_%(name)s, (Py_ssize_t)func_return);
-#else
-        _PyString_Resize(&tmp_%(name)s, (Py_ssize_t)func_return);
-#endif
-    }
-
-    %(result)s = tmp_%(name)s;\n""" % (
-           dict(name= name, result= result, length=self.length))
+        return (
+            "    /* NOTE - this should never happen\n"
+            "     * it might indicate an overflow condition.\n"
+            "     */\n"
+            "    if(func_return > {length:s}) {{\n"
+            "        printf(\"Programming Error - possible overflow!!\\n\");\n"
+            "        abort();\n"
+            "\n"
+            "    // Do we need to truncate the buffer for a short read?\n"
+            "    }} else if(func_return < {length:s}) {{\n"
+            "#if PY_MAJOR_VERSION >= 3\n"
+            "        _PyBytes_Resize(&tmp_{name:s}, (Py_ssize_t)func_return);\n"
+            "#else\n"
+            "        _PyString_Resize(&tmp_{name:s}, (Py_ssize_t)func_return);\n"
+            "#endif\n"
+            "    }}\n"
+            "\n"
+            "    {result:s} = tmp_{name:s};\n").format(**values_dict)
 
     def python_proxy_post_call(self, result="Py_result"):
-        return """
-{
-    char *tmp_buff; Py_ssize_t tmp_len;
-#if PY_MAJOR_VERSION >= 3
-    if(PyBytes_AsStringAndSize(%(result)s, &tmp_buff, &tmp_len) == -1) {
-#else
-    if(PyString_AsStringAndSize(%(result)s, &tmp_buff, &tmp_len) == -1) {
-#endif
-        goto on_error;
-    }
-    memcpy(%(name)s,tmp_buff, tmp_len);
-    Py_DecRef(%(result)s);
-    %(result)s = PyLong_FromLong(tmp_len);
-}
-""" % dict(result = result, name=self.name)
+        values_dict = {
+            "name": self.name,
+            "result": result}
+
+        return (
+            "{{\n"
+            "    char *tmp_buff = NULL;\n"
+            "    Py_ssize_t tmp_len = 0;\n"
+            "\n"
+            "#if PY_MAJOR_VERSION >= 3\n"
+            "    if(PyBytes_AsStringAndSize({result:s}, &tmp_buff, &tmp_len) == -1) {{\n"
+            "#else\n"
+            "    if(PyString_AsStringAndSize({result:s}, &tmp_buff, &tmp_len) == -1) {{\n"
+            "#endif\n"
+            "        goto on_error;\n"
+            "    }}\n"
+            "    memcpy({name:s}, tmp_buff, tmp_len);\n"
+            "    Py_DecRef({result:s});\n"
+            "    {result:s} = PyLong_FromLong(tmp_len);\n"
+            "}}\n").format(**values_dict)
 
 
 class TDB_DATA_P(Char_and_Length_OUT):
@@ -1432,110 +1442,122 @@ class TDB_DATA_P(Char_and_Length_OUT):
     def __init__(self, name, type):
         Type.__init__(self, name, type)
 
-    def definition(self, default=None, **kw):
+    def definition(self, default=None, **kwargs):
         return Type.definition(self)
 
     def byref(self):
-        return "%s.dptr, &%s.dsize" % (self.name, self.name)
+        return "{0:s}.dptr, &{0:s}.dsize".format(self.name)
 
-    def pre_call(self, method, **kw):
+    def pre_call(self, method, **kwargs):
         return ""
 
     def call_arg(self):
         return Type.call_arg(self)
 
-    def to_python_object(self, name=None,result="Py_result", **kw):
-        name = name or self.name
+    def to_python_object(self, name=None,result="Py_result", **kwargs):
+        values_dict = {
+            "name": name or self.name,
+            "result": result}
+
         return (
-            "PyErr_Clear();\n"
+            "    PyErr_Clear();\n"
             "#if PY_MAJOR_VERSION >= 3\n"
-            "%s = PyBytes_FromStringAndSize((char *)%s->dptr, %s->dsize);\n"
+            "    {result:s} = PyBytes_FromStringAndSize((char *){name:s}->dptr, {name:s}->dsize);\n"
             "#else\n"
-            "%s = PyString_FromStringAndSize((char *)%s->dptr, %s->dsize);\n"
+            "    {result:s} = PyString_FromStringAndSize((char *){name:s}->dptr, {name:s}->dsize);\n"
             "#endif\n"
-            "talloc_free(%s);\n") % (result, name, name, name)
+            "    talloc_free({name:s});\n").format(**values_dict)
 
-    def from_python_object(self, source, destination, method, **kw):
+    def from_python_object(self, source, destination, method, **kwargs):
         method.error_set = True
-        return """
-%(destination)s = talloc_zero(self, %(bare_type)s);
-{
-    char *buf = NULL;
-    Py_ssize_t tmp = 0;
+        values_dict = {
+            "bare_type": self.bare_type,
+            "destination": destination,
+            "source": source}
 
-    PyErr_Clear();
-
-#if PY_MAJOR_VERSION >= 3
-    if(PyBytes_AsStringAndSize(%(source)s, &buf, &tmp) == -1) {
-#else
-    if(PyString_AsStringAndSize(%(source)s, &buf, &tmp) == -1) {
-#endif
-        goto on_error;
-    }
-
-    // Take a copy of the python string
-    %(destination)s->dptr = talloc_memdup(%(destination)s, buf, tmp);
-    %(destination)s->dsize = tmp;
-}
-// We no longer need the python object
-Py_DecRef(%(source)s);
-""" % dict(source = source, destination = destination,
-           bare_type = self.bare_type)
+        return (
+            "{destination:s} = talloc_zero(self, {bare_type:s});\n"
+            "{{\n"
+            "    char *buf = NULL;\n"
+            "    Py_ssize_t tmp = 0;\n"
+            "\n"
+            "    PyErr_Clear();\n"
+            "\n"
+            "#if PY_MAJOR_VERSION >= 3\n"
+            "    if(PyBytes_AsStringAndSize({source:s}, &buf, &tmp) == -1) {{\n"
+            "#else\n"
+            "    if(PyString_AsStringAndSize({source:s}, &buf, &tmp) == -1) {{\n"
+            "#endif\n"
+            "        goto on_error;\n"
+            "    }}\n"
+            "\n"
+            "    // Take a copy of the python string\n"
+            "    {destination:s}->dptr = talloc_memdup({destination:s}, buf, tmp);\n"
+            "    {destination:s}->dsize = tmp;\n"
+            "}}\n"
+            "// We no longer need the python object\n"
+            "Py_DecRef({source:s});\n").format(**values_dict)
 
 class TDB_DATA(TDB_DATA_P):
-    error_value = "%(result)s.dptr = NULL; return %(result)s;"
+    error_value = (
+        "{result:s}.dptr = NULL;\n"
+        "return {result:s};")
 
-    def from_python_object(self, source, destination, method, **kw):
+    def from_python_object(self, source, destination, method, **kwargs):
         method.error_set = True
-        return """
-{
-    char *buf = NULL;
-    Py_ssize_t tmp = 0;
-
-    PyErr_Clear();
-
-#if PY_MAJOR_VERSION >= 3
-    if(PyBytes_AsStringAndSize(%(source)s, &buf, &tmp) == -1) {
-#else
-    if(PyString_AsStringAndSize(%(source)s, &buf, &tmp) == -1) {
-#endif
-        goto on_error;
-    }
-    // Take a copy of the python string - This leaks - how to fix it?
-    %(destination)s.dptr = talloc_memdup(NULL, buf, tmp);
-    %(destination)s.dsize = tmp;
-}
-// We no longer need the python object
-Py_DecRef(%(source)s);
-""" % dict(source = source, destination = destination,
-           bare_type = self.bare_type)
-
-    def to_python_object(self, name = None, result="Py_result", **kw):
-        name = name or self.name
+        values_dict = {
+            "destination": destination,
+            "source": source}
 
         return (
-            "PyErr_Clear();\n"
+            "{{\n"
+            "    char *buf = NULL;\n"
+            "    Py_ssize_t tmp = 0;\n"
+            "\n"
+            "    PyErr_Clear();\n"
+            "\n"
             "#if PY_MAJOR_VERSION >= 3\n"
-            "%s = PyBytes_FromStringAndSize((char *)%s.dptr, %s.dsize);\n"
+            "    if(PyBytes_AsStringAndSize({source:s}, &buf, &tmp) == -1) {{\n"
             "#else\n"
-            "%s = PyString_FromStringAndSize((char *)%s.dptr, %s.dsize);\n"
-            "#endif\n") % (result, name, name)
+            "    if(PyString_AsStringAndSize({source:s}, &buf, &tmp) == -1) {{\n"
+            "#endif\n"
+            "        goto on_error;\n"
+            "    }}\n"
+            "    // Take a copy of the python string - This leaks - how to fix it?\n"
+            "    {destination:s}.dptr = talloc_memdup(NULL, buf, tmp);\n"
+            "    {destination:s}.dsize = tmp;\n"
+            "}}\n"
+            "// We no longer need the python object\n"
+            "Py_DecRef({source:s});\n").format(**values_dict)
+
+    def to_python_object(self, name = None, result="Py_result", **kwargs):
+        values_dict = {
+            "name": name or self.name,
+            "result": result}
+
+        return (
+            "    PyErr_Clear();\n"
+            "#if PY_MAJOR_VERSION >= 3\n"
+            "    {result:s} = PyBytes_FromStringAndSize((char *){name:s}.dptr, {name:s}.dsize);\n"
+            "#else\n"
+            "    {result:s} = PyString_FromStringAndSize((char *){name:s}.dptr, {name:s}.dsize);\n"
+            "#endif\n").format(**values_dict)
 
 class Void(Type):
     buildstr = ""
     error_value = "return;"
     original_type = ""
 
-    def __init__(self, name, type = "void", *args):
+    def __init__(self, name, type="void", *args):
         Type.__init__(self, name, type)
 
     def comment(self):
         return "void *ctx"
 
-    def definition(self, default = None, **kw):
+    def definition(self, default = None, **kwargs):
         return ""
 
-    def to_python_object(self, name=None, result = "Py_result", **kw):
+    def to_python_object(self, name=None, result="Py_result", **kwargs):
         return(
             "Py_IncRef(Py_None);\n"
             "Py_result = Py_None;\n")
@@ -1547,69 +1569,79 @@ class Void(Type):
         return None
 
     def assign(self, call, method, target=None, **kwargs):
-        # We dont assign the result to anything
-        return(
+        # We don't assign the result to anything.
+        return (
             "    Py_BEGIN_ALLOW_THREADS\n"
-            "    (void) %s;\n" 
-            "    Py_END_ALLOW_THREADS\n") % call
+            "    (void) {0:s};\n" 
+            "    Py_END_ALLOW_THREADS\n").format(call)
 
     def return_value(self, value):
         return "return;"
 
 class PVoid(Void):
-    def __init__(self, name, type = "void *", *args):
+    def __init__(self, name, type="void *", *args):
         Type.__init__(self, name, type)
 
 class StringArray(String):
     interface = "array"
     buildstr = "O"
 
-    def definition(self, default = '""', **kw):
-        return "char **%s=NULL; PyObject *py_%s=NULL;\n" % (
-            self.name, self.name)
+    def definition(self, default = '""', **kwargs):
+        return (
+            "char **{0:s} = NULL;\n"
+            "PyObject *py_{0:s} = NULL;\n").format(self.name)
 
     def byref(self):
-        return "&py_%s" % (self.name)
+        return "&py_{0:s}".format(self.name)
 
     def from_python_object(self, source, destination, method, context="NULL"):
         method.error_set = True
-        return """{
-    Py_ssize_t i = 0;
-    Py_ssize_t size = 0;
+        values_dict = {
+            "destination": destination,
+            "source": source}
 
-    if(%(source)s) {
-        if(!PySequence_Check(%(source)s)) {
-            PyErr_Format(PyExc_ValueError, "%(destination)s must be a sequence");
-            goto on_error;
-        }
-        size = PySequence_Size(%(source)s);
-    }
-    %(destination)s = talloc_zero_array(NULL, char *, size + 1);
+        return (
+            "{{\n"
+            "    Py_ssize_t i = 0;\n"
+            "    Py_ssize_t size = 0;\n"
+            "\n"
+            "    if({source:s}) {{\n"
+            "        if(!PySequence_Check({source:s})) {{\n"
+            "            PyErr_Format(PyExc_ValueError, \"{destination:s} must be a sequence\");\n"
+            "            goto on_error;\n"
+            "        }}\n"
+            "        size = PySequence_Size({source:s});\n"
+            "    }}\n"
+            "    {destination:s} = talloc_zero_array(NULL, char *, size + 1);\n"
+            "\n"
+            "    for(i = 0; i < size; i++) {{\n"
+            "        PyObject *tmp = PySequence_GetItem({source:s}, i);\n"
+            "        if(!tmp) {{\n"
+            "            goto on_error;\n"
+            "        }}\n"
+            "#if PY_MAJOR_VERSION >= 3\n"
+            "        {destination:s}[i] = PyBytes_AsString(tmp);\n"
+            "#else\n"
+            "        {destination:s}[i] = PyString_AsString(tmp);\n"
+            "#endif\n"
+            "\n"
+            "        if(!{destination:s}[i]) {{\n"
+            "            Py_DecRef(tmp);\n"
+            "            goto on_error;\n"
+            "        }}\n"
+            "        Py_DecRef(tmp);\n"
+            "    }}\n"
+            "}}\n").format(**values_dict)
 
-    for(i = 0; i < size; i++) {
-        PyObject *tmp = PySequence_GetItem(%(source)s, i);
-        if(!tmp) {
-            goto on_error;
-        }
-#if PY_MAJOR_VERSION >= 3
-        %(destination)s[i] = PyBytes_AsString(tmp);
-#else
-        %(destination)s[i] = PyString_AsString(tmp);
-#endif
-
-        if(!%(destination)s[i]) {
-            Py_DecRef(tmp);
-            goto on_error;
-        }
-        Py_DecRef(tmp);
-    }
-}""" % dict(source = source, destination = destination, context = context)
-
-    def pre_call(self, method, **kw):
-        return self.from_python_object("py_%s" % self.name, self.name, method)
+    def pre_call(self, method, **kwargs):
+        return self.from_python_object(
+            "py_{0:s}".format(self.name), self.name, method)
 
     def error_condition(self):
-        return """    if(%s) talloc_free(%s);\n""" % (self.name, self.name)
+        return (
+            "    if({0:s}) {{\n"
+            "        talloc_free({0:s});\n"
+            "    }}\n").format(self.name)
 
 
 class Wrapper(Type):
@@ -1617,74 +1649,89 @@ class Wrapper(Type):
     sense = "IN"
     error_value = "return NULL;"
 
-    def from_python_object(self, source, destination, method, **kw):
-        return((
-            "     /* First check that the returned value is in fact a Wrapper */\n"
-            "     if(!type_check(%(source)s, &%(type)s_Type)) {\n"
-            "          PyErr_Format(PyExc_RuntimeError, \"function must return an %(type)s instance\");\n"
-            "          goto on_error;\n"
-            "     }\n"
-            "\n"
-            "     %(destination)s = ((Gen_wrapper) %(source)s)->base;\n"
-            "\n"
-            "     if(!%(destination)s) {\n"
-            "          PyErr_Format(PyExc_RuntimeError, \"%(type)s instance is no longer valid (was it gc'ed?)\");\n"
-            "          goto on_error;\n"
-            "}\n"
-            "\n") % dict(source=source, destination=destination, type=self.type))
+    def from_python_object(self, source, destination, method, **kwargs):
+        values_dict = {
+            "destination": destination,
+            "source": source,
+            "type": self.type}
 
-    def to_python_object(self, **kw):
+        return (
+            "     /* First check that the returned value is in fact a Wrapper */\n"
+            "     if(!type_check({source:s}, &{type:s}_Type)) {{\n"
+            "          PyErr_Format(PyExc_RuntimeError, \"function must return an {type:s} instance\");\n"
+            "          goto on_error;\n"
+            "     }}\n"
+            "\n"
+            "     {destination:s} = ((Gen_wrapper) {source:s})->base;\n"
+            "\n"
+            "     if(!{destination:s}) {{\n"
+            "          PyErr_Format(PyExc_RuntimeError, \"{type:s} instance is no longer valid (was it gc'ed?)\");\n"
+            "          goto on_error;\n"
+            "}}\n"
+            "\n").format(**values_dict)
+
+    def to_python_object(self, **kwargs):
         return ""
 
-    def returned_python_definition(self, default="NULL", sense="in", **kw):
-        return "%s %s = %s;\n" % (self.type, self.name, default)
+    def returned_python_definition(self, default="NULL", sense="in", **kwargs):
+        return "{0:s} {1:s} = {2:s};\n".format(
+            self.type, self.name, default)
 
     def byref(self):
-        return "&wrapped_%s" % self.name
+        return "&wrapped_{0:s}".format(self.name)
 
-    def definition(self, default="NULL", sense="in", **kw):
+    def definition(self, default="NULL", sense="in", **kwargs):
         result = (
-            "    Gen_wrapper wrapped_%s UNUSED = %s;\n") % (self.name, default)
+            "    Gen_wrapper wrapped_{0:s} UNUSED = {1:s};\n").format(
+                self.name, default)
 
         if sense == "in" and not "OUT" in self.attributes:
-            result += "    %s UNUSED %s;\n" % (self.type, self.name)
+            result += "    {0:s} UNUSED {1:s};\n".format(
+                self.type, self.name)
 
         return result
 
     def call_arg(self):
         return "{0:s}".format(self.name)
 
-    def pre_call(self, method, python_object_index=1, **kw):
+    def pre_call(self, method, python_object_index=1, **kwargs):
         if "OUT" in self.attributes or self.sense == "OUT":
             return ""
         self.original_type = self.type.split()[0]
 
-        values_dict = dict(self.__dict__)
-        values_dict["python_object_index"] = python_object_index
+        values_dict = {
+            "name": self.name,
+            "original_type": self.original_type,
+            "python_object_index": python_object_index}
 
-        return((
-          "    if(wrapped_%(name)s == NULL || (PyObject *)wrapped_%(name)s == Py_None) {\n"
-          "        %(name)s = NULL;\n"
-          "    } else if(!type_check((PyObject *)wrapped_%(name)s,&%(original_type)s_Type)) {\n"
-          "        PyErr_Format(PyExc_RuntimeError, \"%(name)s must be derived from type %(original_type)s\");\n"
+        return (
+          "    if(wrapped_{name:s} == NULL || (PyObject *)wrapped_{name:s} == Py_None) {{\n"
+          "        {name:s} = NULL;\n"
+          "    }} else if(!type_check((PyObject *)wrapped_{name:s},&{original_type:s}_Type)) {{\n"
+          "        PyErr_Format(PyExc_RuntimeError, \"{name:s} must be derived from type {original_type:s}\");\n"
           "        goto on_error;\n"
-          "    } else if(wrapped_%(name)s->base == NULL) {\n"
-          "        PyErr_Format(PyExc_RuntimeError, \"%(original_type)s instance is no longer valid (was it gc'ed?)\");\n"
+          "    }} else if(wrapped_{name:s}->base == NULL) {{\n"
+          "        PyErr_Format(PyExc_RuntimeError, \"{original_type:s} instance is no longer valid (was it gc'ed?)\");\n"
           "        goto on_error;\n"
-          "    } else {\n"
-          "        %(name)s = wrapped_%(name)s->base;\n"
-          "        if(self->python_object%(python_object_index)s == NULL) {\n"
-          "            self->python_object%(python_object_index)s = (PyObject *) wrapped_%(name)s;\n"
-          "            Py_IncRef(self->python_object%(python_object_index)s);\n"
-          "        }\n"
-          "    }\n") % values_dict)
+          "    }} else {{\n"
+          "        {name:s} = wrapped_{name:s}->base;\n"
+          "        if(self->python_object{python_object_index:d} == NULL) {{\n"
+          "            self->python_object{python_object_index:d} = (PyObject *) wrapped_{name:s};\n"
+          "            Py_IncRef(self->python_object{python_object_index:d});\n"
+          "        }}\n"
+          "    }}\n").format(**values_dict)
 
     def assign(self, call, method, target=None, **kwargs):
         method.error_set = True;
-        args = dict(name=(target or self.name), call=call.strip(), type=self.type, incref=INCREF)
+
+        values_dict = {
+            "call": call.strip(),
+            "incref": INCREF,
+            "name": target or self.name,
+            "type": self.type}
 
         result = (
-            "    {\n"
+            "    {{\n"
             "        Object returned_object = NULL;\n"
             "\n"
             "        ClearError();\n"
@@ -1692,19 +1739,19 @@ class Wrapper(Type):
             "        Py_BEGIN_ALLOW_THREADS\n"
             "        // This call will return a Python object if the base is a proxied Python object\n"
             "        // or a talloc managed object otherwise.\n"
-            "        returned_object = (Object) %(call)s;\n"
+            "        returned_object = (Object) {call:s};\n"
             "        Py_END_ALLOW_THREADS\n"
             "\n"
-            "        if(check_error()) {\n"
-            "            if(returned_object != NULL) {\n"
-            "                if(self->base_is_python_object != 0) {\n"
+            "        if(check_error()) {{\n"
+            "            if(returned_object != NULL) {{\n"
+            "                if(self->base_is_python_object != 0) {{\n"
             "                    Py_DecRef((PyObject *) returned_object);\n"
-            "                } else if(self->base_is_internal != 0) {\n"
+            "                }} else if(self->base_is_internal != 0) {{\n"
             "                    talloc_free(returned_object);\n"
-            "                }\n"
-            "            }\n"
+            "                }}\n"
+            "            }}\n"
             "            goto on_error;\n"
-            "        }\n") % args
+            "        }}\n").format(**values_dict)
 
         # Is NULL an acceptable return type? In some Python code NULL
         # can be returned (e.g. in iterators) but usually it should
@@ -1716,33 +1763,33 @@ class Wrapper(Type):
                 "        }\n")
 
         result += (
-            "        wrapped_%(name)s = new_class_wrapper(returned_object, self->base_is_python_object);\n"
+            "        wrapped_{name:s} = new_class_wrapper(returned_object, self->base_is_python_object);\n"
             "\n"
-            "        if(wrapped_%(name)s == NULL) {\n"
-            "            if(returned_object != NULL) {\n"
-            "                if(self->base_is_python_object != 0) {\n"
+            "        if(wrapped_{name:s} == NULL) {{\n"
+            "            if(returned_object != NULL) {{\n"
+            "                if(self->base_is_python_object != 0) {{\n"
             "                    Py_DecRef((PyObject *) returned_object);\n"
-            "                } else if(self->base_is_internal != 0) {\n"
+            "                }} else if(self->base_is_internal != 0) {{\n"
             "                    talloc_free(returned_object);\n"
-            "                }\n"
-            "            }\n"
+            "                }}\n"
+            "            }}\n"
             "            goto on_error;\n"
-            "        }\n") % args
+            "        }}\n").format(**values_dict)
 
         if "BORROWED" in self.attributes:
             result += (
                 "        #error unchecked BORROWED code segment\n"
-                "        %(incref)s(wrapped_%(name)s->base);\n"
-                "        if(((Object) wrapped_%(name)s->base)->extension) {\n"
-                "            Py_IncRef((PyObject *) ((Object) wrapped_%(name)s->base)->extension);\n"
-                "        }\n") % args
+                "        {incref:s}(wrapped_{name:s}->base);\n"
+                "        if(((Object) wrapped_{name:s}->base)->extension) {{\n"
+                "            Py_IncRef((PyObject *) ((Object) wrapped_{name:s}->base)->extension);\n"
+                "        }}\n").format(**values_dict)
 
         result += (
             "    }\n")
 
         return result
 
-    def to_python_object(self, name=None, result="Py_result", sense="in", **kw):
+    def to_python_object(self, name=None, result="Py_result", sense="in", **kwargs):
         name = name or self.name
         args = dict(result=result, name=name)
 
@@ -1761,7 +1808,7 @@ class PointerWrapper(Wrapper):
     def comment(self):
         return "%s *%s" % (self.type, self.name)
 
-    def definition(self, default = "NULL", sense="in", **kw):
+    def definition(self, default = "NULL", sense="in", **kwargs):
         result = "Gen_wrapper wrapped_%s = %s;" % (self.name, default)
         if sense == "in" and not "OUT" in self.attributes:
             result += " %s *%s;\n" % (self.type, self.name)
@@ -1771,7 +1818,7 @@ class PointerWrapper(Wrapper):
     def byref(self):
         return "&wrapped_%s" % self.name
 
-    def pre_call(self, method, **kw):
+    def pre_call(self, method, **kwargs):
         if "OUT" in self.attributes or self.sense == "OUT":
             return ""
         self.original_type = self.type.split()[0]
@@ -1855,7 +1902,7 @@ class StructWrapper(Wrapper):
     def byref(self):
         return "&%s" % self.name
 
-    def definition(self, default = "NULL", sense="in", **kw):
+    def definition(self, default = "NULL", sense="in", **kwargs):
         result = "Gen_wrapper wrapped_%s = %s;" % (self.name, default)
         if sense == "in" and not "OUT" in self.attributes:
             result += " %s *%s=NULL;\n" % (self.original_type, self.name)
@@ -1864,7 +1911,7 @@ class StructWrapper(Wrapper):
 
 
 class PointerStructWrapper(StructWrapper):
-    def from_python_object(self, source, destination, method, **kw):
+    def from_python_object(self, source, destination, method, **kwargs):
         return "%s = ((Gen_wrapper) %s)->base;\n" % (destination, source)
 
     def byref(self):
@@ -1876,19 +1923,19 @@ class Timeval(Type):
     interface = "numeric"
     buildstr = "f"
 
-    def definition(self, default = None, **kw):
-        return "struct timeval %(name)s;\n" % self.__dict__ + self.local_definition(default, **kw)
+    def definition(self, default = None, **kwargs):
+        return "struct timeval %(name)s;\n" % self.__dict__ + self.local_definition(default, **kwargs)
 
-    def local_definition(self, default = None, **kw):
+    def local_definition(self, default = None, **kwargs):
         return "float %(name)s_flt;\n" % self.__dict__
 
     def byref(self):
         return "&%s_flt" % self.name
 
-    def pre_call(self, method, **kw):
+    def pre_call(self, method, **kwargs):
         return "%(name)s.tv_sec = (int)%(name)s_flt; %(name)s.tv_usec = (%(name)s_flt - %(name)s.tv_sec) * 1e6;\n" % self.__dict__
 
-    def to_python_object(self, name=None, result = "Py_result", **kw):
+    def to_python_object(self, name=None, result = "Py_result", **kwargs):
         name = name or self.name
         return """%(name)s_flt = (double)(%(name)s.tv_sec) + %(name)s.tv_usec;
 %(result)s = PyFloat_FromDouble(%(name)s_flt);
@@ -1898,7 +1945,7 @@ class PyObject(Type):
     """ Accept an opaque python object """
     interface = "opaque"
     buildstr = "O"
-    def definition(self, default = "NULL", **kw):
+    def definition(self, default = "NULL", **kwargs):
         self.default = default
         return "PyObject *%(name)s = %(default)s;\n" % self.__dict__
 
@@ -2331,8 +2378,8 @@ class Method:
 
 class IteratorMethod(Method):
     """ A Method which implements an iterator """
-    def __init__(self, *args, **kw):
-        Method.__init__(self, *args, **kw)
+    def __init__(self, *args, **kwargs):
+        Method.__init__(self, *args, **kwargs)
 
         # Tell the return type that a NULL python return is ok
         self.return_type.attributes.add("NULL_OK")
@@ -2761,7 +2808,7 @@ class ProxiedMethod(Method):
 
         for arg in self.args:
             out.write(arg.local_definition())
-            out.write("PyObject *py_%s = NULL;\n" % arg.name)
+            out.write("PyObject *py_{0:s} = NULL;\n".format(arg.name))
 
         out.write((
             "\n"
@@ -2769,21 +2816,22 @@ class ProxiedMethod(Method):
             "    gil_state = PyGILState_Ensure();\n"
             "\n"
             "#if PY_MAJOR_VERSION >= 3\n"
-            "    method_name = PyBytes_FromString(\"%s\");\n"
+            "    method_name = PyBytes_FromString(\"{0:s}\");\n"
             "#else\n"
-            "    method_name = PyString_FromString(\"%s\");\n"
-            "#endif\n") % (self.name, self.name))
+            "    method_name = PyString_FromString(\"{0:s}\");\n"
+            "#endif\n").format(self.name))
 
         out.write("\n// Obtain python objects for all the args:\n")
         for arg in self.args:
             out.write(arg.to_python_object(
-                result=("py_%s" % arg.name), sense="proxied", BORROWED=True))
+                result=("py_{0:s}".format(arg.name)), sense="proxied",
+                BORROWED=True))
 
         out.write((
-            "    if(((Object) self)->extension == NULL) {\n"
-            "        RaiseError(ERuntimeError, \"No proxied object in %s\");\n"
+            "    if(((Object) self)->extension == NULL) {{\n"
+            "        RaiseError(ERuntimeError, \"No proxied object in {0:s}\");\n"
             "        goto on_error;\n"
-            "    }\n") % (self.myclass.class_name))
+            "    }}\n").format(self.myclass.class_name))
 
         out.write(
             "\n"
@@ -2792,7 +2840,7 @@ class ProxiedMethod(Method):
             "    Py_result = PyObject_CallMethodObjArgs(((Object) self)->extension, method_name, ")
 
         for arg in self.args:
-            out.write("py_%s," % arg.name)
+            out.write("py_{0:s},".format(arg.name))
 
         # Sentinal
         out.write(
@@ -2850,14 +2898,15 @@ class ProxiedMethod(Method):
         # Decref all our python objects:
         for arg in self.args:
             out.write((
-                "    if(py_%s != NULL) {\n"
-                "        Py_DecRef(py_%s);\n"
-                "    }\n") %(arg.name, arg.name))
+                "    if(py_{0:s} != NULL) {{\n"
+                "        Py_DecRef(py_{0:s});\n"
+                "    }}\n").format(arg.name))
 
         out.write((
             "    PyGILState_Release(gil_state);\n"
             "\n"
-            "    %s\n") % self.return_type.return_value("func_return"))
+            "    {0:s}\n").format(
+                self.return_type.return_value("func_return")))
 
         if self.error_set:
             out.write(
@@ -2872,14 +2921,15 @@ class ProxiedMethod(Method):
             # Decref all our python objects:
             for arg in self.args:
                 out.write((
-                    "    if(py_%s != NULL) {\n"
-                    "        Py_DecRef(py_%s);\n"
-                    "    }\n") % (arg.name, arg.name))
+                    "    if(py_{0:s} != NULL) {{\n"
+                    "        Py_DecRef(py_{0:s});\n"
+                    "    }}\n").format(arg.name))
 
             out.write((
                 "    PyGILState_Release(gil_state);\n"
                 "\n"
-                "    %s\n") % self.error_condition())
+                "    {0:s}\n").format(
+                    self.error_condition()))
 
         out.write(
             "}\n"
@@ -3536,7 +3586,7 @@ class EnumType(Integer):
         Integer.__init__(self, name, type)
         self.type = type
 
-    def definition(self, default=None, **kw):
+    def definition(self, default=None, **kwargs):
         # Force the enum to be an int just in case the compiler chooses
         # a random size.
         if default:
@@ -3544,14 +3594,14 @@ class EnumType(Integer):
         else:
             return "    int UNUSED {0:s} = 0;\n".format(self.name)
 
-    def to_python_object(self, name=None, result="Py_result", **kw):
+    def to_python_object(self, name=None, result="Py_result", **kwargs):
         name = name or self.name
         return (
             "PyErr_Clear();\n"
             "{0:s} = PyObject_CallMethod(g_module, \"{1:s}\", \"K\", (uint64_t){2:s});\n").format(
                 result, self.type, name)
 
-    def pre_call(self, method, **kw):
+    def pre_call(self, method, **kwargs):
         method.error_set = True
 
         values_dict = {
