@@ -876,63 +876,78 @@ class String(Type):
         return "&{0:s}".format(self.name)
 
     def to_python_object(self, name=None, result="Py_result", **kw):
-        name = name or self.name
+
+        values_dict = {
+            "length": self.length,
+            "name": name or self.name,
+            "result": result}
 
         result = (
             "    PyErr_Clear();\n"
             "\n"
-            "    if(!%(name)s) {\n"
+            "    if(!{name:s}) {{\n"
             "        Py_IncRef(Py_None);\n"
-            "        %(result)s = Py_None;\n"
-            "    } else {\n"
+            "        {result:s} = Py_None;\n"
+            "    }} else {{\n"
             "#if PY_MAJOR_VERSION >= 3\n"
-            "        %(result)s = PyBytes_FromStringAndSize((char *)%(name)s, %(length)s);\n"
+            "        {result:s} = PyBytes_FromStringAndSize((char *){name:s}, {length:s};n"
             "#else\n"
-            "        %(result)s = PyString_FromStringAndSize((char *)%(name)s, %(length)s);\n"
+            "        {result:s} = PyString_FromStringAndSize((char *){name:s}, {length:s});\n"
             "#endif\n"
-            "        if(!%(result)s) goto on_error;\n"
-            "    };\n") % dict(name=name, result=result,length=self.length)
+            "        if(!{result:s}) {{\n"
+            "            goto on_error;\n"
+            "        }}\n"
+            "    }}\n").format(**values_dict)
 
         if "BORROWED" not in self.attributes and "BORROWED" not in kw:
-            result += "talloc_unlink(NULL, %s);\n" % name
+            result += "talloc_unlink(NULL, {0:s});\n".format(name)
 
         return result
 
     def from_python_object(self, source, destination, method, context="NULL"):
         method.error_set = True
-        return """
-{
-    char *buff = NULL;
-    Py_ssize_t length = 0;
 
-    PyErr_Clear();
+        values_dict = {
+            "context": context,
+            "destination": destination,
+            "source": source}
 
-#if PY_MAJOR_VERSION >= 3
-    if(PyBytes_AsStringAndSize(%(source)s, &buff, &length) == -1) {
-#else
-    if(PyString_AsStringAndSize(%(source)s, &buff, &length) == -1) {
-#endif
-        goto on_error;
-    }
-    %(destination)s = talloc_size(%(context)s, length + 1);
-    memcpy(%(destination)s, buff, length);
-    %(destination)s[length]=0;
-};
-""" % dict(source = source, destination = destination, context =context)
+        return (
+            "{{\n"
+            "    char *buff = NULL;\n"
+            "    Py_ssize_t length = 0;\n"
+            "\n"
+            "    PyErr_Clear();\n"
+            "\n"
+            "#if PY_MAJOR_VERSION >= 3\n"
+            "    if(PyBytes_AsStringAndSize({source:s}, &buff, &length) == -1) {{\n"
+            "#else\n"
+            "    if(PyString_AsStringAndSize({source:s}, &buff, &length) == -1) {{\n"
+            "#endif\n"
+            "        goto on_error;\n"
+            "    }}\n"
+            "    {destination:s} = talloc_size({context:s}, length + 1);\n"
+            "    memcpy({destination:s}, buff, length);\n"
+            "    {destination:s}[length] = 0;\n"
+            "}};\n").format(**values_dict)
 
 class ZString(String):
     interface = "null_terminated_string"
 
 class BorrowedString(String):
     def to_python_object(self, name=None, result="Py_result", **kw):
-        name = name or self.name
-        return((
-            "PyErr_Clear();\n"
+        values_dict = {
+            "length": self.length,
+            "name": name or self.name,
+            "result": result}
+
+        return (
+            "    PyErr_Clear();\n"
             "#if PY_MAJOR_VERSION >= 3\n"
-            "%s = PyBytes_FromStringAndSize((char *)%(name)s, %(length)s);\n"
+            "    {result:s} = PyBytes_FromStringAndSize((char *){name:s}, {length:s});\n"
             "#else\n"
-            "%s = PyString_FromStringAndSize((char *)%(name)s, %(length)s);\n"
-            "#endif\n") % dict(name=name, length=self.length, result=result))
+            "    {result:s} = PyString_FromStringAndSize((char *){name:s}, {length:s});\n"
+            "#endif\n").format(**values_dict)
 
 class Char_and_Length(Type):
     interface = "char_and_length"
@@ -971,16 +986,16 @@ class Char_and_Length(Type):
             "result": result}
 
         return (
-            "PyErr_Clear();\n"
+            "    PyErr_Clear();\n"
             "#if PY_MAJOR_VERSION >= 3\n"
-            "{result:s} = PyBytes_FromStringAndSize((char *){name:s}, {length:s});\n"
+            "    {result:s} = PyBytes_FromStringAndSize((char *){name:s}, {length:s});\n"
             "#else\n"
-            "{result:s} = PyString_FromStringAndSize((char *){name:s}, {length:s});\n"
+            "    {result:s} = PyString_FromStringAndSize((char *){name:s}, {length:s});\n"
             "#endif\n"
             "\n"
-            "if(!{result:s}) {{\n"
-            "    goto on_error;\n"
-            "}}\n").format(**values_dict)
+            "    if(!{result:s}) {{\n"
+            "        goto on_error;\n"
+            "    }}\n").format(**values_dict)
 
 
 class Integer(Type):
@@ -999,22 +1014,25 @@ class Integer(Type):
             "result": result}
 
         return (
-            "PyErr_Clear();\n"
+            "    PyErr_Clear();\n"
             "#if PY_MAJOR_VERSION >= 3\n"
-            "{result:s} = PyLong_FromLong({name:s});\n"
+            "    {result:s} = PyLong_FromLong({name:s});\n"
             "#else\n"
-            "{result:s} = PyInt_FromLong({name:s});\n"
+            "    {result:s} = PyInt_FromLong({name:s});\n"
             "#endif\n").format(**values_dict)
 
     def from_python_object(self, source, destination, method, **kw):
-        return((
-            "PyErr_Clear();\n"
+        values_dict = {
+            "destination": destination,
+            "source": source}
+
+        return (
+            "    PyErr_Clear();\n"
             "#if PY_MAJOR_VERSION >= 3\n"
-            "%(destination)s = PyLong_AsLongMask(%(source)s);\n"
+            "    {destination:s} = PyLong_AsLongMask({source:s});\n"
             "#else\n"
-            "%(destination)s = PyInt_AsLongMask(%(source)s);\n"
-            "#endif\n") % (
-                dict(source=source, destination=destination)))
+            "    {destination:s} = PyInt_AsLongMask({source:s});\n"
+            "#endif\n").format(**values_dict)
 
     def comment(self):
         return "{0:s} {1:s} ".format(self.original_type, self.name)
@@ -1025,25 +1043,30 @@ class IntegerUnsigned(Integer):
     int_type = "unsigned int"
 
     def to_python_object(self, name=None, result="Py_result", **kw):
-        name = name or self.name
-        return((
-            "PyErr_Clear();\n"
+        values_dict = {
+            "name": name or self.name,
+            "result": result}
+
+        return (
+            "    PyErr_Clear();\n"
             "#if PY_MAJOR_VERSION >= 3\n"
-            "%(result)s = PyLong_FromLong((long) %(name)s);\n"
+            "    {result:s} = PyLong_FromLong((long) {name:s});\n"
             "#else\n"
-            "%(result)s = PyInt_FromLong((long) %(name)s);\n"
-            "#endif\n") % (
-                dict(result=result, name=name)))
+            "    {result:s} = PyInt_FromLong((long) {name:s});\n"
+            "#endif\n").format(**values_dict)
 
     def from_python_object(self, source, destination, method, **kw):
-        return((
-            "PyErr_Clear();\n"
+        values_dict = {
+            "destination": destination,
+            "source": source}
+
+        return (
+            "    PyErr_Clear();\n"
             "#if PY_MAJOR_VERSION >= 3\n"
-            "%(destination)s = PyLong_AsUnsignedLongMask(%(source)s);\n"
+            "    {destination:s} = PyLong_AsUnsignedLongMask({source:s});\n"
             "#else\n"
-            "%(destination)s = PyInt_AsUnsignedLongMask(%(source)s);\n"
-            "#endif\n") % (
-                dict(source=source, destination=destination)))
+            "    {destination:s} = PyInt_AsUnsignedLongMask({source:s});\n"
+            "#endif\n").format(**values_dict)
 
 
 class Integer8(Integer):
@@ -1075,32 +1098,38 @@ class Integer64(Integer):
     int_type = "int64_t"
 
     def to_python_object(self, name=None, result="Py_result", **kw):
-        name = name or self.name
-        return((
-            "PyErr_Clear();\n"
+        values_dict = {
+            "name": name or self.name,
+            "result": result}
+
+        return (
+            "    PyErr_Clear();\n"
             "#if defined( HAVE_LONG_LONG )\n"
-            "    %(result)s = PyLong_FromLongLong(%(name)s);\n"
+            "    {result:s} = PyLong_FromLongLong({name:s});\n"
             "#else\n"
-            "    %(result)s = PyLong_FromLong(%(name)s);\n"
-            "#endif\n") % dict(result=result, name=name))
+            "    {result:s} = PyLong_FromLong({name:s});\n"
+            "#endif\n").format(**values_dict)
 
     def from_python_object(self, source, destination, method, **kw):
-        return((
-            "PyErr_Clear();\n"
+        values_dict = {
+            "destination": destination,
+            "source": source}
+
+        return (
+            "    PyErr_Clear();\n"
             "#if PY_MAJOR_VERSION >= 3\n"
             "#if defined( HAVE_LONG_LONG )\n"
-            "    %(destination)s = PyLong_AsLongLongMask(%(source)s);\n"
+            "    {destination:s} = PyLong_AsLongLongMask({source:s});\n"
             "#else\n"
-            "    %(destination)s = PyLong_AsLongMask(%(source)s);\n"
+            "    {destination:s} = PyLong_AsLongMask({source:s});\n"
             "#endif\n"
             "#else\n"
             "#if defined( HAVE_LONG_LONG )\n"
-            "    %(destination)s = PyInt_AsLongLongMask(%(source)s);\n"
+            "    {destination:s} = PyInt_AsLongLongMask({source:s});\n"
             "#else\n"
-            "    %(destination)s = PyInt_AsLongMask(%(source)s);\n"
+            "    {destination:s} = PyInt_AsLongMask({source:s});\n"
             "#endif\n"
-            "#endif /* PY_MAJOR_VERSION >= 3 */\n") % dict(
-                source=source, destination=destination))
+            "#endif /* PY_MAJOR_VERSION >= 3 */\n").format(**values_dict)
 
 
 class Integer64Unsigned(Integer):
@@ -1108,32 +1137,38 @@ class Integer64Unsigned(Integer):
     int_type = "uint64_t"
 
     def to_python_object(self, name=None, result="Py_result", **kw):
-        name = name or self.name
-        return((
-            "PyErr_Clear();\n"
+        values_dict = {
+            "name": name or self.name,
+            "result": result}
+
+        return (
+            "    PyErr_Clear();\n"
             "#if defined( HAVE_LONG_LONG )\n"
-            "    %(result)s = PyLong_FromUnsignedLongLong(%(name)s);\n"
+            "    {result:s} = PyLong_FromUnsignedLongLong({name:s});\n"
             "#else\n"
-            "    %(result)s = PyLong_FromUnsignedLong(%(name)s);\n"
-            "#endif\n") % dict(result=result, name=name))
+            "    {result:s} = PyLong_FromUnsignedLong({name:s});\n"
+            "#endif\n").format(**values_dict)
 
     def from_python_object(self, source, destination, method, **kw):
-        return((
-            "PyErr_Clear();\n"
+        values_dict = {
+            "destination": destination,
+            "source": source}
+
+        return (
+            "    PyErr_Clear();\n"
             "#if PY_MAJOR_VERSION >= 3\n"
             "#if defined( HAVE_LONG_LONG )\n"
-            "    %(destination)s = PyLong_AsUnsignedLongLongMask(%(source)s);\n"
+            "    {destination:s} = PyLong_AsUnsignedLongLongMask({source:s});\n"
             "#else\n"
-            "    %(destination)s = PyLong_AsUnsignedLongMask(%(source)s);\n"
+            "    {destination:s} = PyLong_AsUnsignedLongMask({source:s});\n"
             "#endif\n"
             "#else\n"
             "#if defined( HAVE_LONG_LONG )\n"
-            "    %(destination)s = PyInt_AsUnsignedLongLongMask(%(source)s);\n"
+            "    {destination:s} = PyInt_AsUnsignedLongLongMask({source:s});\n"
             "#else\n"
-            "    %(destination)s = PyInt_AsUnsignedLongMask(%(source)s);\n"
+            "    {destination:s} = PyInt_AsUnsignedLongMask({source:s});\n"
             "#endif\n"
-            "#endif /* PY_MAJOR_VERSION >= 3 */\n") % dict(
-                source=source, destination=destination))
+            "#endif /* PY_MAJOR_VERSION >= 3 */\n").format(**values_dict)
 
 
 class Long(Integer):
@@ -1141,17 +1176,24 @@ class Long(Integer):
     int_type = "long"
 
     def to_python_object(self, name=None, result="Py_result", **kw):
-        name = name or self.name
-        return((
+        values_dict = {
+            "name": name or self.name,
+            "result": result}
+
+        return (
             "PyErr_Clear();\n"
-            "%(result)s = PyLong_FromLongLong(%(name)s);\n") % (
-                dict(result=result, name=name)))
+            "{result:s} = PyLong_FromLongLong({name:s});\n").format(
+                **values_dict)
 
     def from_python_object(self, source, destination, method, **kw):
-        return((
+        values_dict = {
+            "destination": destination,
+            "source": source}
+
+        return (
             "PyErr_Clear();\n"
-            "%(destination)s = PyLong_AsLongMask(%(source)s);\n") % (
-                dict(source=source, destination=destination)))
+            "{destination:s} = PyLong_AsLongMask({source:s});\n").format(
+                **values_dict)
 
 
 class LongUnsigned(Integer):
@@ -1159,17 +1201,24 @@ class LongUnsigned(Integer):
     int_type = "unsigned long"
 
     def to_python_object(self, name=None, result="Py_result", **kw):
-        name = name or self.name
-        return((
+        values_dict = {
+            "name": name or self.name,
+            "result": result}
+
+        return (
             "PyErr_Clear();\n"
-            "%(result)s = PyLong_FromUnsignedLong(%(name)s);\n") % (
-                dict(result=result, name=name)))
+            "{result:s} = PyLong_FromUnsignedLong({name:s});\n").format(
+                **values_dict)
 
     def from_python_object(self, source, destination, method, **kw):
-        return((
+        values_dict = {
+            "destination": destination,
+            "source": source}
+
+        return (
             "PyErr_Clear();\n"
-            "%(destination)s = PyLong_AsUnsignedLongMask(%(source)s);\n") % (
-                dict(source=source, destination=destination)))
+            "{destination:s} = PyLong_AsUnsignedLongMask({source:s});\n").format(
+                **values_dict)
 
 
 class Char(Integer):
@@ -1178,36 +1227,49 @@ class Char(Integer):
 
     def to_python_object(self, name=None, result="Py_result", **kw):
         # We really want to return a string here
-        return((
-            "{\n"
-            "    char *str_%(name)s = &%(name)s;\n"
+        values_dict = {
+            "name": name or self.name,
+            "result": result}
+
+        return (
+            "{{\n"
+            "    char *str_{name:s} = &{name:s};\n"
+            "\n"
             "    PyErr_Clear();\n"
             "#if PY_MAJOR_VERSION >= 3\n"
-            "    %(result)s = PyBytes_FromStringAndSize(str_%(name)s, 1);\n"
+            "    {result:s} = PyBytes_FromStringAndSize(str_{name:s}, 1);\n"
             "#else\n"
-            "    %(result)s = PyString_FromStringAndSize(str_%(name)s, 1);\n"
+            "    {result:s} = PyString_FromStringAndSize(str_{name:s}, 1);\n"
             "#endif\n"
             "\n"
-            "    if(!%(result)s) goto on_error;\n"
-            "}\n") % dict(result=result, name = name or self.name))
+            "    if(!{result:s}) {{\n"
+            "        goto on_error;\n"
+            "}}\n").format(**values_dict)
 
     def definition(self, default = '"\\x0"', **kw):
         # Shut up unused warnings
-        return "char %s UNUSED=0;\nchar *str_%s UNUSED = %s;\n" % (
-            self.name,self.name, default)
+        return (
+            "char {0:s} UNUSED=0;\n"
+            "char *str_{0:s} UNUSED = {1:s};\n").format(
+                self.name, default)
 
     def byref(self):
-        return "&str_%s" % self.name
+        return "&str_{0:s}".format(self.name)
 
     def pre_call(self, method, **kw):
         method.error_set = True
-        return((
-            "    if(strlen(str_%(name)s) != 1) {\n"
-            "        PyErr_Format(PyExc_RuntimeError, \"You must only provide a single character for arg %(name)r\");\n"
+
+        values_dict = {
+            "name": self.name}
+
+        return (
+            "    if(strlen(str_{name:s}) != 1) {\n"
+            "        PyErr_Format(PyExc_RuntimeError, \"You must only provide a single character for arg {name:s}\");\n"
             "        goto on_error;\n"
             "    }\n"
             "\n"
-            "    %(name)s = str_%(name)s[0];\n") % dict(name = self.name))
+            "    {name:s} = str_{name:s}[0];\n").format(
+                **values_dict)
 
 
 class StringOut(String):
@@ -1222,13 +1284,25 @@ class IntegerOut(Integer):
 
     def definition(self, default = 0, **kw):
         # We need to make static storage for the pointers
-        storage = "storage_%s" % (self.name)
+        storage = "storage_{0:s}".format(self.name)
         bare_type = self.type.split()[0]
-        return "%s %s=0;\n%s" % (bare_type, storage, Type.definition(self, "&%s" % storage))
+        type_definition = Type.definition(
+            self, "&{0:s}".format(storage))
+
+        return (
+            "{0:s} {1:s} = 0;\n"
+            "{2:s}\n").format(
+                bare_type, storage, type_definition)
 
     def to_python_object(self, name=None, result="Py_result", **kw):
-        name = name or self.name
-        return "PyErr_Clear();\n%s = PyLong_FromLongLong(*%s);\n" % (result, name)
+        values_dict = {
+            "name": name or self.name,
+            "result": result}
+
+        return (
+            "PyErr_Clear();\n"
+            "{result:s} = PyLong_FromLongLong(*{name:s});\n").format(
+                **values_dict)
 
     def python_name(self):
         return None
@@ -1237,7 +1311,7 @@ class IntegerOut(Integer):
         return self.name
 
     def call_arg(self):
-        return "%s" % self.name
+        return "{0:s}".format(self.name)
 
     def passthru_call(self):
         return self.name
@@ -1257,24 +1331,32 @@ class Char_and_Length_OUT(Char_and_Length):
     sense = "OUT_DONE"
     buildstr = "l"
 
-    def definition(self, default = 0, **kw):
-        return((
-            "    char *%s = NULL;\n"
-            "    Py_ssize_t %s = %s;\n"
-            "    PyObject *tmp_%s = NULL;\n") % (
-                self.name, self.length, default, self.name))
+    def definition(self, default=0, **kw):
+        values_dict = {
+            "default": default,
+            "length": self.length,
+            "name": self.name}
+
+        return (
+            "    char *{name:s} = NULL;\n"
+            "    Py_ssize_t {length:s} = {default:d};\n"
+            "    PyObject *tmp_{name:s} = NULL;\n").format(
+                **values_dict)
 
     def error_cleanup(self):
-        return((
-            "    if(tmp_%s != NULL) {\n"
-            "        Py_DecRef(tmp_%s);\n"
-            "    }\n") % (self.name, self.name))
+        values_dict = {
+            "name": self.name}
+
+        return (
+            "    if(tmp_{name:s} != NULL) {{\n"
+            "        Py_DecRef(tmp_{name:s});\n"
+            "    }}\n").format(**values_dict)
 
     def python_name(self):
         return self.length
 
     def byref(self):
-        return "&%s" % self.length
+        return "&{0:s}".format(self.length)
 
     def pre_call(self, method, **kw):
         return((
