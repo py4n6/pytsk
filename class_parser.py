@@ -234,14 +234,17 @@ import lexer
 
 DEBUG = 0
 
-# The pytsk3 version
+# The pytsk3 version.
 VERSION = "20141218"
 
-# These functions are used to manage library memory
+# These functions are used to manage library memory.
 FREE = "aff4_free"
 INCREF = "aff4_incref"
 CURRENT_ERROR_FUNCTION = "aff4_get_current_error"
 CONSTANTS_BLACKLIST = ["TSK3_H_"]
+
+# Some constants.
+DOCSTRING_RE = re.compile("[ ]*\n[ \t]+[*][ ]?")
 
 
 def log(msg):
@@ -249,10 +252,17 @@ def log(msg):
         sys.stderr.write("{0:s}\n".format(msg))
 
 
-def escape_for_string(string):
+def format_as_docstring(string):
+    # Remove C/C++ comment code statements.
+    string = DOCSTRING_RE.sub("\n", string)
     byte_string = string.encode("unicode-escape")
-    # In Python 3 the replace method requires the arguments to be byte streams.
-    return byte_string.replace(b"\"", b"\\\"")
+    # Escapes double quoted string. We need to run this after unicode-escape to
+    # prevent this operation to escape the escape character (\). In Python 3
+    # the replace method requires the arguments to be byte strings.
+    byte_string = byte_string.replace(b"\"", b"\\\"")
+    # Make sure to return the string a Unicode otherwise in Python 3 the string
+    # is prefixed with b when written or printed.
+    return byte_string.decode("utf-8")
 
 
 class Module(object):
@@ -895,7 +905,7 @@ class String(Type):
             "        {result:s} = Py_None;\n"
             "    }} else {{\n"
             "#if PY_MAJOR_VERSION >= 3\n"
-            "        {result:s} = PyBytes_FromStringAndSize((char *){name:s}, {length:s};n"
+            "        {result:s} = PyBytes_FromStringAndSize((char *){name:s}, {length:s});\n"
             "#else\n"
             "        {result:s} = PyString_FromStringAndSize((char *){name:s}, {length:s});\n"
             "#endif\n"
@@ -2430,7 +2440,7 @@ class Method(object):
         docstring = self.comment() + "\n\n" + self.docstring.strip()
         values_dict = {
             "class_name": self.class_name,
-            "docstring": escape_for_string(docstring),
+            "docstring": format_as_docstring(docstring),
             "name": self.name}
 
         out.write((
@@ -3271,9 +3281,7 @@ class ClassGenerator(object):
 
     def prototypes(self, out):
         """Write prototype suitable for .h file"""
-        out.write(
-            "staticforward PyTypeObject {0:s}_Type;\n".format(
-                self.class_name))
+        out.write("static PyTypeObject {0:s}_Type;\n".format(self.class_name))
         self.constructor.prototype(out)
 
         if self.attributes:
@@ -3316,54 +3324,99 @@ class ClassGenerator(object):
                 args[type] = "0"
 
         out.write((
+            "#if PY_MAJOR_VERSION >= 3\n"
             "static PyNumberMethods {class:s}_as_number = {{\n"
             "    (binaryfunc)    0,             /* nb_add */\n"
             "    (binaryfunc)    0,             /* nb_subtract */\n"
             "    (binaryfunc)    0,             /* nb_multiply */\n"
-            "                    0,             /* nb_divide */\n"
-            "                    0,             /* nb_remainder */\n"
-            "                    0,             /* nb_divmod */\n"
-            "                    0,             /* nb_power */\n"
+            "    (binaryfunc)    0,             /* nb_remainder */\n"
+            "    (binaryfunc)    0,             /* nb_divmod */\n"
+            "    (ternaryfunc)   0,             /* nb_power */\n"
             "    (unaryfunc)     0,             /* nb_negative */\n"
-            "    (unaryfunc)     0,             /* tp_positive */\n"
-            "    (unaryfunc)     0,             /* tp_absolute */\n"
-            "    (inquiry)       {nonzero:s},   /* tp_nonzero */\n"
+            "    (unaryfunc)     0,             /* nb_positive */\n"
+            "    (unaryfunc)     0,             /* nb_absolute */\n"
+            "    (inquiry)       {nonzero:s},   /* nb_bool */\n"
             "    (unaryfunc)     0,             /* nb_invert */\n"
-            "                    0,             /* nb_lshift */\n"
+            "    (binaryfunc)    0,             /* nb_lshift */\n"
             "    (binaryfunc)    0,             /* nb_rshift */\n"
-            "                    0,             /* nb_and */\n"
-            "                    0,             /* nb_xor */\n"
-            "                    0,             /* nb_or */\n"
-            "                    0,             /* nb_coerce */\n"
-            "     (unaryfunc)    {int:s},       /* nb_int */\n"
-            "                    0,             /* nb_long */\n"
-            "                    0,             /* nb_float */\n"
-            "                    0,             /* nb_oct */\n"
-            "                    0,             /* nb_hex */\n"
-            "                    0,             /* nb_inplace_add */\n"
-            "                    0,             /* nb_inplace_subtract */\n"
-            "                    0,             /* nb_inplace_multiply */\n"
-            "                    0,             /* nb_inplace_divide */\n"
-            "                    0,             /* nb_inplace_remainder */\n"
-            "                    0,             /* nb_inplace_power */\n"
-            "                    0,             /* nb_inplace_lshift */\n"
-            "                    0,             /* nb_inplace_rshift */\n"
-            "                    0,             /* nb_inplace_and */\n"
-            "                    0,             /* nb_inplace_xor */\n"
-            "                    0,             /* nb_inplace_or */\n"
-            "                    0,             /* nb_floor_divide */\n"
-            "                    0,             /* nb_true_divide */\n"
-            "                    0,             /* nb_inplace_floor_divide */\n"
-            "                    0,             /* nb_inplace_true_divide */\n"
-            "                    0,             /* nb_index */\n"
+            "    (binaryfunc)    0,             /* nb_and */\n"
+            "    (binaryfunc)    0,             /* nb_xor */\n"
+            "    (binaryfunc)    0,             /* nb_or */\n"
+            "    (unaryfunc)     {int:s},       /* nb_int */\n"
+            "    (void *)        NULL,          /* nb_reserved */\n"
+            "    (unaryfunc)     0,             /* nb_float */\n"
+            "\n"
+            "    (binaryfunc)    0,             /* nb_inplace_add */\n"
+            "    (binaryfunc)    0,             /* nb_inplace_subtract */\n"
+            "    (binaryfunc)    0,             /* nb_inplace_multiply */\n"
+            "    (binaryfunc)    0,             /* nb_inplace_remainder */\n"
+            "    (ternaryfunc)   0,             /* nb_inplace_power */\n"
+            "    (binaryfunc)    0,             /* nb_inplace_lshift */\n"
+            "    (binaryfunc)    0,             /* nb_inplace_rshift */\n"
+            "    (binaryfunc)    0,             /* nb_inplace_and */\n"
+            "    (binaryfunc)    0,             /* nb_inplace_xor */\n"
+            "    (binaryfunc)    0,             /* nb_inplace_or */\n"
+            "\n"
+            "    (binaryfunc)    0,             /* nb_floor_divide */\n"
+            "    (binaryfunc)    0,             /* nb_true_divide */\n"
+            "    (binaryfunc)    0,             /* nb_inplace_floor_divide */\n"
+            "    (binaryfunc)    0,             /* nb_inplace_true_divide */\n"
+            "\n"
+            "    (unaryfunc)     0,             /* nb_index */\n"
             "}};\n"
+            "#else\n"
+            "static PyNumberMethods {class:s}_as_number = {{\n"
+            "    (binaryfunc)    0,             /* nb_add */\n"
+            "    (binaryfunc)    0,             /* nb_subtract */\n"
+            "    (binaryfunc)    0,             /* nb_multiply */\n"
+            "    (binaryfunc)    0,             /* nb_divide */\n"
+            "    (binaryfunc)    0,             /* nb_remainder */\n"
+            "    (binaryfunc)    0,             /* nb_divmod */\n"
+            "    (ternaryfunc)   0,             /* nb_power */\n"
+            "    (unaryfunc)     0,             /* nb_negative */\n"
+            "    (unaryfunc)     0,             /* nb_positive */\n"
+            "    (unaryfunc)     0,             /* nb_absolute */\n"
+            "    (inquiry)       {nonzero:s},   /* nb_nonzero */\n"
+            "    (unaryfunc)     0,             /* nb_invert */\n"
+            "    (binaryfunc)    0,             /* nb_lshift */\n"
+            "    (binaryfunc)    0,             /* nb_rshift */\n"
+            "    (binaryfunc)    0,             /* nb_and */\n"
+            "    (binaryfunc)    0,             /* nb_xor */\n"
+            "    (binaryfunc)    0,             /* nb_or */\n"
+            "    (coercion)      0,             /* nb_coerce */\n"
+            "    (unaryfunc)     {int:s},       /* nb_int */\n"
+            "    (unaryfunc)     0,             /* nb_long */\n"
+            "    (unaryfunc)     0,             /* nb_float */\n"
+            "    (unaryfunc)     0,             /* nb_oct */\n"
+            "    (unaryfunc)     0,             /* nb_hex */\n"
+            "\n"
+            "    (binaryfunc)    0,             /* nb_inplace_add */\n"
+            "    (binaryfunc)    0,             /* nb_inplace_subtract */\n"
+            "    (binaryfunc)    0,             /* nb_inplace_multiply */\n"
+            "    (binaryfunc)    0,             /* nb_inplace_divide */\n"
+            "    (binaryfunc)    0,             /* nb_inplace_remainder */\n"
+            "    (ternaryfunc)   0,             /* nb_inplace_power */\n"
+            "    (binaryfunc)    0,             /* nb_inplace_lshift */\n"
+            "    (binaryfunc)    0,             /* nb_inplace_rshift */\n"
+            "    (binaryfunc)    0,             /* nb_inplace_and */\n"
+            "    (binaryfunc)    0,             /* nb_inplace_xor */\n"
+            "    (binaryfunc)    0,             /* nb_inplace_or */\n"
+            "\n"
+            "    (binaryfunc)    0,             /* nb_floor_divide */\n"
+            "    (binaryfunc)    0,             /* nb_true_divide */\n"
+            "    (binaryfunc)    0,             /* nb_inplace_floor_divide */\n"
+            "    (binaryfunc)    0,             /* nb_inplace_true_divide */\n"
+            "\n"
+            "    (unaryfunc)     0,             /* nb_index */\n"
+            "}};\n"
+            "#endif /* PY_MAJOR_VERSION >= 3 */\n"
             "\n").format(**args))
 
         return "&{class:s}_as_number".format(**args)
 
     def PyTypeObject(self, out):
         docstring = "{0:s}: {1:s}".format(
-            self.class_name, escape_for_string(self.docstring))
+            self.class_name, format_as_docstring(self.docstring))
 
         args = {
             "class": self.class_name,
