@@ -25,21 +25,23 @@ class Lexer(object):
   ## [ state_re, re, token/action, next state ]
   tokens = []
   state = "INITIAL"
-  buffer = ''
+  buffer = ""
   error = 0
   verbose = 0
   state_stack = []
   processed = 0
-  processed_buffer = ''
+  processed_buffer = ""
   saved_state = None
   flags = 0
 
   def __init__(self, verbose=0, fd=None):
     super(Lexer, self).__init__()
+    self.encoding = "utf-8"
+
     if not self.verbose:
       self.verbose = verbose
 
-    if len(self.tokens[0])==4:
+    if len(self.tokens[0]) == 4:
       for row in self.tokens:
         row.append(re.compile(row[0], re.DOTALL))
         row.append(re.compile(row[1], re.DOTALL | re.M | re.S | self.flags))
@@ -80,14 +82,14 @@ class Lexer(object):
     if not state:
       return
 
-    self.state_stack = state['state_stack']
-    self.processed = state['processed']
-    self.processed_buffer = state['processed_buffer']
-    self.buffer = ''
-    self.fd.seek(state['readptr'])
-    self.state = state['state']
-    self.objects = state['objects']
-    self.error = state['error']
+    self.state_stack = state["state_stack"]
+    self.processed = state["processed"]
+    self.processed_buffer = state["processed_buffer"]
+    self.buffer = ""
+    self.fd.seek(state["readptr"])
+    self.state = state["state"]
+    self.objects = state["objects"]
+    self.error = state["error"]
 
     if self.verbose > 1:
       print("Restoring state to offset {0:s}".format(self.processed))
@@ -114,7 +116,7 @@ class Lexer(object):
           self.processed += match.end()
 
           ## Try to iterate over all the callbacks specified:
-          for t in token.split(','):
+          for t in token.split(","):
             try:
               if self.verbose > 0:
                 print("0x{0:X}: Calling {1:s} {2:s}".format(
@@ -151,7 +153,12 @@ class Lexer(object):
     return
 
   def feed(self, data):
-    self.buffer += data
+    """Feeds the lexer.
+
+    Args:
+      data: binary string containing the data (instance of bytes).
+    """
+    self.buffer += data.decode(self.encoding)
 
   def empty(self):
     return not len(self.buffer)
@@ -161,7 +168,7 @@ class Lexer(object):
       print("Default handler: {0:s} with {1:s}".format(
           token, repr(match.group(0))))
 
-  def ERROR(self, message = None, weight =1):
+  def ERROR(self, message=None, weight=1):
     if self.verbose > 0 and message:
       print("Error({0:s}): {1:s}".format(weight, message))
 
@@ -187,6 +194,7 @@ class Lexer(object):
     """Just a conveniece function to force us to parse all the data."""
     while self.next_token():
       pass
+
 
 class SelfFeederMixIn(Lexer):
   """This mixin is used to make a lexer which feeds itself one

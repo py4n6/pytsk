@@ -224,10 +224,10 @@ get freed until we are finished with it.
              reference count using aff4_incref();
 """
 
+import io
 import os
 import pdb
 import re
-import StringIO
 import sys
 
 import lexer
@@ -243,16 +243,17 @@ INCREF = "aff4_incref"
 CURRENT_ERROR_FUNCTION = "aff4_get_current_error"
 CONSTANTS_BLACKLIST = ["TSK3_H_"]
 
+
 def log(msg):
     if DEBUG > 0:
-        sys.stderr.write(msg+"\n")
+        sys.stderr.write("{0:s}\n".format(msg))
+
 
 def escape_for_string(string):
-    result = string
+    result = string.encode("utf-8")
     result = result.encode("string-escape")
-    result = result.replace('"', r'\"')
+    return result.replace("\"", r'\"')
 
-    return result
 
 class Module(object):
     public_api = None
@@ -276,11 +277,11 @@ class Module(object):
             if attr.is_active():
                 result += "    {0:s}\n".format(attr)
 
-        l = list(self.constants)
-        l.sort()
+        constants_list = list(self.constants)
+        constants_list.sort()
         result += "Constants:\n"
-        for attr, type in l:
-            result += " {0:s}\n".format(attr)
+        for name, _ in constants_list:
+            result += " {0:s}\n".format(name)
 
         return result
 
@@ -3757,80 +3758,80 @@ class EnumType(Integer):
 
 class HeaderParser(lexer.SelfFeederMixIn):
     tokens = [
-        [ "INITIAL", r"#define\s+", "PUSH_STATE", "DEFINE" ],
-        [ "DEFINE", r"([A-Za-z_0-9]+)\s+[^\n]+", "DEFINE,POP_STATE", None ],
-        [ "DEFINE", r"\n", "POP_STATE", None],
+        ["INITIAL", r"#define\s+", "PUSH_STATE", "DEFINE"],
+        ["DEFINE", r"([A-Za-z_0-9]+)\s+[^\n]+", "DEFINE,POP_STATE", None ],
+        ["DEFINE", r"\n", "POP_STATE", None],
         # Ignore macros with args
-        [ "DEFINE", r"\([^\n]+", "POP_STATE", None],
+        ["DEFINE", r"\([^\n]+", "POP_STATE", None],
 
         # Recognize ansi c comments
-        [ ".", r"/\*(.)", "PUSH_STATE", "COMMENT" ],
-        [ "COMMENT", r"(.+?)\*/\s+", "COMMENT_END,POP_STATE", None],
-        [ "COMMENT", r"(.+)", "COMMENT", None],
+        [".", r"/\*(.)", "PUSH_STATE", "COMMENT"],
+        ["COMMENT", r"(.+?)\*/\s+", "COMMENT_END,POP_STATE", None],
+        ["COMMENT", r"(.+)", "COMMENT", None],
 
         # And c++ comments
-        [ ".", r"//([^\n]+)", "COMMENT", None],
+        [".", r"//([^\n]+)", "COMMENT", None],
 
         # An empty line clears the current comment
-        [ ".", r"\r?\n\r?\n", "CLEAR_COMMENT", None],
+        [".", r"\r?\n\r?\n", "CLEAR_COMMENT", None],
 
         # Ignore whitespace
-        [ ".", r"\s+", "SPACE", None ],
-        [ ".", r"\\\n", "SPACE", None ],
+        [".", r"\s+", "SPACE", None ],
+        [".", r"\\\n", "SPACE", None ],
 
         # Recognize CLASS() definitions
-        [ "INITIAL", r"^([A-Z]+)?\s*CLASS\(([A-Z_a-z0-9]+)\s*,\s*([A-Z_a-z0-9]+)\)",
+        ["INITIAL", r"^([A-Z]+)?\s*CLASS\(([A-Z_a-z0-9]+)\s*,\s*([A-Z_a-z0-9]+)\)",
                      "PUSH_STATE,CLASS_START", "CLASS"],
 
-        [ "CLASS", r"^\s*(FOREIGN|ABSTRACT|PRIVATE)?([0-9A-Z_a-z ]+( |\*))METHOD\(([A-Z_a-z0-9]+),\s*([A-Z_a-z0-9]+),?",
+        ["CLASS", r"^\s*(FOREIGN|ABSTRACT|PRIVATE)?([0-9A-Z_a-z ]+( |\*))METHOD\(([A-Z_a-z0-9]+),\s*([A-Z_a-z0-9]+),?",
                      "PUSH_STATE,METHOD_START", "METHOD"],
-        [ "METHOD", r"\s*([0-9A-Z a-z_]+\s+\*?\*?)([0-9A-Za-z_]+),?", "METHOD_ARG", None ],
-        [ "METHOD", r"\);", "POP_STATE,METHOD_END", None],
+        ["METHOD", r"\s*([0-9A-Z a-z_]+\s+\*?\*?)([0-9A-Za-z_]+),?", "METHOD_ARG", None ],
+        ["METHOD", r"\);", "POP_STATE,METHOD_END", None],
 
-        [ "CLASS", r"^\s*(FOREIGN|ABSTRACT)?([0-9A-Z_a-z ]+\s+\*?)\s*([A-Z_a-z0-9]+)\s*;",
+        ["CLASS", r"^\s*(FOREIGN|ABSTRACT)?([0-9A-Z_a-z ]+\s+\*?)\s*([A-Z_a-z0-9]+)\s*;",
                    "CLASS_ATTRIBUTE", None],
-        [ "CLASS", "END_CLASS", "END_CLASS,POP_STATE", None],
+        ["CLASS", "END_CLASS", "END_CLASS,POP_STATE", None],
 
         # Recognize struct definitions (With name)
-        [ "INITIAL", "([A-Z_a-z0-9 ]+)?struct\s+([A-Z_a-z0-9]+)\s+{",
+        ["INITIAL", "([A-Z_a-z0-9 ]+)?struct\s+([A-Z_a-z0-9]+)\s+{",
                      "PUSH_STATE,STRUCT_START", "STRUCT"],
 
         # Without name (using typedef)
-        [ "INITIAL", "typedef\s+struct\s+{",
+        ["INITIAL", "typedef\s+struct\s+{",
                      "PUSH_STATE,TYPEDEF_STRUCT_START", "STRUCT"],
 
-        [ "STRUCT", r"^\s*([0-9A-Z_a-z ]+\s+\*?)\s*([A-Z_a-z0-9]+)\s*;",
+        ["STRUCT", r"^\s*([0-9A-Z_a-z ]+\s+\*?)\s*([A-Z_a-z0-9]+)\s*;",
                      "STRUCT_ATTRIBUTE", None],
 
-        [ "STRUCT", r"^\s*([0-9A-Z_a-z ]+)\*\s+([A-Z_a-z0-9]+)\s*;",
+        ["STRUCT", r"^\s*([0-9A-Z_a-z ]+)\*\s+([A-Z_a-z0-9]+)\s*;",
                      "STRUCT_ATTRIBUTE_PTR", None],
 
         # Struct ended with typedef
-        [ "STRUCT", "}\s+([0-9A-Za-z_]+);", "POP_STATE,TYPEDEF_STRUCT_END", None],
-        [ "STRUCT", "}", "POP_STATE,STRUCT_END", None],
+        ["STRUCT", "}\s+([0-9A-Za-z_]+);", "POP_STATE,TYPEDEF_STRUCT_END", None],
+        ["STRUCT", "}", "POP_STATE,STRUCT_END", None],
 
         # Handle recursive struct or union definition (At the moment
         # we cant handle them at all)
-        [ "(RECURSIVE_)?STRUCT", "(struct|union)\s+([_A-Za-z0-9]+)?\s*{", "PUSH_STATE", "RECURSIVE_STRUCT"],
-        [ "RECURSIVE_STRUCT", "}\s+[0-9A-Za-z]+", "POP_STATE", None],
+        ["(RECURSIVE_)?STRUCT", "(struct|union)\s+([_A-Za-z0-9]+)?\s*{", "PUSH_STATE", "RECURSIVE_STRUCT"],
+        ["RECURSIVE_STRUCT", "}\s+[0-9A-Za-z]+", "POP_STATE", None],
 
         # Process enums (2 forms - named and typedefed)
-        [ "INITIAL", r"enum\s+([0-9A-Za-z_]+)\s+{", "PUSH_STATE,ENUM_START", "ENUM" ],
+        ["INITIAL", r"enum\s+([0-9A-Za-z_]+)\s+{", "PUSH_STATE,ENUM_START", "ENUM"],
         # Unnamed
-        [ "INITIAL", r"typedef\s+enum\s+{", "PUSH_STATE,TYPEDEF_ENUM_START", "ENUM" ],
-        [ "ENUM", r"([0-9A-Za-z_]+)\s+=[^\n]+", "ENUM_VALUE", None],
+        ["INITIAL", r"typedef\s+enum\s+{", "PUSH_STATE,TYPEDEF_ENUM_START", "ENUM"],
+        ["ENUM", r"([0-9A-Za-z_]+)\s+=[^\n]+", "ENUM_VALUE", None],
 
         # Typedefed ending
-        [ "ENUM", r"}\s+([0-9A-Za-z_]+);", "POP_STATE,TYPEDEFED_ENUM_END", None],
-        [ "ENUM", r"}", "POP_STATE,ENUM_END", None],
+        ["ENUM", r"}\s+([0-9A-Za-z_]+);", "POP_STATE,TYPEDEFED_ENUM_END", None],
+        ["ENUM", r"}", "POP_STATE,ENUM_END", None],
 
-        [ "INITIAL", r"BIND_STRUCT\(([0-9A-Za-z_ \*]+)\)", "BIND_STRUCT", None],
+        ["INITIAL", r"BIND_STRUCT\(([0-9A-Za-z_ \*]+)\)", "BIND_STRUCT", None],
 
         # A simple typedef of one type for another type:
-        [ "INITIAL", r"typedef ([A-Za-z_0-9]+) +([^;]+);", "SIMPLE_TYPEDEF", None],
+        ["INITIAL", r"typedef ([A-Za-z_0-9]+) +([^;]+);", "SIMPLE_TYPEDEF", None],
 
         # Handle proxied directives
-        [ "INITIAL", r"PXXROXY_CLASS\(([A-Za-z0-9_]+)\)", "PROXY_CLASS", None],
+        ["INITIAL", r"PXXROXY_CLASS\(([A-Za-z0-9_]+)\)", "PROXY_CLASS", None],
 
         ]
 
@@ -3839,11 +3840,11 @@ class HeaderParser(lexer.SelfFeederMixIn):
         self.base = base
         super(HeaderParser, self).__init__(verbose=0)
 
-        io = StringIO.StringIO(
-            "// Base object\n"
-            "CLASS(Object, Obj)\n"
-            "END_CLASS\n")
-        self.parse_fd(io)
+        file_object = io.BytesIO(
+            b"// Base object\n"
+            b"CLASS(Object, Obj)\n"
+            b"END_CLASS\n")
+        self.parse_fd(file_object)
 
     current_comment = ""
     def COMMENT(self, t, m):
@@ -4052,7 +4053,7 @@ class HeaderParser(lexer.SelfFeederMixIn):
             self._parse(f)
 
     def _parse(self, filename):
-        fd = open(filename)
+        fd = open(filename, "rb")
         self.parse_fd(fd)
         fd.close()
 
@@ -4078,11 +4079,11 @@ class HeaderParser(lexer.SelfFeederMixIn):
 if __name__ == "__main__":
     p = HeaderParser("pytsk3", verbose=1)
     for arg in sys.argv[1:]:
-        p.parse_fd(open(arg))
+        p.parse_fd(open(arg, "rb"))
 
     log("second parse")
     for arg in sys.argv[1:]:
-        p.parse_fd(open(arg))
+        p.parse_fd(open(arg, "rb"))
 
     p.write(sys.stdout)
     p.write_headers()
