@@ -250,9 +250,9 @@ def log(msg):
 
 
 def escape_for_string(string):
-    result = string.encode("utf-8")
-    result = result.encode("string-escape")
-    return result.replace("\"", r'\"')
+    byte_string = string.encode("unicode-escape")
+    # In Python 3 the replace method requires the arguments to be byte streams.
+    return byte_string.replace(b"\"", b"\\\"")
 
 
 class Module(object):
