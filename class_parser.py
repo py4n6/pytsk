@@ -235,7 +235,7 @@ import lexer
 DEBUG = 0
 
 # The pytsk3 version
-VERSION = "20141217"
+VERSION = "20141218"
 
 # These functions are used to manage library memory
 FREE = "aff4_free"
@@ -493,12 +493,12 @@ static int check_error() {{
 }}
 
 /* This function checks if a method was overridden in self over a
- * method defined in type. This is used to determine if a python class is
+ * method defined in type. This is used to determine if a Python class is
  * extending this C type. If not, a proxy function is not written and C
  * calls are made directly.
  * 
- * This is an optimization to eliminate the need for a call into python
- * in the case where python objects do not actually extend any methods.
+ * This is an optimization to eliminate the need for a call into Python
+ * in the case where Python objects do not actually extend any methods.
  * 
  * We basically just iterate over the MRO and determine if a method is
  * defined in each level until we reach the base class.
@@ -580,6 +580,7 @@ static int check_method_override(PyObject *self, PyTypeObject *type, char *metho
 
             values_dict = {
                 "name": cls.class_name}
+
             out.write((
                 "    {name:s}_Type.tp_new = PyType_GenericNew;\n"
                 "    if (PyType_Ready(&{name:s}_Type) < 0) {{\n"
@@ -1494,11 +1495,11 @@ class TDB_DATA_P(Char_and_Length_OUT):
             "        goto on_error;\n"
             "    }}\n"
             "\n"
-            "    // Take a copy of the python string\n"
+            "    // Take a copy of the Python string\n"
             "    {destination:s}->dptr = talloc_memdup({destination:s}, buf, tmp);\n"
             "    {destination:s}->dsize = tmp;\n"
             "}}\n"
-            "// We no longer need the python object\n"
+            "// We no longer need the Python object\n"
             "Py_DecRef({source:s});\n").format(**values_dict)
 
 class TDB_DATA(TDB_DATA_P):
@@ -1526,11 +1527,11 @@ class TDB_DATA(TDB_DATA_P):
             "#endif\n"
             "        goto on_error;\n"
             "    }}\n"
-            "    // Take a copy of the python string - This leaks - how to fix it?\n"
+            "    // Take a copy of the Python string - This leaks - how to fix it?\n"
             "    {destination:s}.dptr = talloc_memdup(NULL, buf, tmp);\n"
             "    {destination:s}.dsize = tmp;\n"
             "}}\n"
-            "// We no longer need the python object\n"
+            "// We no longer need the Python object\n"
             "Py_DecRef({source:s});\n").format(**values_dict)
 
     def to_python_object(self, name = None, result="Py_result", **kwargs):
@@ -1972,7 +1973,7 @@ class Timeval(Type):
                 **values_dict)
 
 class PyObject(Type):
-    """Accept an opaque python object."""
+    """Accept an opaque Python object."""
     interface = "opaque"
     buildstr = "O"
     def definition(self, default="NULL", **kwargs):
@@ -2191,7 +2192,7 @@ class Method(object):
         # Iterators have a different prototype and do not need to
         # unpack any args
         if not "iternext" in self.name:
-            # Now parse the args from python objects
+            # Now parse the args from Python objects
             out.write("\n")
             out.write(kwlist)
             out.write((
@@ -2273,7 +2274,7 @@ class Method(object):
         out.write((
             "    // Check the function is implemented\n"
             "    {{\n"
-            "        void *method = (({def_class_name:s})self->base)->{method:s};\n"
+            "        void *method = (({def_class_name:s}) self->base)->{method:s};\n"
             "\n"
             "        if(method == NULL || (void *) unimplemented == (void *) method) {{\n"
             "            PyErr_Format(PyExc_RuntimeError, \"{class_name:s}.{method:s} is not implemented\");\n"
@@ -2444,7 +2445,7 @@ class IteratorMethod(Method):
     def __init__(self, *args, **kwargs):
         super(IteratorMethod, self).__init__(*args, **kwargs)
 
-        # Tell the return type that a NULL python return is ok
+        # Tell the return type that a NULL Python return is ok
         self.return_type.attributes.add("NULL_OK")
 
     def _prototype(self, out):
@@ -2482,7 +2483,7 @@ class SelfIteratorMethod(IteratorMethod):
 
         out.write((
             "{{\n"
-            "    (({class_name:s})self->base)->{method:s}(({class_name:s}) self->base);\n"
+            "    (({class_name:s}) self->base)->{method:s}(({class_name:s}) self->base);\n"
             "    return PyObject_SelfIter((PyObject *) self);\n"
             "}}\n").format(**values_dict))
 
@@ -2744,6 +2745,7 @@ class GetattrMethod(Method):
             values_dict = {
                 "class_name": self.class_name,
                 "name": self.name}
+
             out.write(
                 "static PyObject *{name:s}(py{class_name:s} *self, PyObject *name);\n".format(
                 **values_dict))
@@ -2752,28 +2754,34 @@ class GetattrMethod(Method):
         """Check for some built in attributes we need to support."""
         out.write(
             "    if(strcmp(name, \"__members__\") == 0) {\n"
-            "        PyObject *result = PyList_New(0);\n"
-            "        PyObject *tmp = NULL;\n"
             "        PyMethodDef *i = NULL;\n"
+            "        PyObject *result = NULL;\n"
+            "        PyObject *tmp = NULL;\n"
             "\n"
-            "        if(result == NULL) goto on_error;\n"
+            "        result = PyList_New(0);\n"
+            "        if(result == NULL) {\n"
+            "            goto on_error;\n"
+            "        }\n"
             "\n")
 
         # Add attributes
         for class_name, attr in self.get_attributes():
+            values_dict = {
+                "name": attr.name}
+
             out.write((
                 "#if PY_MAJOR_VERSION >= 3\n"
-                "        tmp = PyBytes_FromString(\"%(name)s\");\n"
+                "        tmp = PyBytes_FromString(\"{name:s}\");\n"
                 "#else\n"
-                "        tmp = PyString_FromString(\"%(name)s\");\n"
+                "        tmp = PyString_FromString(\"{name:s}\");\n"
                 "#endif\n"
                 "        PyList_Append(result, tmp);\n"
-                "        Py_DecRef(tmp);\n") % dict(name=attr.name))
+                "        Py_DecRef(tmp);\n").format(**values_dict))
 
         # Add methods
         out.write((
             "\n"
-            "        for(i=%s_methods; i->ml_name; i++) {\n"
+            "        for(i = {0:s}_methods; i->ml_name; i++) {{\n"
             "#if PY_MAJOR_VERSION >= 3\n"
             "            tmp = PyBytes_FromString(i->ml_name);\n"
             "#else\n"
@@ -2781,27 +2789,29 @@ class GetattrMethod(Method):
             "#endif\n"
             "            PyList_Append(result, tmp);\n"
             "            Py_DecRef(tmp);\n"
-            "        }\n") % self.class_name)
-
-        out.write(
+            "        }}\n"
             "        return result;\n"
-            "    }\n")
+            "    }}\n").format(self.class_name))
 
     def write_definition(self, out):
         if not self.name:
             return
 
+        values_dict = {
+            "class_name": self.class_name,
+            "name": self.name}
+
         out.write((
-            "static PyObject *py%(class_name)s_getattr(py%(class_name)s *self, PyObject *pyname) {\n"
+            "static PyObject *py{class_name:s}_getattr(py{class_name:s} *self, PyObject *pyname) {{\n"
             "    PyObject *result = NULL;\n"
             "    char *name = NULL;\n"
             "\n"
-            "    // Try to hand it off to the python native handler first\n"
-            "    result = PyObject_GenericGetAttr((PyObject*)self, pyname);\n"
+            "    // Try to hand it off to the Python native handler first\n"
+            "    result = PyObject_GenericGetAttr((PyObject*) self, pyname);\n"
             "\n"
-            "    if(result) {\n"
+            "    if(result) {{\n"
             "        return result;\n"
-            "    }\n"
+            "    }}\n"
             "\n"
             "    PyErr_Clear();\n"
             "    // No - nothing interesting was found by python\n"
@@ -2811,43 +2821,45 @@ class GetattrMethod(Method):
             "    name = PyString_AsString(pyname);\n"
             "#endif\n"
             "\n"
-            "    if(!self->base) {\n"
-            "        return PyErr_Format(PyExc_RuntimeError, \"Wrapped object (%(class_name)s.%(name)s) no longer valid\");\n"
-            "    }\n"
-            "    if(!name) {\n"
+            "    if(!self->base) {{\n"
+            "        return PyErr_Format(PyExc_RuntimeError, \"Wrapped object ({class_name:s}.{name:s}) no longer valid\");\n"
+            "    }}\n"
+            "    if(!name) {{\n"
             "        return NULL;\n"
-            "    }\n") % self.__dict__)
+            "    }}\n").format(**values_dict))
 
         self.built_ins(out)
 
         for class_name, attr in self.get_attributes():
-            # what we want to assign
+            # What we want to assign.
             if self.base_class_name:
-                call = "(((%s) self->base)->%s)" % (class_name, attr.name)
+                call = "((({0:s}) self->base)->{1:s})".format(
+                    class_name, attr.name)
             else:
-                call = "(self->base->%s)" % (attr.name)
+                call = "(self->base->{0:s})".format(attr.name)
 
-            args = dict(name=attr.name, python_obj=attr.to_python_object(),
-                        python_assign=attr.assign(call, self, borrowed=True),
-                        python_def=attr.definition(sense="out"))
+            values_dict = {
+                "name": attr.name,
+                "python_obj": attr.to_python_object(),
+                "python_assign": attr.assign(call, self, borrowed=True),
+                "python_def": attr.definition(sense="out")}
 
             out.write((
-                "    if(strcmp(name, \"%(name)s\") == 0) {\n"
+                "    if(strcmp(name, \"{name:s}\") == 0) {{\n"
                 "        PyObject *Py_result = NULL;\n"
-                "%(python_def)s\n"
+                "{python_def:s}\n"
                 "\n"
-                "%(python_assign)s\n"
-                "%(python_obj)s\n"
+                "{python_assign:s}\n"
+                "{python_obj:s}\n"
                 "\n"
                 "        return Py_result;\n"
-                "    }\n") % args)
+                "    }}\n").format(**values_dict))
 
-        out.write("""
+        out.write(
+            "\n"
+            "    return PyObject_GenericGetAttr((PyObject *) self, pyname);\n")
 
-  return PyObject_GenericGetAttr((PyObject *)self, pyname);
-""" % self.__dict__)
-
-        # Write the error part of the function
+        # Write the error part of the function.
         if self.error_set:
             out.write("on_error:\n" + self.error_condition())
 
@@ -2870,16 +2882,13 @@ class ProxiedMethod(Method):
         self.error_set = False
 
     def get_name(self):
-        return "Proxied%(class_name)s_%(name)s" % (
-            dict(class_name=self.myclass.class_name, name=self.name))
+        return "Proxied{0:s}_{1:s}".format(
+            self.myclass.class_name, self.name)
 
     def _prototype(self, out):
-        out.write(
-            "static %(return_type)s %(name)s(%(definition_class_name)s self" % (
-                dict(return_type=self.return_type.type.strip(),
-                     class_name=self.myclass.class_name,
-                     method=self.name, name=self.get_name(),
-                     definition_class_name=self.definition_class_name)))
+        out.write("static {0:s} {1:s}({2:s} self".format(
+            self.return_type.type.strip(), self.get_name(),
+            self.definition_class_name))
 
         for arg in self.args:
             tmp = arg.comment().strip()
@@ -2917,7 +2926,7 @@ class ProxiedMethod(Method):
 
         out.write((
             "\n"
-            "    // Grab the GIL so we can do python stuff\n"
+            "    // Grab the GIL so we can do Python stuff\n"
             "    gil_state = PyGILState_Ensure();\n"
             "\n"
             "#if PY_MAJOR_VERSION >= 3\n"
@@ -2926,7 +2935,7 @@ class ProxiedMethod(Method):
             "    method_name = PyString_FromString(\"{0:s}\");\n"
             "#endif\n").format(self.name))
 
-        out.write("\n// Obtain python objects for all the args:\n")
+        out.write("\n// Obtain Python objects for all the args:\n")
         for arg in self.args:
             out.write(arg.to_python_object(
                 result=("py_{0:s}".format(arg.name)), sense="proxied",
@@ -2954,15 +2963,15 @@ class ProxiedMethod(Method):
 
         self.error_set = True
         out.write((
-           "    /* Check for python errors */\n"
-           "    if(PyErr_Occurred()) {\n"
+           "    /* Check for Python errors */\n"
+           "    if(PyErr_Occurred()) {{\n"
            "        PyObject *exception_t = NULL;\n"
            "        PyObject *exception = NULL;\n"
            "        PyObject *tb = NULL;\n"
            "        PyObject *str = NULL;\n"
            "        char *str_c = NULL;\n"
            "        char *error_str = NULL;\n"
-           "        int *error_type = (int *) %(CURRENT_ERROR_FUNCTION)s(&error_str);\n"
+           "        int *error_type = (int *) {0:s}(&error_str);\n"
            "\n"
            "        // Fetch the exception state and convert it to a string:\n"
            "        PyErr_Fetch(&exception_t, &exception, &tb);\n"
@@ -2974,22 +2983,22 @@ class ProxiedMethod(Method):
            "        str_c = PyString_AsString(str);\n"
            "#endif\n"
            "\n"
-           "        if(str_c != NULL) {\n"
+           "        if(str_c != NULL) {{\n"
            "            strncpy(error_str, str_c, BUFF_SIZE-1);\n"
            "            error_str[BUFF_SIZE - 1] = 0;\n"
            "            *error_type = ERuntimeError;\n"
-           "        }\n"
+           "        }}\n"
            "        PyErr_Restore(exception_t, exception, tb);\n"
            "        Py_DecRef(str);\n"
            "\n"
            "        goto on_error;\n"
-           "    }\n"
-           "\n") % dict(CURRENT_ERROR_FUNCTION=CURRENT_ERROR_FUNCTION))
+           "    }}\n"
+           "\n").format(CURRENT_ERROR_FUNCTION))
 
         for arg in self.args:
             out.write(arg.python_proxy_post_call())
 
-        # Now convert the python value back to a value
+        # Now convert the Python value back to a value
         out.write(self.return_type.from_python_object(
             "Py_result", self.return_type.name, self, context="self"))
 
@@ -3000,7 +3009,7 @@ class ProxiedMethod(Method):
             "    Py_DecRef(method_name);\n"
             "\n")
 
-        # Decref all our python objects:
+        # Decref all our Python objects:
         for arg in self.args:
             out.write((
                 "    if(py_{0:s} != NULL) {{\n"
@@ -3023,7 +3032,7 @@ class ProxiedMethod(Method):
                 "    Py_DecRef(method_name);\n"
                 "\n")
 
-            # Decref all our python objects:
+            # Decref all our Python objects:
             for arg in self.args:
                 out.write((
                     "    if(py_{0:s} != NULL) {{\n"
@@ -3041,7 +3050,9 @@ class ProxiedMethod(Method):
             "\n")
 
     def error_condition(self):
-        return self.return_type.error_value % dict(result="func_return")
+        values_dict = {
+            "result": "func_return"}
+        return self.return_type.error_value.format(**values_dict)
 
 
 class StructConstructor(ConstructorMethod):
@@ -3060,6 +3071,7 @@ class StructConstructor(ConstructorMethod):
         """
         values_dict = {
             "class_name": self.class_name}
+
         out.write((
             "static void {class_name:s}_dealloc(py{class_name:s} *self) {{\n"
             "    struct _typeobject *ob_type = NULL;\n"
@@ -3079,6 +3091,7 @@ class StructConstructor(ConstructorMethod):
     def write_definition(self, out):
         values_dict = {
             "class_name": self.class_name}
+
         out.write((
             "static int py{class_name:s}_init(py{class_name:s} *self, PyObject *args, PyObject *kwds) {{\n"
             "    // Base is borrowed from another object.\n"
@@ -3094,6 +3107,7 @@ class EmptyConstructor(ConstructorMethod):
     def write_definition(self, out):
         values_dict = {
             "class_name": self.class_name}
+
         out.write(
             "static int py{class_name:s}_init(py{class_name:s} *self, PyObject *args, PyObject *kwds) {{\n"
             "    return 0;\n"
@@ -3193,6 +3207,7 @@ class ClassGenerator(object):
     def struct(self,out):
         values_dict = {
             "class_name": self.class_name}
+
         out.write((
           "\n"
           "typedef struct {{\n"
@@ -3226,6 +3241,7 @@ class ClassGenerator(object):
     def initialise(self):
         values_dict = {
             "class_name": self.class_name}
+
         result = (
             "python_wrappers[TOTAL_CLASSES].class_ref = (Object)&__{class_name:s};\n"
             "python_wrappers[TOTAL_CLASSES].python_type = &{class_name:s}_Type;\n").format(**values_dict)
@@ -3278,6 +3294,7 @@ class ClassGenerator(object):
     def numeric_protocol_nonzero(self):
         values_dict = {
             "class_name": self.class_name}
+
         return (
             "static int {class_name:s}_nonzero(py{class_name:s} *v) {{\n"
             "    return v->base != 0;\n"
@@ -3490,6 +3507,7 @@ class StructGenerator(ClassGenerator):
     def struct(self, out):
         values_dict = {
             "class_name": self.class_name}
+
         out.write((
             "\n"
             "typedef struct {{\n"
@@ -3515,6 +3533,7 @@ class EnumConstructor(ConstructorMethod):
     def write_destructor(self, out):
         values_dict = {
             "class_name": self.class_name}
+
         out.write((
             "static void {class_name:s}_dealloc(py{class_name:s} *self) {{\n"
             "    struct _typeobject *ob_type = NULL;\n"
@@ -3535,6 +3554,7 @@ class EnumConstructor(ConstructorMethod):
 
         values_dict = {
             "class_name": self.class_name}
+
         out.write((
             "{{\n"
             "    static char *kwlist[] = {{\"value\", NULL}};\n"
@@ -3617,6 +3637,7 @@ class Enum(StructGenerator):
     def struct(self,out):
         values_dict = {
             "class_name": self.class_name}
+
         out.write((
             "\n"
             "typedef struct {{\n"
@@ -3641,6 +3662,7 @@ class Enum(StructGenerator):
     def numeric_protocol_int(self):
         values_dict = {
             "class_name": self.class_name}
+
         return (
             "static PyObject *{class_name:s}_int(py{class_name:s} *self) {{\n"
             "    Py_IncRef(self->value);\n"
@@ -3650,6 +3672,7 @@ class Enum(StructGenerator):
     def initialise(self):
         values_dict = {
             "class_name": self.class_name}
+
         result = (
             "{class_name:s}_Dict_lookup = PyDict_New();\n"
             "{class_name:s}_rev_lookup = PyDict_New();\n").format(
@@ -3665,6 +3688,7 @@ class Enum(StructGenerator):
                 values_dict = {
                     "class_name": self.class_name,
                     "value": attr}
+
                 result += (
                     "    tmp = PyLong_FromLong({value:s});\n"
                     "\n"
@@ -3712,6 +3736,7 @@ class EnumType(Integer):
         values_dict = {
             "name": self.name,
             "type": self.type}
+
         return (
             "/* Check if the integer passed is actually a valid member\n"
             " * of the enum. Enum value of 0 is always allowed.\n"
@@ -3971,7 +3996,7 @@ class HeaderParser(lexer.SelfFeederMixIn):
 
         # For now we just treat enums as an integer, and also add
         # them to the constant table. In future it would be nice to
-        # have them as a proper python object so we can override
+        # have them as a proper Python object so we can override
         # __str__ and __int__.
         for attr in self.current_enum.values:
             self.module.add_constant(attr, "integer")
