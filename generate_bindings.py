@@ -23,7 +23,7 @@ import class_parser
 
 
 def generate_bindings(
-    target, source_files, env = None, initialization='', free='talloc_free'):
+    target, source_files, env = None, initialization="", free="talloc_free"):
   """ Generated the Python bindings """
   module_name = os.path.splitext(os.path.basename(target))[0]
   print("Generating Python bindings for module %s" % module_name)
@@ -32,15 +32,15 @@ def generate_bindings(
 
   ## Sets the free function
   class_parser.FREE = free
-  p = class_parser.HeaderParser(module_name, verbose=env['V'])
+  p = class_parser.HeaderParser(module_name, verbose=env["V"])
   p.module.init_string = initialization
   p.parse_filenames(source_files)
 
-  fd = open(target, 'w')
+  fd = open(target, "w")
   p.write(fd)
   fd.close()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
   if len(sys.argv) != 2:
     print("Usage: ./generate_bindings.py path_to_source")
     sys.exit(1)
@@ -65,4 +65,4 @@ if __name__ == '__main__':
       "tsk3.h",
   ]
 
-  generate_bindings("pytsk3.c", sources, initialization='tsk_init();')
+  generate_bindings("pytsk3.c", sources, initialization="tsk_init();")

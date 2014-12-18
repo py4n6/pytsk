@@ -271,11 +271,11 @@ class Module(object):
 
     def __str__(self):
         result = "Module {0:s}\n".format(self.name)
-        l = self.classes.values()
-        l.sort()
-        for attr in l:
-            if attr.is_active():
-                result += "    {0:s}\n".format(attr)
+        classes_list = list(self.classes.values())
+        classes_list.sort(key=lambda cls: cls.class_name)
+        for cls in classes_list:
+            if cls.is_active():
+                result += "    {0:s}\n".format(cls)
 
         constants_list = list(self.constants)
         constants_list.sort()
