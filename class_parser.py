@@ -589,24 +589,62 @@ static int check_method_override(PyObject *self, PyTypeObject *type, char *metho
     return found;
 }}
 
-/* Copies a Python int or long object to an unsigned 64-bit value
+/* Fetches the Python error (exception)
  */
-uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
-    PyObject *exception_t = NULL;
-    PyObject *exception = NULL;
-    PyObject *tb = NULL;
-    PyObject *str = NULL;
+void pytsk_fetch_error(void) {{
+    PyObject *exception_traceback = NULL;
+    PyObject *exception_type = NULL;
+    PyObject *exception_value = NULL;
+    PyObject *string_object = NULL;
     char *str_c = NULL;
     char *error_str = NULL;
     int *error_type = (int *) {get_current_error:s}(&error_str);
 
-    int result = 0;
+#if PY_MAJOR_VERSION >= 3
+    PyObject *utf8_string_object  = NULL;
+#endif
 
+    // Fetch the exception state and convert it to a string:
+    PyErr_Fetch(&exception_type, &exception_value, &exception_traceback);
+
+    string_object = PyObject_Repr(exception_value);
+
+#if PY_MAJOR_VERSION >= 3
+    utf8_string_object = PyUnicode_AsUTF8String(string_object);
+
+    if(utf8_string_object != NULL) {{
+        str_c = PyBytes_AsString(utf8_string_object);
+    }}
+#else
+    str_c = PyString_AsString(string_object);
+#endif
+
+    if(str_c != NULL) {{
+        strncpy(error_str, str_c, BUFF_SIZE-1);
+        error_str[BUFF_SIZE - 1] = 0;
+        *error_type = ERuntimeError;
+    }}
+    PyErr_Restore(exception_type, exception_value, exception_traceback);
+
+#if PY_MAJOR_VERSION >= 3
+    if( utf8_string_object != NULL ) {{
+        Py_DecRef(utf8_string_object);
+    }}
+#endif
+    Py_DecRef(string_object);
+
+    return;
+}}
+
+/* Copies a Python int or long object to an unsigned 64-bit value
+ */
+uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
 #if defined( HAVE_LONG_LONG )
     PY_LONG_LONG long_value = 0;
 #else
     long long_value = 0;
 #endif
+    int result = 0;
 
     if(integer_object == NULL) {{
         PyErr_Format(PyExc_ValueError, "Missing integer object");
@@ -618,23 +656,7 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
     result = PyObject_IsInstance(integer_object, (PyObject *) &PyLong_Type);
 
     if(result == -1) {{
-        // Fetch the exception state and convert it to a string:
-        PyErr_Fetch(&exception_t, &exception, &tb);
-
-        str = PyObject_Repr(exception);
-#if PY_MAJOR_VERSION >= 3
-        str_c = PyBytes_AsString(str);
-#else
-        str_c = PyString_AsString(str);
-#endif
-
-        if(str_c != NULL) {{
-            strncpy(error_str, str_c, BUFF_SIZE-1);
-            error_str[BUFF_SIZE - 1] = 0;
-            *error_type = ERuntimeError;
-        }}
-        PyErr_Restore(exception_t, exception, tb);
-        Py_DecRef(str);
+        pytsk_fetch_error();
 
         return (uint64_t) -1;
 
@@ -654,23 +676,7 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
         result = PyObject_IsInstance(integer_object, (PyObject *) &PyInt_Type);
 
         if(result == -1) {{
-            // Fetch the exception state and convert it to a string:
-            PyErr_Fetch(&exception_t, &exception, &tb);
-
-            str = PyObject_Repr(exception);
-#if PY_MAJOR_VERSION >= 3
-            str_c = PyBytes_AsString(str);
-#else
-            str_c = PyString_AsString(str);
-#endif
-
-            if(str_c != NULL) {{
-                strncpy(error_str, str_c, BUFF_SIZE-1);
-                error_str[BUFF_SIZE - 1] = 0;
-                *error_type = ERuntimeError;
-            }}
-            PyErr_Restore(exception_t, exception, tb);
-            Py_DecRef(str);
+            pytsk_fetch_error();
 
             return (uint64_t) -1;
 
@@ -687,23 +693,7 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
 #endif /* PY_MAJOR_VERSION < 3 */
     if(result == 0) {{
         if(PyErr_Occurred()) {{
-
-            PyErr_Fetch(&exception_t, &exception, &tb);
-
-            str = PyObject_Repr(exception);
-#if PY_MAJOR_VERSION >= 3
-            str_c = PyBytes_AsString(str);
-#else
-            str_c = PyString_AsString(str);
-#endif
-
-            if(str_c != NULL) {{
-                strncpy(error_str, str_c, BUFF_SIZE-1);
-                error_str[BUFF_SIZE - 1] = 0;
-                *error_type = ERuntimeError;
-            }}
-            PyErr_Restore(exception_t, exception, tb);
-            Py_DecRef(str);
+            pytsk_fetch_error();
 
             return (uint64_t) -1;
         }}
@@ -3143,31 +3133,7 @@ class ProxiedMethod(Method):
         out.write((
            "    /* Check for Python errors */\n"
            "    if(PyErr_Occurred()) {{\n"
-           "        PyObject *exception_t = NULL;\n"
-           "        PyObject *exception = NULL;\n"
-           "        PyObject *tb = NULL;\n"
-           "        PyObject *str = NULL;\n"
-           "        char *str_c = NULL;\n"
-           "        char *error_str = NULL;\n"
-           "        int *error_type = (int *) {0:s}(&error_str);\n"
-           "\n"
-           "        // Fetch the exception state and convert it to a string:\n"
-           "        PyErr_Fetch(&exception_t, &exception, &tb);\n"
-           "\n"
-           "        str = PyObject_Repr(exception);\n"
-           "#if PY_MAJOR_VERSION >= 3\n"
-           "        str_c = PyBytes_AsString(str);\n"
-           "#else\n"
-           "        str_c = PyString_AsString(str);\n"
-           "#endif\n"
-           "\n"
-           "        if(str_c != NULL) {{\n"
-           "            strncpy(error_str, str_c, BUFF_SIZE-1);\n"
-           "            error_str[BUFF_SIZE - 1] = 0;\n"
-           "            *error_type = ERuntimeError;\n"
-           "        }}\n"
-           "        PyErr_Restore(exception_t, exception, tb);\n"
-           "        Py_DecRef(str);\n"
+           "        pytsk_fetch_error();\n"
            "\n"
            "        goto on_error;\n"
            "    }}\n"
