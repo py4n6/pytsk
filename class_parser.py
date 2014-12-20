@@ -247,6 +247,28 @@ CONSTANTS_BLACKLIST = ["TSK3_H_"]
 DOCSTRING_RE = re.compile("[ ]*\n[ \t]+[*][ ]?")
 
 
+def dispatch(name, type):
+    if not type:
+        return PVoid(name)
+
+    m = re.match("struct ([a-zA-Z0-9]+)_t *", type)
+    if m:
+        type = m.group(1)
+
+    type_components = type.split()
+    attributes = set()
+
+    if type_components[0] in method_attributes:
+        attributes.add(type_components.pop(0))
+
+    type = " ".join(type_components)
+    result = type_dispatcher[type](name, type)
+
+    result.attributes = attributes
+
+    return result
+
+
 def log(msg):
     if DEBUG > 0:
         sys.stderr.write("{0:s}\n".format(msg))
@@ -279,22 +301,6 @@ class Module(object):
         self.active_structs = set()
         self.function_definitions = set()
 
-    def __str__(self):
-        result = "Module {0:s}\n".format(self.name)
-        classes_list = list(self.classes.values())
-        classes_list.sort(key=lambda cls: cls.class_name)
-        for cls in classes_list:
-            if cls.is_active():
-                result += "    {0:s}\n".format(cls)
-
-        constants_list = list(self.constants)
-        constants_list.sort()
-        result += "Constants:\n"
-        for name, _ in constants_list:
-            result += " {0:s}\n".format(name)
-
-        return result
-
     init_string = ""
     def initialization(self):
         result = self.init_string + (
@@ -310,7 +316,7 @@ class Module(object):
         return result
 
     def add_constant(self, constant, type="numeric"):
-        """ This will be called to add #define constant macros """
+        """This will be called to add #define constant macros."""
         self.constants.add((constant, type))
 
     def add_class(self, cls, handler):
@@ -319,6 +325,23 @@ class Module(object):
         # Make a wrapper in the type dispatcher so we can handle
         # passing this class from/to Python
         type_dispatcher[cls.class_name] = handler
+
+    def get_string(self):
+        """Retrieves a string representation."""
+        result = "Module {0:s}\n".format(self.name)
+        classes_list = list(self.classes.values())
+        classes_list.sort(key=lambda cls: cls.class_name)
+        for cls in classes_list:
+            if cls.is_active():
+                result += "    {0:s}\n".format(cls)
+
+        constants_list = list(self.constants)
+        constants_list.sort()
+        result += "Constants:\n"
+        for name, _ in constants_list:
+            result += " {0:s}\n".format(name)
+
+        return result
 
     def private_functions(self):
         """Emits hard coded private functions for doing various things"""
@@ -627,7 +650,7 @@ static int check_method_override(PyObject *self, PyTypeObject *type, char *metho
         out.write(
             " *\n"
             " * This module implements the following classes:\n")
-        out.write(self.__str__())
+        out.write(self.get_string())
         out.write(
             " ************************************************************/\n")
         out.write(self.headers)
@@ -796,6 +819,7 @@ static int check_method_override(PyObject *self, PyTypeObject *type, char *metho
             "#endif\n"
             "}\n")
 
+
 class Type(object):
     interface = None
     buildstr = "O"
@@ -811,6 +835,15 @@ class Type(object):
 
     def comment(self):
         return "{0:s} {1:s} ".format(self.type, self.name)
+
+    def get_string(self):
+        """Retrieves a string representation."""
+        if self.name == "func_return":
+            return self.type
+        if "void" in self.type:
+            return ""
+
+        return "{0:s} : {1:s}".format(self.type, self.name)
 
     def python_name(self):
         return self.name
@@ -868,15 +901,6 @@ class Type(object):
     def return_value(self, value):
         return "return {0!s};".format(value)
 
-    def __str__(self):
-        if self.name == "func_return":
-            return self.type
-        if "void" in self.type:
-            return ""
-
-        result = "{0:s} : {1:s}".format(self.type, self.name)
-
-        return result
 
 class String(Type):
     interface = "string"
@@ -2051,25 +2075,6 @@ type_dispatcher = {
 
 method_attributes = ["BORROWED", "DESTRUCTOR", "IGNORE"]
 
-def dispatch(name, type):
-    if not type: return PVoid(name)
-
-    m = re.match("struct ([a-zA-Z0-9]+)_t *", type)
-    if m:
-        type = m.group(1)
-
-    type_components = type.split()
-    attributes = set()
-
-    if type_components[0] in method_attributes:
-        attributes.add(type_components.pop(0))
-
-    type = " ".join(type_components)
-    result = type_dispatcher[type](name, type)
-
-    result.attributes = attributes
-
-    return result
 
 class ResultException(object):
     value = 0
@@ -2097,22 +2102,23 @@ class Method(object):
     typedefed_re = re.compile(r"struct (.+)_t \*")
 
     def __init__(
-        self, class_name, base_class_name, method_name, args, return_type,
+        self, class_name, base_class_name, name, args, return_type,
         myclass=None):
         if not isinstance(myclass, ClassGenerator):
             raise RuntimeError("myclass must be a class generator")
 
-        self.name = method_name
-        self.myclass = myclass
-        self.docstring = ""
-        self.defaults = {}
-        self.exception = None
-        self.error_set = False
-        self.class_name = class_name
-        self.base_class_name = base_class_name
         self.args = []
+        self.base_class_name = base_class_name
+        self.class_name = class_name
+        self.defaults = {}
         self.definition_class_name = class_name
-        for type,name in args:
+        self.docstring = ""
+        self.error_set = False
+        self.exception = None
+        self.name = name
+        self.myclass = myclass
+
+        for type, name in args:
             self.add_arg(type, name)
 
         try:
@@ -2126,6 +2132,12 @@ class Method(object):
                     self.class_name, self.name, return_type))
                 #pdb.set_trace()
             self.return_type = PVoid("func_return")
+
+    def get_string(self):
+        """Retrieves a string representation."""
+        return "def {0:s} {1:s}({2:s}):".format(
+            self.return_type, self.name,
+            " , ".join([a.get_string() for a in self.args]))
 
     def clone(self, new_class_name):
         self.find_optional_vars()
@@ -2409,14 +2421,13 @@ class Method(object):
         self.args.append(t)
 
     def comment(self):
-        result = self.return_type.original_type+" "+self.class_name+"."+self.name+"("
         args = []
         for type in self.args:
-            args.append( type.comment())
+            args.append(type.comment())
 
-        result += ",".join(args) + ");\n"
-
-        return result
+        return "{0:s} {1:s}.{2:s}({3:s});\n".format(
+            self.return_type.original_type, self.class_name, self.name,
+            ",".join(args))
 
     def prototype(self, out):
         self._prototype(out)
@@ -2429,12 +2440,6 @@ class Method(object):
 
         out.write(
            "static PyObject *py{class_name:s}_{method:s}(py{class_name:s} *self, PyObject *args, PyObject *kwds)".format(**values_dict))
-
-    def __str__(self):
-        result = "def {0:s} {1:s}({2:s}):".format(
-            self.return_type, self.name,
-            " , ".join([a.__str__() for a in self.args]))
-        return result
 
     def PyMethodDef(self, out):
         docstring = self.comment() + "\n\n" + self.docstring.strip()
@@ -2453,11 +2458,16 @@ class Method(object):
 
 class IteratorMethod(Method):
     """A method which implements an iterator."""
+
     def __init__(self, *args, **kwargs):
         super(IteratorMethod, self).__init__(*args, **kwargs)
 
         # Tell the return type that a NULL Python return is ok
         self.return_type.attributes.add("NULL_OK")
+
+    def get_string(self):
+        """Retrieves a string representation."""
+        return "Iterator returning {0:s}.".format(self.return_type)
 
     def _prototype(self, out):
         values_dict = {
@@ -2468,13 +2478,11 @@ class IteratorMethod(Method):
             "static PyObject *py{class_name:s}_{method:s}(py{class_name:s} *self)".format(
             **values_dict))
 
-    def __str__(self):
-        return "Iterator returning {0:s}.".format(self.return_type)
-
     def PyMethodDef(self, out):
         # This method should not go in the method table as its linked
         # in directly.
         pass
+
 
 class SelfIteratorMethod(IteratorMethod):
     def write_definition(self, out):
@@ -2501,6 +2509,7 @@ class SelfIteratorMethod(IteratorMethod):
 
 class ConstructorMethod(Method):
     # Python constructors are a bit different than regular methods
+
     def _prototype(self, out):
         values_dict = {
             "class_name": self.class_name,
@@ -2703,12 +2712,24 @@ class ConstructorMethod(Method):
 
 class GetattrMethod(Method):
     def __init__(self, class_name, base_class_name, myclass):
-        self.base_class_name = base_class_name
+        # Cannot use super here due to certain logic in Method.__init__().
         self._attributes = []
+        self.base_class_name = base_class_name
+        self.class_name = class_name
         self.error_set = True
-        self.return_type = Void("")
         self.myclass = myclass
+        self.name = ""
+        self.return_type = Void("")
+
         self.rename_class_name(class_name)
+
+    def get_string(self):
+        """Retrieves a string representation."""
+        result = ""
+        for class_name, attr in self.get_attributes():
+            result += "    {0:s}\n".format(attr.get_string())
+
+        return result
 
     def add_attribute(self, attr):
         if attr.name:
@@ -2719,31 +2740,31 @@ class GetattrMethod(Method):
         Required for late initialization of Structs whose name is not
         know until much later on.
         """
-        self.class_name = new_name
-        self.name = "py{0:s}_getattr".format(new_name)
-        for x in self._attributes:
-            x[0] = new_name
+        # TODO fix this behavior, new_name can be None but it is unclear what
+        # the behavious should be. Python 3 requires the values to be set to
+        # string types.
+        if not new_name:
+          self.class_name = ""
+          self.name = ""
+        else:
+          self.class_name = new_name
+          self.name = "py{0:s}_getattr".format(new_name)
+
+        for attribure in self._attributes:
+            attribure[0] = new_name
 
     def get_attributes(self):
         for class_name, attr in self._attributes:
             try:
                 # If its not an active struct, skip it
-                if not type_dispatcher[attr.type].active and \
-                        not attr.type in self.myclass.module.active_structs:
+                if (not type_dispatcher[attr.type].active and 
+                    not attr.type in self.myclass.module.active_structs):
                     continue
 
             except KeyError:
                 pass
 
             yield class_name, attr
-
-    def __str__(self):
-        result = ""
-        for class_name, attr in self.get_attributes():
-            result += "    {0:s}\n".format(attr.__str__())
-
-        return result
-
 
     def clone(self, class_name):
         result = self.__class__(class_name, self.base_class_name, self.myclass)
@@ -2879,18 +2900,19 @@ class GetattrMethod(Method):
 
 class ProxiedMethod(Method):
     def __init__(self, method, myclass):
-        self.name = method.name
+        # Cannot use super here due to certain logic in Method.__init__().
+        self.args = method.args
+        self.base_class_name = method.base_class_name
+        self.class_name = method.class_name
+        self.defaults = {}
+        self.definition_class_name = method.definition_class_name
+        self.docstring = "Proxy for {0:s}".format(method.name)
+        self.error_set = False
+        self.exception = None
         self.method = method
         self.myclass = myclass
-        self.class_name = method.class_name
-        self.base_class_name = method.base_class_name
-        self.args = method.args
-        self.definition_class_name = method.definition_class_name
+        self.name = method.name
         self.return_type = method.return_type
-        self.docstring = "Proxy for {0:s}".format(self.name)
-        self.defaults = {}
-        self.exception = None
-        self.error_set = False
 
     def get_name(self):
         return "Proxied{0:s}_{1:s}".format(
@@ -3125,8 +3147,10 @@ class EmptyConstructor(ConstructorMethod):
             "}}\n"
             "\n".format(**values_dict))
 
+
 class ClassGenerator(object):
     docstring = ""
+
     def __init__(self, class_name, base_class_name, module):
         self.class_name = class_name
         self.methods = []
@@ -3144,13 +3168,8 @@ class ClassGenerator(object):
         self.active = True
         self.iterator = None
 
-    def prepare(self):
-        """ This method is called just before we need to write the
-        output and allows us to do any last minute fixups.
-        """
-        pass
-
-    def __str__(self):
+    def get_string(self):
+        """Retrieves a string representation."""
         result = (
             "#{0:s}\n"
             "Class {1:s}({2:s}):\n"
@@ -3161,9 +3180,15 @@ class ClassGenerator(object):
                 self.constructor, self.attributes)
 
         for method in self.methods:
-            result += "        {0:s}\n".format(method.__str__())
+            result += "        {0:s}\n".format(method.get_string())
 
         return result
+
+    def prepare(self):
+        """ This method is called just before we need to write the
+        output and allows us to do any last minute fixups.
+        """
+        pass
 
     def is_active(self):
         """Returns true if this class is active and should be generated"""
@@ -3172,7 +3197,7 @@ class ClassGenerator(object):
 
         if (not self.active or self.modifier and
             ("PRIVATE" in self.modifier or "ABSTRACT" in self.modifier)):
-            log("{0:s} is not active {1:s}".format(
+            log("{0:s} is not active {1!s}".format(
                 self.class_name, self.modifier))
             return False
 
@@ -3184,7 +3209,8 @@ class ClassGenerator(object):
         """
         result = ClassGenerator(new_class_name, self.class_name, self.module)
         result.constructor = self.constructor.clone(new_class_name)
-        result.methods = [ x.clone(new_class_name) for x in self.methods ]
+        result.methods = [
+            method.clone(new_class_name) for method in self.methods]
         result.attributes = self.attributes.clone(new_class_name)
 
         return result
@@ -3199,7 +3225,8 @@ class ClassGenerator(object):
         try:
             # All attribute references are always borrowed - that
             # means we dont want to free them after accessing them
-            type_class = dispatch(attr_name, "BORROWED "+attr_type)
+            type_class = dispatch(
+                attr_name, "BORROWED {0:s}".format(attr_type))
         except KeyError:
             log("Unknown attribute type {0:s} for {1:s}.{2:s}".format(
                 attr_type, self.class_name, attr_name))
@@ -3527,7 +3554,8 @@ class ClassGenerator(object):
 
 
 class StructGenerator(ClassGenerator):
-    """ A wrapper generator for structs """
+    """A wrapper generator for structs."""
+
     def __init__(self, class_name, module):
         self.class_name = class_name
         self.methods = []
@@ -3538,6 +3566,13 @@ class StructGenerator(ClassGenerator):
         self.constructor = None
         self.attributes = GetattrMethod(
             self.class_name, self.base_class_name, self)
+
+    def get_string(self):
+        """Retrieves a string representation."""
+        return (
+            "# {0:s}\n"
+            "Struct {1:s}:\n"
+            "{2:s}\n").format(self.docstring, self.class_name, self.attributes)
 
     def prepare(self):
         # This is needed for late stage initialization - sometimes
@@ -3550,13 +3585,6 @@ class StructGenerator(ClassGenerator):
             self.attributes.rename_class_name(self.class_name)
             for x in self.attributes._attributes:
                 x[1].attributes.add("FOREIGN")
-
-    def __str__(self):
-        return (
-            "# {0:s}\n"
-            "Struct {1:s}:\n"
-            "{2:s}\n").format(
-                self.docstring, self.class_name, self.attributes)
 
     def struct(self, out):
         values_dict = {
@@ -3675,18 +3703,19 @@ class Enum(StructGenerator):
         self.attributes = None
         self.active = True
 
+    def get_string(self):
+        """Retrieves a string representation."""
+        result = "Enum {0:s}:\n".format(self.name)
+        for attr in self.values:
+            result += "    {0:s}\n".format(attr.get_string())
+
+        return result
+
     def prepare(self):
         self.constructor = EnumConstructor(
             self.class_name, self.base_class_name, "Con", [], "void",
             myclass=self)
         StructGenerator.prepare(self)
-
-    def __str__(self):
-        result = "Enum {0:s}:\n".format(self.name)
-        for attr in self.values:
-            result += "    {0:s}\n".format(attr.__str__())
-
-        return result
 
     def struct(self,out):
         values_dict = {
@@ -3945,12 +3974,13 @@ class HeaderParser(lexer.SelfFeederMixIn):
         method_name = m.group(5).strip()
         modifier = m.group(1) or ""
 
-        if "PRIVATE" in modifier: return
+        if "PRIVATE" in modifier:
+            return
 
         # Is it a regular method or a constructor?
         self.current_method = Method
-        if return_type == self.current_class.class_name and \
-                method_name.startswith("Con"):
+        if (return_type == self.current_class.class_name and
+            method_name.startswith("Con")):
             self.current_method = ConstructorMethod
         elif method_name == "iternext":
             self.current_method = IteratorMethod
@@ -3976,7 +4006,8 @@ class HeaderParser(lexer.SelfFeederMixIn):
             self.current_method.add_arg(type, name)
 
     def METHOD_END(self, t, m):
-        if not self.current_method: return
+        if not self.current_method:
+            return
 
         if isinstance(self.current_method, ConstructorMethod):
             self.current_class.constructor = self.current_method
@@ -4051,7 +4082,7 @@ class HeaderParser(lexer.SelfFeederMixIn):
         # For now we just treat enums as an integer, and also add
         # them to the constant table. In future it would be nice to
         # have them as a proper Python object so we can override
-        # __str__ and __int__.
+        # __unicode__, __str__ and __int__.
         for attr in self.current_enum.values:
             self.module.add_constant(attr, "integer")
 
@@ -4106,9 +4137,9 @@ class HeaderParser(lexer.SelfFeederMixIn):
             self._parse(f)
 
     def _parse(self, filename):
-        fd = open(filename, "rb")
-        self.parse_fd(fd)
-        fd.close()
+        file_object = open(filename, "rb")
+        self.parse_fd(file_object)
+        file_object.close()
 
         if filename not in self.module.files:
               if filename.startswith(self.base):
