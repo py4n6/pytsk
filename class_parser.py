@@ -2715,7 +2715,7 @@ class GetattrMethod(Method):
             self._attributes.append([self.class_name, attr])
 
     def rename_class_name(self, new_name):
-        """ This allows us to rename the class_name at a later stage.
+        """This allows us to rename the class_name at a later stage.
         Required for late initialization of Structs whose name is not
         know until much later on.
         """

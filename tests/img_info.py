@@ -46,12 +46,12 @@ class TSKImgInfoTestCase(unittest.TestCase):
     Args:
       img_info: the Img_Info object.
     """
-    self.assertEquals(img_info.read(0x5800, 16), 'place,user,passw')
-    self.assertEquals(img_info.read(0x7c00, 16), 'This is another ')
+    self.assertEquals(img_info.read(0x5800, 16), b'place,user,passw')
+    self.assertEquals(img_info.read(0x7c00, 16), b'This is another ')
 
     # Conforming to the POSIX seek the offset can exceed the file size
     # but reading will result in no data being returned.
-    self.assertEquals(img_info.read(0x19000, 16), '')
+    self.assertEquals(img_info.read(0x19000, 16), b'')
 
     with self.assertRaises(IOError):
       img_info.read(-1, 16)
@@ -81,8 +81,8 @@ class TSKImgInfoTest(TSKImgInfoTestCase):
     """Test the read functionality."""
     img_info = pytsk3.Img_Info(url=self._test_file)
 
-    self.assertEquals(img_info.read(0x5800, 16), 'place,user,passw')
-    self.assertEquals(img_info.read(0x7c00, 16), 'This is another ')
+    self.assertEquals(img_info.read(0x5800, 16), b'place,user,passw')
+    self.assertEquals(img_info.read(0x7c00, 16), b'This is another ')
 
     # Conforming to the POSIX seek the offset can exceed the file size
     # but reading will result in no data being returned. Note that the SleuthKit
@@ -171,7 +171,7 @@ class TSKImgInfoFileObjectLargeSizeTest(TSKImgInfoTestCase):
     """Sets up the needed objects used throughout the test."""
     test_file = os.path.join('test_data', 'image.raw')
     self._file_object = open(test_file, 'rb')
-    self._file_size = long(1e12)
+    self._file_size = 1000000000000
 
   def testInitialize(self):
     """Test the initialize functionality."""
