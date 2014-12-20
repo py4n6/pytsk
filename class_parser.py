@@ -333,7 +333,7 @@ class Module(object):
         classes_list.sort(key=lambda cls: cls.class_name)
         for cls in classes_list:
             if cls.is_active():
-                result += "    {0:s}\n".format(cls)
+                result += "    {0:s}\n".format(cls.get_string())
 
         constants_list = list(self.constants)
         constants_list.sort()
@@ -2136,7 +2136,7 @@ class Method(object):
     def get_string(self):
         """Retrieves a string representation."""
         return "def {0:s} {1:s}({2:s}):".format(
-            self.return_type, self.name,
+            self.return_type.get_string(), self.name,
             " , ".join([a.get_string() for a in self.args]))
 
     def clone(self, new_class_name):
@@ -2467,7 +2467,7 @@ class IteratorMethod(Method):
 
     def get_string(self):
         """Retrieves a string representation."""
-        return "Iterator returning {0:s}.".format(self.return_type)
+        return "Iterator returning {0:s}.".format(self.return_type.get_string())
 
     def _prototype(self, out):
         values_dict = {
@@ -3177,7 +3177,7 @@ class ClassGenerator(object):
             "    Attributes:\n{4:s}\n"
             "    Methods:\n").format(
                 self.docstring, self.class_name, self.base_class_name,
-                self.constructor, self.attributes)
+                self.constructor.get_string(), self.attributes.get_string())
 
         for method in self.methods:
             result += "        {0:s}\n".format(method.get_string())
@@ -3228,7 +3228,8 @@ class ClassGenerator(object):
             type_class = dispatch(
                 attr_name, "BORROWED {0:s}".format(attr_type))
         except KeyError:
-            log("Unknown attribute type {0:s} for {1:s}.{2:s}".format(
+            # TODO: fix that self.class_name is None.
+            log("Unknown attribute type {0:s} for {1!s}.{2:s}".format(
                 attr_type, self.class_name, attr_name))
             return
 
@@ -3572,7 +3573,8 @@ class StructGenerator(ClassGenerator):
         return (
             "# {0:s}\n"
             "Struct {1:s}:\n"
-            "{2:s}\n").format(self.docstring, self.class_name, self.attributes)
+            "{2:s}\n").format(
+                self.docstring, self.class_name, self.attributes.get_string())
 
     def prepare(self):
         # This is needed for late stage initialization - sometimes
@@ -3707,7 +3709,7 @@ class Enum(StructGenerator):
         """Retrieves a string representation."""
         result = "Enum {0:s}:\n".format(self.name)
         for attr in self.values:
-            result += "    {0:s}\n".format(attr.get_string())
+            result += "    {0:s}\n".format(attr)
 
         return result
 
