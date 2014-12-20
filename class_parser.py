@@ -235,7 +235,7 @@ import lexer
 DEBUG = 0
 
 # The pytsk3 version.
-VERSION = "20141218"
+VERSION = "20141220"
 
 # These functions are used to manage library memory.
 FREE = "aff4_free"
