@@ -146,7 +146,7 @@ class TSKFsInfoFileObjectTest(TSKFsInfoTestCase):
     test_file = os.path.join('test_data', 'image.raw')
     self._file_object = open(test_file, 'rb')
 
-    self._file_size = 1000000000000
+    self._file_size = 1024 * 1024 * 1024
     self._img_info = test_lib.FileObjectImageInfo(
         self._file_object, self._file_size)
 

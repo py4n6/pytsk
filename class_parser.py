@@ -554,7 +554,7 @@ static int check_method_override(PyObject *self, PyTypeObject *type, char *metho
     mro = ob_type->tp_mro;
 
 #if PY_MAJOR_VERSION >= 3
-    py_method = PyBytes_FromString(method);
+    py_method = PyUnicode_FromString(method);
 #else
     py_method = PyString_FromString(method);
 #endif
@@ -587,6 +587,149 @@ static int check_method_override(PyObject *self, PyTypeObject *type, char *metho
     PyErr_Clear();
 
     return found;
+}}
+
+/* Copies a Python int or long object to an unsigned 64-bit value
+ */
+uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
+    PyObject *exception_t = NULL;
+    PyObject *exception = NULL;
+    PyObject *tb = NULL;
+    PyObject *str = NULL;
+    char *str_c = NULL;
+    char *error_str = NULL;
+    int *error_type = (int *) {get_current_error:s}(&error_str);
+
+    int result = 0;
+
+#if defined( HAVE_LONG_LONG )
+    PY_LONG_LONG long_value = 0;
+#else
+    long long_value = 0;
+#endif
+
+    if(integer_object == NULL) {{
+        PyErr_Format(PyExc_ValueError, "Missing integer object");
+
+        return (uint64_t) -1;
+    }}
+    PyErr_Clear();
+
+    result = PyObject_IsInstance(integer_object, (PyObject *) &PyLong_Type);
+
+    if(result == -1) {{
+        // Fetch the exception state and convert it to a string:
+        PyErr_Fetch(&exception_t, &exception, &tb);
+
+        str = PyObject_Repr(exception);
+#if PY_MAJOR_VERSION >= 3
+        str_c = PyBytes_AsString(str);
+#else
+        str_c = PyString_AsString(str);
+#endif
+
+        if(str_c != NULL) {{
+            strncpy(error_str, str_c, BUFF_SIZE-1);
+            error_str[BUFF_SIZE - 1] = 0;
+            *error_type = ERuntimeError;
+        }}
+        PyErr_Restore(exception_t, exception, tb);
+        Py_DecRef(str);
+
+        return (uint64_t) -1;
+
+    }} else if(result != 0) {{
+        PyErr_Clear();
+
+#if defined( HAVE_LONG_LONG )
+    long_value = PyLong_AsUnsignedLongLong(integer_object);
+#else
+    long_value = PyLong_AsUnsignedLong(integer_object);
+#endif
+    }}
+#if PY_MAJOR_VERSION < 3
+    if(result == 0) {{
+        PyErr_Clear();
+
+        result = PyObject_IsInstance(integer_object, (PyObject *) &PyInt_Type);
+
+        if(result == -1) {{
+            // Fetch the exception state and convert it to a string:
+            PyErr_Fetch(&exception_t, &exception, &tb);
+
+            str = PyObject_Repr(exception);
+#if PY_MAJOR_VERSION >= 3
+            str_c = PyBytes_AsString(str);
+#else
+            str_c = PyString_AsString(str);
+#endif
+
+            if(str_c != NULL) {{
+                strncpy(error_str, str_c, BUFF_SIZE-1);
+                error_str[BUFF_SIZE - 1] = 0;
+                *error_type = ERuntimeError;
+            }}
+            PyErr_Restore(exception_t, exception, tb);
+            Py_DecRef(str);
+
+            return (uint64_t) -1;
+
+        }} else if(result != 0) {{
+            PyErr_Clear();
+
+#if defined( HAVE_LONG_LONG )
+            long_value = PyInt_AsUnsignedLongLongMask(integer_object);
+#else
+            long_value = PyInt_AsUnsignedLongMask(integer_object);
+#endif
+        }}
+    }}
+#endif /* PY_MAJOR_VERSION < 3 */
+    if(result == 0) {{
+        if(PyErr_Occurred()) {{
+
+            PyErr_Fetch(&exception_t, &exception, &tb);
+
+            str = PyObject_Repr(exception);
+#if PY_MAJOR_VERSION >= 3
+            str_c = PyBytes_AsString(str);
+#else
+            str_c = PyString_AsString(str);
+#endif
+
+            if(str_c != NULL) {{
+                strncpy(error_str, str_c, BUFF_SIZE-1);
+                error_str[BUFF_SIZE - 1] = 0;
+                *error_type = ERuntimeError;
+            }}
+            PyErr_Restore(exception_t, exception, tb);
+            Py_DecRef(str);
+
+            return (uint64_t) -1;
+        }}
+    }}
+#if defined( HAVE_LONG_LONG )
+#if ( SIZEOF_LONG_LONG > 8 )
+    if((long_value < (PY_LONG_LONG) 0) || (long_value > (PY_LONG_LONG) UINT64_MAX)) {{
+#else
+    if(long_value < (PY_LONG_LONG) 0) {{
+#endif
+        PyErr_Format(PyExc_ValueError, "Integer object value out of bounds");
+
+        return (uint64_t) -1;
+    }}
+#else
+#if ( SIZEOF_LONG > 8 )
+    if((long_value < (long) 0) || (long_value > (long) UINT64_MAX)) {{
+#else
+    if(long_value < (PY_LONG_LONG) 0) {{
+#endif
+        PyErr_Format(PyExc_ValueError, "Integer object value out of bounds");
+
+        return (uint64_t) -1;
+    }}
+#endif
+    return (uint64_t) long_value;
 }}
 
 """.format(**values_dict)
@@ -1193,6 +1336,8 @@ class Integer64Unsigned(Integer):
             "destination": destination,
             "source": source}
 
+        # TODO: use integer_object_copy_to_uint64 instead to support both
+        # long and int objects.
         return (
             "    PyErr_Clear();\n"
             "#if PY_MAJOR_VERSION >= 3\n"
@@ -2963,7 +3108,7 @@ class ProxiedMethod(Method):
             "    gil_state = PyGILState_Ensure();\n"
             "\n"
             "#if PY_MAJOR_VERSION >= 3\n"
-            "    method_name = PyBytes_FromString(\"{0:s}\");\n"
+            "    method_name = PyUnicode_FromString(\"{0:s}\");\n"
             "#else\n"
             "    method_name = PyString_FromString(\"{0:s}\");\n"
             "#endif\n").format(self.name))
