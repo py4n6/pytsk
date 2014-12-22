@@ -301,7 +301,7 @@ setup(
     long_description = (
         "Python bindings for the sleuthkit (http://www.sleuthkit.org/)"),
     license = "Apache 2.0",
-    url = "http://code.google.com/p/pytsk/",
+    url = "https://github.com/py4n6/pytsk/",
     author = "Michael Cohen",
     author_email = "scudette@gmail.com",
     cmdclass = {"test": TestCommand},
