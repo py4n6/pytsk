@@ -1,0 +1,13 @@
+# Files to ignore by git
+
+# Generic auto-generated build files
+*.pyc
+*.pyo
+
+# Specific auto-generated build files
+/__pycache__
+/build
+/dist
+
+# Project specific auto-generated files
+pytsk3.c
