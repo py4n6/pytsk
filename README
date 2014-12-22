@@ -27,7 +27,7 @@ SleuthKit tools in Python (using the library and bindings) as a
 demonstration of what is possible with the new bindings. This page
 documents how to use the binding from a practical point of view - we
 want to show examples of how to do some common tasks. There are lots
-of sample programs in the sameples directory to demonstrate how these
+of sample programs in the samples directory to demonstrate how these
 bindings can be used.
 
 To build the bindings just use the standard Python distutils method:
