@@ -1103,8 +1103,10 @@ class String(Type):
             "    {destination:s}[length] = 0;\n"
             "}};\n").format(**values_dict)
 
+
 class ZString(String):
     interface = "null_terminated_string"
+
 
 class BorrowedString(String):
     def to_python_object(self, name=None, result="Py_result", **kwargs):
@@ -1120,6 +1122,7 @@ class BorrowedString(String):
             "#else\n"
             "    {result:s} = PyString_FromStringAndSize((char *){name:s}, {length:s});\n"
             "#endif\n").format(**values_dict)
+
 
 class Char_and_Length(Type):
     interface = "char_and_length"
@@ -1451,7 +1454,7 @@ class StringOut(String):
 
 
 class IntegerOut(Integer):
-    """ Handle Integers pushed out through OUT int *result """
+    """Handle Integers pushed out through OUT int *result."""
     sense = "OUT_DONE"
     buildstr = ""
     int_type = "int *"
@@ -2957,6 +2960,11 @@ class GetattrMethod(Method):
             "            PyList_Append(result, tmp);\n"
             "            Py_DecRef(tmp);\n"
             "        }}\n"
+            "#if PY_MAJOR_VERSION >= 3\n"
+            "        if( utf8_string_object != NULL ) {{\n"
+            "            Py_DecRef(utf8_string_object);\n"
+            "        }}\n"
+            "#endif\n"
             "        return result;\n"
             "    }}\n").format(self.class_name))
 
@@ -2973,6 +2981,10 @@ class GetattrMethod(Method):
             "    PyObject *result = NULL;\n"
             "    char *name = NULL;\n"
             "\n"
+            "#if PY_MAJOR_VERSION >= 3\n"
+            "    PyObject *utf8_string_object  = NULL;\n"
+            "#endif\n"
+            "\n"
             "    // Try to hand it off to the Python native handler first\n"
             "    result = PyObject_GenericGetAttr((PyObject*) self, pyname);\n"
             "\n"
@@ -2983,16 +2995,25 @@ class GetattrMethod(Method):
             "    PyErr_Clear();\n"
             "    // No - nothing interesting was found by python\n"
             "#if PY_MAJOR_VERSION >= 3\n"
-            "    name = PyBytes_AsString(pyname);\n"
+            "    utf8_string_object = PyUnicode_AsUTF8String(pyname);\n"
+            "\n"
+            "    if(utf8_string_object != NULL) {{\n"
+            "        name = PyBytes_AsString(utf8_string_object);\n"
+            "    }}\n"
             "#else\n"
             "    name = PyString_AsString(pyname);\n"
             "#endif\n"
             "\n"
             "    if(!self->base) {{\n"
+            "#if PY_MAJOR_VERSION >= 3\n"
+            "        if( utf8_string_object != NULL ) {{\n"
+            "            Py_DecRef(utf8_string_object);\n"
+            "        }}\n"
+            "#endif\n"
             "        return PyErr_Format(PyExc_RuntimeError, \"Wrapped object ({class_name:s}.{name:s}) no longer valid\");\n"
             "    }}\n"
             "    if(!name) {{\n"
-            "        return NULL;\n"
+            "        goto on_error;\n"
             "    }}\n").format(**values_dict))
 
         self.built_ins(out)
@@ -3019,16 +3040,32 @@ class GetattrMethod(Method):
                 "{python_assign:s}\n"
                 "{python_obj:s}\n"
                 "\n"
+                "#if PY_MAJOR_VERSION >= 3\n"
+                "        if( utf8_string_object != NULL ) {{\n"
+                "            Py_DecRef(utf8_string_object);\n"
+                "        }}\n"
+                "#endif\n"
                 "        return Py_result;\n"
                 "    }}\n").format(**values_dict))
 
         out.write(
             "\n"
+            "#if PY_MAJOR_VERSION >= 3\n"
+            "    if( utf8_string_object != NULL ) {{\n"
+            "        Py_DecRef(utf8_string_object);\n"
+            "    }}\n"
+            "#endif\n"
             "    return PyObject_GenericGetAttr((PyObject *) self, pyname);\n")
 
         # Write the error part of the function.
         if self.error_set:
-            out.write("on_error:\n" + self.error_condition())
+            out.write(
+                "on_error:\n"
+                "#if PY_MAJOR_VERSION >= 3\n"
+                "    if( utf8_string_object != NULL ) {{\n"
+                "        Py_DecRef(utf8_string_object);\n"
+                "    }}\n"
+                "#endif\n" + self.error_condition())
 
         out.write("}\n\n")
 

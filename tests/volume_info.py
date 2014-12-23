@@ -60,7 +60,7 @@ class TSKVolumeInfoTestCase(unittest.TestCase):
       part_string = (
           u'{0:02d}:  {1:010d}   {2:010d}   {3:010d}   {4:s}\n').format(
               part.addr, part.start, part.start + part.len - 1, part.len,
-              part.desc)
+              part.desc.decode('utf-8'))
       parts.append(part_string)
 
     self.assertEquals(len(parts), 7)
@@ -188,7 +188,7 @@ class TSKVolumeInfoFileObjectTest(TSKVolumeInfoTestCase):
       part_string = (
           u'{0:02d}:  {1:010d}   {2:010d}   {3:010d}   {4:s}\n').format(
               part.addr, part.start, part.start + part.len - 1, part.len,
-              part.desc)
+              part.desc.decode('utf-8'))
       parts.append(part_string)
 
     # Note that due to the size the SleuthKit will add a non-existing part:
