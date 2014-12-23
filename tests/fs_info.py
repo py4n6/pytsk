@@ -59,8 +59,8 @@ class TSKFsInfoTest(TSKFsInfoTestCase):
 
   def setUp(self):
     """Sets up the needed objects used throughout the test."""
-    self._test_file = os.path.join('test_data', 'image.raw')
-    self._img_info = pytsk3.Img_Info(self._test_file)
+    test_file = os.path.join('test_data', 'image.raw')
+    self._img_info = pytsk3.Img_Info(test_file)
 
   def testInitialize(self):
     """Test the initialize functionality."""
@@ -78,8 +78,8 @@ class TSKFsInfoBogusTest(TSKFsInfoTestCase):
 
   def setUp(self):
     """Sets up the needed objects used throughout the test."""
-    self._test_file = os.path.join('test_data', 'bogus.raw')
-    self._img_info = pytsk3.Img_Info(self._test_file)
+    test_file = os.path.join('test_data', 'bogus.raw')
+    self._img_info = pytsk3.Img_Info(test_file)
 
   def testInitialize(self):
     """Test the initialize functionality."""
@@ -146,7 +146,7 @@ class TSKFsInfoFileObjectTest(TSKFsInfoTestCase):
     test_file = os.path.join('test_data', 'image.raw')
     self._file_object = open(test_file, 'rb')
 
-    self._file_size = 1024 * 1024 * 1024
+    self._file_size = 1024 * 1024 * 1024 * 1024
     self._img_info = test_lib.FileObjectImageInfo(
         self._file_object, self._file_size)
 

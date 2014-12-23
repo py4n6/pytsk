@@ -5,9 +5,11 @@
 *.pyo
 
 # Specific auto-generated build files
+a.out
 /__pycache__
 /build
 /dist
+/tmp
 
 # Project specific auto-generated files
 pytsk3.c
