@@ -12,4 +12,4 @@ before_install:
 install:
   - ./setup.py build
 script:
-  - ./run_tests.py
+  - PYTHONPATH=build/lib.* ./run_tests.py
