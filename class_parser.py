@@ -2925,11 +2925,11 @@ class GetattrMethod(Method):
         out.write(
             "    if(strcmp(name, \"__members__\") == 0) {\n"
             "        PyMethodDef *i = NULL;\n"
-            "        PyObject *result = NULL;\n"
-            "        PyObject *tmp = NULL;\n"
+            "        PyObject *list_object = NULL;\n"
+            "        PyObject *string_object = NULL;\n"
             "\n"
-            "        result = PyList_New(0);\n"
-            "        if(result == NULL) {\n"
+            "        list_object = PyList_New(0);\n"
+            "        if(list_object == NULL) {\n"
             "            goto on_error;\n"
             "        }\n"
             "\n")
@@ -2941,31 +2941,32 @@ class GetattrMethod(Method):
 
             out.write((
                 "#if PY_MAJOR_VERSION >= 3\n"
-                "        tmp = PyBytes_FromString(\"{name:s}\");\n"
+                "        string_object = PyUnicode_FromString(\"{name:s}\");\n"
                 "#else\n"
-                "        tmp = PyString_FromString(\"{name:s}\");\n"
+                "        string_object = PyString_FromString(\"{name:s}\");\n"
                 "#endif\n"
-                "        PyList_Append(result, tmp);\n"
-                "        Py_DecRef(tmp);\n").format(**values_dict))
+                "        PyList_Append(list_object, string_object);\n"
+                "        Py_DecRef(string_object);\n"
+                "\n").format(**values_dict))
 
         # Add methods
         out.write((
             "\n"
             "        for(i = {0:s}_methods; i->ml_name; i++) {{\n"
             "#if PY_MAJOR_VERSION >= 3\n"
-            "            tmp = PyBytes_FromString(i->ml_name);\n"
+            "            string_object = PyUnicode_FromString(i->ml_name);\n"
             "#else\n"
-            "            tmp = PyString_FromString(i->ml_name);\n"
+            "            string_object = PyString_FromString(i->ml_name);\n"
             "#endif\n"
-            "            PyList_Append(result, tmp);\n"
-            "            Py_DecRef(tmp);\n"
+            "            PyList_Append(list_object, string_object);\n"
+            "            Py_DecRef(string_object);\n"
             "        }}\n"
             "#if PY_MAJOR_VERSION >= 3\n"
             "        if( utf8_string_object != NULL ) {{\n"
             "            Py_DecRef(utf8_string_object);\n"
             "        }}\n"
             "#endif\n"
-            "        return result;\n"
+            "        return list_object;\n"
             "    }}\n").format(self.class_name))
 
     def write_definition(self, out):
