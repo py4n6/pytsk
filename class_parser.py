@@ -235,7 +235,7 @@ import lexer
 DEBUG = 0
 
 # The pytsk3 version.
-VERSION = "20141223"
+VERSION = "20141224"
 
 # These functions are used to manage library memory.
 FREE = "aff4_free"
@@ -3915,8 +3915,8 @@ class Enum(StructGenerator):
         if self.values:
             result += (
                 "{\n"
-                "    PyObject *tmp = NULL;\n"
-                "    PyObject *tmp2 = NULL;\n")
+                "    PyObject *integer_object = NULL;\n"
+                "    PyObject *string_object = NULL;\n")
 
             for attr in self.values:
                 values_dict = {
@@ -3924,17 +3924,17 @@ class Enum(StructGenerator):
                     "value": attr}
 
                 result += (
-                    "    tmp = PyLong_FromLong({value:s});\n"
+                    "    integer_object = PyLong_FromLong({value:s});\n"
                     "\n"
                     "#if PY_MAJOR_VERSION >= 3\n"
-                    "    tmp2 = PyBytes_FromString(\"{value:s}\");\n"
+                    "    string_object = PyUnicode_FromString(\"{value:s}\");\n"
                     "#else\n"
-                    "    tmp2 = PyString_FromString(\"{value:s}\");\n"
+                    "    string_object = PyString_FromString(\"{value:s}\");\n"
                     "#endif\n"
-                    "    PyDict_SetItem({class_name:s}_Dict_lookup, tmp2, tmp);\n"
-                    "    PyDict_SetItem({class_name:s}_rev_lookup, tmp, tmp2);\n"
-                    "    Py_DecRef(tmp);\n"
-                    "    Py_DecRef(tmp2);\n"
+                    "    PyDict_SetItem({class_name:s}_Dict_lookup, string_object, integer_object);\n"
+                    "    PyDict_SetItem({class_name:s}_rev_lookup, integer_object, string_object);\n"
+                    "    Py_DecRef(integer_object);\n"
+                    "    Py_DecRef(string_object);\n"
                     "\n").format(**values_dict)
 
             result += "}\n"
