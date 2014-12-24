@@ -54,6 +54,11 @@ class TSKVolumeInfoTestCase(unittest.TestCase):
     Args:
       volume_info: the Volume_Info object.
     """
+    self.assertNotEquals(volume_info, None)
+    self.assertNotEquals(getattr(volume_info, 'info', None), None)
+
+    self.assertEquals(str(volume_info.info.vstype), 'TSK_VS_TYPE_DOS')
+
     parts = []
 
     for part in volume_info:
@@ -181,6 +186,11 @@ class TSKVolumeInfoFileObjectTest(TSKVolumeInfoTestCase):
   def testIterate(self):
     """Test the iterate functionality."""
     volume_info = pytsk3.Volume_Info(self._img_info)
+
+    self.assertNotEquals(volume_info, None)
+    self.assertNotEquals(getattr(volume_info, 'info', None), None)
+
+    self.assertEquals(str(volume_info.info.vstype), 'TSK_VS_TYPE_DOS')
 
     parts = []
 

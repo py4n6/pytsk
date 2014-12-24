@@ -46,6 +46,8 @@ class TSKFsInfoTestCase(unittest.TestCase):
     Args:
       fs_info: the FS_Info object.
     """
+    self.assertNotEquals(fs_info, None)
+
     file_object = fs_info.open_meta(15)
 
     self.assertNotEquals(file_object, None)
