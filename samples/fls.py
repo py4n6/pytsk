@@ -154,9 +154,9 @@ class Fls(object):
           else:
             filename = name.name
 
-        if meta and name:
-          print("{0:s}{1:s} {2:s}:\t{3:s}".format(
-              prefix, directory_entry_type, inode, filename))
+          if meta and name:
+            print("{0:s}{1:s} {2:s}:\t{3:s}".format(
+                prefix, directory_entry_type, inode, filename))
 
 
 def Main():
