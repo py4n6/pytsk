@@ -1,13 +1,12 @@
 Source: pytsk
-Section: misc
+Section: python
 Priority: extra
 Maintainer: Joachim Metz <joachim.metz@gmail.com>
 Build-Depends: debhelper (>= 7), python, libtsk-dev, python-dev, python-setuptools
-Standards-Version: 3.8.3
+Standards-Version: 3.9.2
 Homepage: https://github.com/py4n6/pytsk/
 
 Package: pytsk3
-Section: python
 Architecture: any
 Depends: libtsk (= 4.1.2-1), ${shlibs:Depends}, ${python:Depends}
 Description: Python bindings for libtsk
