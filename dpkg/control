@@ -3,7 +3,7 @@ Section: python
 Priority: extra
 Maintainer: Joachim Metz <joachim.metz@gmail.com>
 Build-Depends: debhelper (>= 7), python, libtsk-dev, python-dev, python-setuptools
-Standards-Version: 3.9.2
+Standards-Version: 3.9.5
 Homepage: https://github.com/py4n6/pytsk/
 
 Package: pytsk3
