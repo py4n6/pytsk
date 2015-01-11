@@ -1,4 +1,4 @@
-Source: pytsk
+Source: pytsk3
 Section: python
 Priority: extra
 Maintainer: Joachim Metz <joachim.metz@gmail.com>
@@ -8,7 +8,14 @@ Homepage: https://github.com/py4n6/pytsk/
 
 Package: pytsk3
 Architecture: any
-Depends: libtsk (= 4.1.2-1), ${shlibs:Depends}, ${python:Depends}
+Depends: libtsk (= 4.1.3-1), ${shlibs:Depends}, ${misc:Depends}
 Description: Python bindings for libtsk
  Python bindings for libtsk.
+
+Package: pytsk3-dbg
+Architecture: any
+Section: debug
+Depends: pytsk3 (= ${binary:Version}), ${misc:Depends}
+Description: Debugging symbols for pytsk3
+ Debugging symbols for pytsk3.
 
