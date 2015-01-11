@@ -1,0 +1,2 @@
+tar-ignore = "a.out"
+tar-ignore = "tmp/*"
