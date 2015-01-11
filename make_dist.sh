@@ -33,7 +33,6 @@ SCRIPTS="\
 
 DATA_FILES="\
     ../pytsk/LICENSE \
-    ../pytsk/MANIFEST \
     ../pytsk/MANIFEST.in \
     ../pytsk/README \
     ../pytsk/dpkg \
@@ -48,5 +47,5 @@ FILES="\
     ${DATA_FILES}"
 
 echo "Creating: pytsk-${VERSION}.tgz"
-tar zcf pytsk-${VERSION}.tgz ${FILES} 2>/dev/null
+tar zcf pytsk-${VERSION}.tgz --exclude __pycache__ ${FILES} 2>/dev/null
 
