@@ -146,11 +146,6 @@ typedef int bool;
 #define true 1
 #define false 0
 
-#if !defined( HAVE_HTONLL ) && !defined( WIN32 )
-uint64_t htonll(uint64_t n);
-#define ntohll(x) htonll(x)
-#endif
-
 #ifdef __cplusplus
 }
 #endif
