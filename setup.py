@@ -315,4 +315,7 @@ setup(
             define_macros = CONFIG["DEFINES"],
         )
     ],
+    data_files=[
+        ("share/doc/pytsk", ["LICENSE", "README"]),
+    ],
 )

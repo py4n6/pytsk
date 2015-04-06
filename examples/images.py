@@ -16,9 +16,12 @@
 """This module selects a suitable image info object based on the type."""
 
 import bisect
+import sys
+
+import pyqcow
+
 import ewf
 import pytsk3
-import sys
 
 
 class EWFImgInfo(pytsk3.Img_Info):
@@ -45,6 +48,24 @@ class EWFImgInfo(pytsk3.Img_Info):
   def close(self):
     """Dispose of the underlying file like object."""
     self.fd.close()
+
+
+class QcowImgInfo(pytsk3.Img_Info):
+  def __init__(self, filename):
+    self._qcow_file = pyqcow.file()
+    self._qcow_file.open(filename)
+    super(QcowImgInfo, self).__init__(
+        url='', type=pytsk3.TSK_IMG_TYPE_EXTERNAL)
+
+  def close(self):
+    self._qcow_file.close()
+
+  def read(self, offset, size):
+    self._qcow_file.seek(offset)
+    return self._qcow_file.read(size)
+
+  def get_size(self):
+    return self._qcow_file.get_media_size()
 
 
 class SplitImage(pytsk3.Img_Info):
@@ -124,3 +145,6 @@ def SelectImage(img_type, files):
   elif img_type == "ewf":
     # Instantiate our special image object
     return EWFImgInfo(*files)
+
+  elif img_type == "qcow":
+    return QcowImgInfo(files[0])

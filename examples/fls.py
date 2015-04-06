@@ -186,7 +186,7 @@ def Main():
 
   args_parser.add_argument(
       "-i", "--imgtype", metavar="TYPE", dest="image_type", type=str,
-      choices=["ewf", "raw"], default="raw", help=(
+      choices=["ewf", "qcow", "raw"], default="raw", help=(
           "Set the storage media image type."))
 
   # TODO: not implemented.
