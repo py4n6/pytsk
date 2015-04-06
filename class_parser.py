@@ -806,6 +806,7 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
         for cls in self.classes.values():
             if cls.is_active():
                 cls.PyMethodDef(out)
+                cls.PyGetSetDef(out)
                 cls.code(out)
                 cls.PyTypeObject(out)
 
@@ -832,7 +833,7 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
             "        \"\\n\"\n"
             "        \"Retrieves the version.\" }},\n"
             "\n"
-            "    {{NULL}}  /* Sentinel */\n"
+            "    {{NULL, NULL, 0, NULL}}  /* Sentinel */\n"
             "}};\n"
             "\n"
             "#if PY_MAJOR_VERSION >= 3\n"
@@ -1021,7 +1022,10 @@ class Type(object):
 
     def post_call(self, method):
         # Check for errors
-        result = "if(check_error()) goto on_error;\n"
+        result = (
+            "if(check_error()) {\n"
+            "    goto on_error;\n"
+            "}\n")
 
         if "DESTRUCTOR" in self.attributes:
             result += "self->base = NULL;  //DESTRUCTOR - C object no longer valid\n"
@@ -1674,6 +1678,7 @@ class TDB_DATA_P(Char_and_Length_OUT):
             "}}\n"
             "// We no longer need the Python object\n"
             "Py_DecRef({source:s});\n").format(**values_dict)
+
 
 class TDB_DATA(TDB_DATA_P):
     error_value = (
@@ -2911,14 +2916,27 @@ class GetattrMethod(Method):
         return result
 
     def prototype(self, out):
-        if self.name:
-            values_dict = {
-                "class_name": self.class_name,
-                "name": self.name}
+        if not self.name:
+            return
 
-            out.write(
-                "static PyObject *{name:s}(py{class_name:s} *self, PyObject *name);\n".format(
+        values_dict = {
+            "class_name": self.class_name,
+            "name": self.name}
+
+        # Define getattr.
+        out.write(
+            "static PyObject *{name:s}(py{class_name:s} *self, PyObject *name);\n".format(
                 **values_dict))
+
+        # Define getters.
+        for _, attr in self.get_attributes():
+          values_dict = {
+              "class_name": self.class_name,
+              "name": attr.name}
+
+          out.write(
+              "PyObject *py{class_name:s}_{name:s}_getter(py{class_name:s} *self, PyObject *arguments);\n".format(
+                  **values_dict))
 
     def built_ins(self, out):
         """Check for some built in attributes we need to support."""
@@ -3019,36 +3037,6 @@ class GetattrMethod(Method):
 
         self.built_ins(out)
 
-        for class_name, attr in self.get_attributes():
-            # What we want to assign.
-            if self.base_class_name:
-                call = "((({0:s}) self->base)->{1:s})".format(
-                    class_name, attr.name)
-            else:
-                call = "(self->base->{0:s})".format(attr.name)
-
-            values_dict = {
-                "name": attr.name,
-                "python_obj": attr.to_python_object(),
-                "python_assign": attr.assign(call, self, borrowed=True),
-                "python_def": attr.definition(sense="out")}
-
-            out.write((
-                "    if(strcmp(name, \"{name:s}\") == 0) {{\n"
-                "        PyObject *Py_result = NULL;\n"
-                "{python_def:s}\n"
-                "\n"
-                "{python_assign:s}\n"
-                "{python_obj:s}\n"
-                "\n"
-                "#if PY_MAJOR_VERSION >= 3\n"
-                "        if( utf8_string_object != NULL ) {{\n"
-                "            Py_DecRef(utf8_string_object);\n"
-                "        }}\n"
-                "#endif\n"
-                "        return Py_result;\n"
-                "    }}\n").format(**values_dict))
-
         out.write(
             "\n"
             "#if PY_MAJOR_VERSION >= 3\n"
@@ -3069,6 +3057,59 @@ class GetattrMethod(Method):
                 "#endif\n" + self.error_condition())
 
         out.write("}\n\n")
+
+        self.write_definition_getters(out)
+
+    def write_definition_getters(self, out):
+        for _, attr in self.get_attributes():
+            if self.base_class_name:
+                call = "((({0:s}) self->base)->{1:s})".format(
+                    self.class_name, attr.name)
+            else:
+                call = "(self->base->{0:s})".format(attr.name)
+
+            values_dict = {
+                "class_name": self.class_name,
+                "name": attr.name,
+                "python_obj": attr.to_python_object(),
+                "python_assign": attr.assign(call, self, borrowed=True),
+                "python_def": attr.definition(sense="out")}
+
+            out.write((
+                "PyObject *py{class_name:s}_{name:s}_getter(py{class_name:s} *self, PyObject *arguments) {{\n"
+                  "    PyObject *Py_result = NULL;\n"
+                  "{python_def:s}\n"
+                  "\n"
+                  "{python_assign:s}\n"
+                  "{python_obj:s}\n"
+                  "\n"
+                  "    return Py_result;\n"
+                "\n").format(**values_dict))
+
+            # Work-around for the String class that generates code that contains "goto on_error".
+            if isinstance(attr, String):
+                out.write((
+                    "on_error:\n"
+                    "    {0:s}\n").format(attr.error_value))
+
+            out.write("}\n\n")
+
+    def PyGetSetDef(self, out):
+        for _, attr in self.get_attributes():
+          # TODO: improve docstring.
+          docstring = "{0:s}.".format(attr.name)
+          values_dict = {
+              "class_name": self.class_name,
+              "docstring": format_as_docstring(docstring),
+              "name": attr.name}
+
+          out.write((
+              "    {{ \"{name:s}\",\n"
+              "      (getter) py{class_name:s}_{name:s}_getter,\n"
+              "      (setter) 0,\n"
+              "      \"{docstring:s}\",\n"
+              "      NULL }},\n"
+              "\n").format(**values_dict))
 
 
 class ProxiedMethod(Method):
@@ -3443,16 +3484,28 @@ class ClassGenerator(object):
         result += "TOTAL_CLASSES++;\n"
         return result
 
-    def PyMethodDef(self, out):
+    def PyGetSetDef(self, out):
         out.write(
-            "static PyMethodDef {0:s}_methods[] = {{\n".format(
+            "static PyGetSetDef {0:s}_get_set_definitions[] = {{\n".format(
                 self.class_name))
+
+        if self.attributes:
+          self.attributes.PyGetSetDef(out)
+
+        out.write(
+            "    {NULL, NULL, NULL, NULL, NULL}  /* Sentinel */\n"
+            "};\n"
+            "\n")
+
+    def PyMethodDef(self, out):
+        out.write("static PyMethodDef {0:s}_methods[] = {{\n".format(
+            self.class_name))
 
         for method in self.methods:
             method.PyMethodDef(out)
 
         out.write(
-            "    {NULL}  /* Sentinel */\n"
+            "    {NULL, NULL, 0, NULL}  /* Sentinel */\n"
             "};\n"
             "\n")
 
@@ -3682,7 +3735,7 @@ class ClassGenerator(object):
             "    /* tp_members */\n"
             "    0,\n"
             "    /* tp_getset */\n"
-            "    0,\n"
+            "    {class:s}_get_set_definitions,\n"
             "    /* tp_base */\n"
             "    0,\n"
             "    /* tp_dict */\n"
@@ -3883,10 +3936,17 @@ class Enum(StructGenerator):
             "PyObject *{class_name:s}_rev_lookup;\n").format(
                 **values_dict))
 
+    def PyGetSetDef(self, out):
+        out.write((
+            "static PyGetSetDef {0:s}_get_set_definitions[] = {{\n"
+            "    {{NULL, NULL, NULL, NULL, NULL}}  /* Sentinel */\n"
+            "}};\n"
+            "\n").format(self.class_name))
+
     def PyMethodDef(self, out):
         out.write((
             "static PyMethodDef {0:s}_methods[] = {{\n"
-            "    {{NULL}}  /* Sentinel */\n"
+            "    {{NULL, NULL, 0, NULL}}  /* Sentinel */\n"
             "}};\n"
             "\n").format(self.class_name))
 
