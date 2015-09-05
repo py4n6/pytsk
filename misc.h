@@ -61,7 +61,7 @@ extern "C" {
 
 #if defined( _MSC_VER )
 #define PYTSK_INLINE __inline
-#elif defined( __BORLANDC__ ) || defined( __clang__ )
+#elif defined( __BORLANDC__ ) || defined( __clang__ ) || ( defined( __GNUC__ ) && __GNUC__ >= 5 )
 #define PYTSK_INLINE /* inline */
 #else
 #define PYTSK_INLINE inline
