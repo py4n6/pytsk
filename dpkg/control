@@ -2,20 +2,35 @@ Source: pytsk3
 Section: python
 Priority: extra
 Maintainer: Joachim Metz <joachim.metz@gmail.com>
-Build-Depends: debhelper (>= 7), python, libtalloc-dev, libtsk-dev, python-dev, python-setuptools
+Build-Depends: debhelper (>= 7), libtalloc-dev, libtsk-dev, python-all (>= 2.7~), python-dev, python-setuptools, python3-all (>= 3.2~), python3-dev, python3-setuptools
 Standards-Version: 3.9.5
+X-Python-Version: >= 2.7
+X-Python3-Version: >= 3.2
 Homepage: https://github.com/py4n6/pytsk/
 
-Package: pytsk3
+Package: python-pytsk3
 Architecture: any
 Depends: libtsk (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
-Description: Python bindings for libtsk
- Python bindings for libtsk.
+Description: Python 2 bindings for libtsk
+ Python 2 bindings for libtsk.
 
-Package: pytsk3-dbg
+Package: python-pytsk3-dbg
 Architecture: any
 Section: debug
-Depends: pytsk3 (= ${binary:Version}), ${misc:Depends}
-Description: Debugging symbols for pytsk3
- Debugging symbols for pytsk3.
+Depends: python-pytsk3 (= ${binary:Version}), ${misc:Depends}
+Description: Debugging symbols for python-pytsk3
+ Debugging symbols for python-pytsk3.
+
+Package: python3-pytsk3
+Architecture: any
+Depends: libtsk (= ${binary:Version}), ${shlibs:Depends}, ${misc:Depends}
+Description: Python 3 bindings for libtsk
+ Python 3 bindings for libtsk.
+
+Package: python3-pytsk3-dbg
+Architecture: any
+Section: debug
+Depends: python3-pytsk3 (= ${binary:Version}), ${misc:Depends}
+Description: Debugging symbols for python3-pytsk3
+ Debugging symbols for python3-pytsk3.
 

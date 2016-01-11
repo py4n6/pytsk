@@ -235,7 +235,7 @@ import lexer
 DEBUG = 0
 
 # The pytsk3 version.
-VERSION = "20150406"
+VERSION = "20160111"
 
 # These functions are used to manage library memory.
 FREE = "aff4_free"
@@ -917,12 +917,21 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
                 out.write(
                    "    tmp = PyLong_FromUnsignedLongLong((uint64_t) {0:s});\n".format(constant))
             elif type == "string":
-                out.write((
-                    "#if PY_MAJOR_VERSION >= 3\n"
-                    "    tmp = PyBytes_FromString((char *){0:s});\n"
-                    "#else\n"
-                    "    tmp = PyString_FromString((char *){0:s});\n"
-                    "#endif\n").format(constant))
+                if constant == "TSK_VERSION_STR":
+                    out.write((
+                        "#if PY_MAJOR_VERSION >= 3\n"
+                        "    tmp = PyUnicode_FromString((char *){0:s});\n"
+                        "#else\n"
+                        "    tmp = PyString_FromString((char *){0:s});\n"
+                        "#endif\n").format(constant))
+
+                else:
+                    out.write((
+                        "#if PY_MAJOR_VERSION >= 3\n"
+                        "    tmp = PyBytes_FromString((char *){0:s});\n"
+                        "#else\n"
+                        "    tmp = PyString_FromString((char *){0:s});\n"
+                        "#endif\n").format(constant))
             else:
                 out.write(
                     "    /* I dont know how to convert {0:s} type {1:s} */\n".format(

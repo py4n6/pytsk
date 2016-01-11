@@ -9,15 +9,29 @@ export DH_OPTIONS
 
 
 %:
-	dh  $@ --with python2 -- CFLAGS="-g"
+	dh  $@ --with python2,python3 -- CFLAGS="-g"
+
+.PHONY: override_dh_auto_clean
+override_dh_auto_clean:
+	dh_auto_clean
+	rm -rf build pytsk3.egg-info/SOURCES.txt pytsk3.egg-info/PKG-INFO
+
+.PHONY: override_dh_auto_build
+override_dh_auto_build:
+	dh_auto_build
+	set -ex; for python in $(shell py3versions -r); do \
+		$$python setup.py build; \
+	done;
+
+.PHONY: override_dh_auto_install
+override_dh_auto_install:
+	dh_auto_install --destdir $(CURDIR)/debian/python-pytsk3
+	set -ex; for python in $(shell py3versions -r); do \
+		$$python setup.py install --root=$(CURDIR)/debian/python3-pytsk3 --install-layout=deb; \
+	done;
 
 .PHONY: override_dh_auto_test
 override_dh_auto_test:
-
-.PHONY: override_dh_installinit
-override_dh_installinit:
-	# Create the pytsk3 package.
-	dh_install "debian/tmp/usr/lib/python2.7/dist-packages/*" -p pytsk3
 
 .PHONY: override_dh_installmenu
 override_dh_installmenu:
@@ -58,16 +72,10 @@ override_dh_icons:
 .PHONY: override_dh_perl
 override_dh_perl:
 
-.PHONY: override_dh_pysupport
-override_dh_pysupport:
-
-.PHONY: override_dh_python2
-override_dh_python2:
-	dh_python2 -V 2.7 setup.py
-
 .PHONY: override_dh_strip
 override_dh_strip:
 ifeq (,$(filter nostrip,$(DEB_BUILD_OPTIONS)))
-	dh_strip -ppytsk3 --dbg-package=pytsk3-dbg
+	dh_strip -ppython-pytsk3 --dbg-package=python-pytsk3-dbg
+	dh_strip -ppython3-pytsk3 --dbg-package=python3-pytsk3-dbg
 endif
 

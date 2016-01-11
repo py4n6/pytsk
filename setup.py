@@ -22,12 +22,91 @@ import sys
 from distutils import ccompiler
 from distutils import cygwinccompiler
 from distutils import sysconfig
-from distutils.core import Command
-from distutils.core import Extension
-from distutils.core import setup
+
+try:
+  from setuptools import setup, Command, Extension
+except ImportError:
+  from distutils.core import setup, Command, Extension
+
+try:
+  from setuptools.commands.bdist_rpm import bdist_rpm
+except ImportError:
+  from distutils.command.bdist_rpm import bdist_rpm
 
 import generate_bindings
 import run_tests
+
+
+class BdistRPMCommand(bdist_rpm):
+  """Custom handler for the bdist_rpm command."""
+
+  def _make_spec_file(self):
+    """Generates the text of an RPM spec file.
+
+    Returns:
+      A list of strings containing the lines of text.
+    """
+    global TSK_VERSION, PYTSK_VERSION
+
+    # Note that bdist_rpm can be an old style class.
+    if issubclass(BdistRPMCommand, object):
+      spec_file = super(BdistRPMCommand, self)._make_spec_file()
+    else:
+      spec_file = bdist_rpm._make_spec_file(self)
+
+    if sys.version_info[0] < 3:
+      python_package = "python"
+    else:
+      python_package = "python3"
+
+    description = []
+    summary = ""
+    in_description = False
+
+    python_spec_file = []
+    for index, line in enumerate(spec_file):
+      if line.startswith("Summary: "):
+        summary = line
+
+      elif line.startswith("%define unmangled_version "):
+        line = "%define unmangled_version {0:s}-{1:s}".format(
+            TSK_VERSION, PYTSK_VERSION)
+
+      elif line.startswith("BuildRequires: "):
+        line = "BuildRequires: {0:s}-setuptools".format(python_package)
+
+      elif line.startswith('Requires: '):
+        if python_package == 'python3':
+          line = line.replace('python', 'python3')
+
+      elif line.startswith("%description"):
+        in_description = True
+
+      elif line.startswith("%files"):
+        line = "%files -f INSTALLED_FILES {0:s}".format(
+           python_package)
+
+      elif line.startswith("%prep"):
+        in_description = False
+
+        python_spec_file.append(
+            "%package {0:s}".format(python_package))
+        python_spec_file.append("{0:s}".format(summary))
+        python_spec_file.append("")
+        python_spec_file.append(
+            "%description {0:s}".format(python_package))
+        python_spec_file.extend(description)
+
+      elif in_description:
+        # Ignore leading white lines in the description.
+        if not description and not line:
+          continue
+
+        description.append(line)
+
+      python_spec_file.append(line)
+
+    return python_spec_file
 
 
 class TestCommand(Command):
@@ -160,9 +239,11 @@ print("Pytsk version found: {0:s}".format(PYTSK_VERSION))
 # Command bdist_msi does not support the SleuthKit version followed by
 # the pytsk version.
 if "bdist_msi" in sys.argv:
-  PYTSK_VERSION = TSK_VERSION
+  MODULE_VERSION = TSK_VERSION
+elif "bdist_rpm" in sys.argv:
+  MODULE_VERSION = "{0:s}_{1:s}".format(TSK_VERSION, PYTSK_VERSION)
 else:
-  PYTSK_VERSION = "{0:s}-{1:s}".format(TSK_VERSION, PYTSK_VERSION)
+  MODULE_VERSION = "{0:s}-{1:s}".format(TSK_VERSION, PYTSK_VERSION)
 
 # Set-up the build configuration.
 CONFIG = dict(
@@ -296,7 +377,7 @@ if not have_libtalloc:
 
 setup(
     name="pytsk3",
-    version=PYTSK_VERSION,
+    version=MODULE_VERSION,
     description = "Python bindings for the sleuthkit",
     long_description = (
         "Python bindings for the sleuthkit (http://www.sleuthkit.org/)"),
@@ -304,7 +385,9 @@ setup(
     url = "https://github.com/py4n6/pytsk/",
     author = "Michael Cohen",
     author_email = "scudette@gmail.com",
-    cmdclass = {"test": TestCommand},
+    cmdclass={
+        'bdist_rpm': BdistRPMCommand,
+        'test': TestCommand},
     ext_modules = [
         Extension(
             "pytsk3",
