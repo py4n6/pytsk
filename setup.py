@@ -242,6 +242,8 @@ if "bdist_msi" in sys.argv:
   MODULE_VERSION = TSK_VERSION
 elif "bdist_rpm" in sys.argv:
   MODULE_VERSION = "{0:s}_{1:s}".format(TSK_VERSION, PYTSK_VERSION)
+elif "sdist" in sys.argv:
+  MODULE_VERSION = "{0:s}".format(PYTSK_VERSION)
 else:
   MODULE_VERSION = "{0:s}-{1:s}".format(TSK_VERSION, PYTSK_VERSION)
 
