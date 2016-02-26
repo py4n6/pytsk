@@ -234,13 +234,16 @@ class UpdateCommand(Command):
     }
 
     def patch_sleuthkit(self):
-        for filename, rules in self.files.iteritems():
+        for filename, rules in iter(self.files.items()):
             data = open(filename).read()
             for search, replace in rules:
                 data = re.sub(search, replace, data)
 
             with open(filename, "w") as fd:
                 fd.write(data)
+
+        for patch_file in glob.glob(os.path.join("patches", "*.patch")):
+            subprocess.check_call(["git", "apply", "-p0", patch_file])
 
     def run(self):
         subprocess.check_call(["git", "stash"], cwd="sleuthkit")
