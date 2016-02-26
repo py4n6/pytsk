@@ -9,7 +9,8 @@
 *.pyo
 
 # Specific auto-generated build files
-a.out
+/.tox
+/a.out
 /__pycache__
 /build
 /dist
@@ -18,4 +19,4 @@ a.out
 /tmp
 
 # Project specific auto-generated files
-pytsk3.c
+/pytsk3.c
