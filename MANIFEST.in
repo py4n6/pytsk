@@ -1,8 +1,19 @@
-include LICENSE *.c *.h *.py
-exclude pytsk3.c
+include *
 recursive-include dpkg *
+recursive-include sleuthkit *
 recursive-include examples *.py
-recursive-include msvscpp *
 recursive-include talloc *
-recursive-include test_data *
-recursive-include tests *.py
+
+recursive-exclude test_data *
+recursive-exclude sleuthkit/bindings *
+recursive-exclude sleuthkit/autom4te.cache *
+recursive-exclude sleuthkit/framework *
+recursive-exclude sleuthkit/man *
+recursive-exclude sleuthkit/packages *
+recursive-exclude sleuthkit/release *
+recursive-exclude sleuthkit/samples *
+recursive-exclude sleuthkit/tests *
+recursive-exclude sleuthkit/tools *
+recursive-exclude sleuthkit/unit_tests *
+recursive-exclude sleuthkit/win32 *
+recursive-exclude sleuthkit/xcode *
