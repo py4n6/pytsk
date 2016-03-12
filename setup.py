@@ -205,7 +205,20 @@ class UpdateCommand(Command):
     This is normally only run by packagers to make a new release.
     """
     version = time.strftime("%Y%m%d")
-    version_pkg = time.strftime("%a, %d %b %Y %H:%M:%S %Z")
+
+    timezone_minutes, _ = divmod(time.timezone, 60)
+    timezone_hours, timezone_minutes = divmod(timezone_minutes, 60)
+
+    # If timezone_hours is -1 %02d will format as -1 instead of -01
+    # hence we detect the sign and force a leading zero.
+    if timezone_hours < 0:
+      timezone_string = '-%02d%02d' % (-timezone_hours, timezone_minutes)
+    else:
+      timezone_string = '+%02d%02d' % (timezone_hours, timezone_minutes)
+
+    version_pkg = '%s %s' % (
+        time.strftime('%a, %d %b %Y %H:%M:%S'), timezone_string)
+
     user_options = []
 
     def initialize_options(self):
@@ -227,8 +240,8 @@ class UpdateCommand(Command):
             ('VERSION = "[^"]+"', 'VERSION = "%s"' % version)
         ],
         "dpkg/changelog": [
-            (r"pytsk3 \([^\)]+\)", "pytsk (%s-1)" % version),
-            ("(<[^>]+>).+", r"\1 %s" % version_pkg),
+            (r"pytsk3 \([^\)]+\)", "pytsk3 (%s-1)" % version),
+            ("(<[^>]+>).+", r"\1  %s" % version_pkg),
         ],
 
     }
