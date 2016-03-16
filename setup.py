@@ -78,11 +78,6 @@ class BdistRPMCommand(bdist_rpm):
             if line.startswith("Summary: "):
                 summary = line
 
-            elif line.startswith("%define unmangled_version "):
-                line = "%define unmangled_version {0}-{1}".format(
-                    self.project_builder.tsk_version,
-                    self.project_builder.pytsk_version)
-
             elif line.startswith("BuildRequires: "):
                 line = "BuildRequires: {0}-setuptools".format(python_package)
 
@@ -169,6 +164,22 @@ class BuildExtCommand(build_ext):
         compiler = new_compiler(compiler=self.compiler)
         self.define = self.configure_source_tree(compiler)
 
+        libtsk_path = "sleuthkit/tsk"
+
+        if not os.access("pytsk3.c", os.R_OK):
+            # Generate the Python binding code (pytsk3.c).
+            libtsk_header_files = [
+                os.path.join(libtsk_path, "libtsk.h"),
+                os.path.join(libtsk_path, "base", "tsk_base.h"),
+                os.path.join(libtsk_path, "fs", "tsk_fs.h"),
+                os.path.join(libtsk_path, "img", "tsk_img.h"),
+                os.path.join(libtsk_path, "vs", "tsk_vs.h"),
+                "tsk3.h"]
+
+            print("Generating bindings...")
+            generate_bindings.generate_bindings(
+                "pytsk3.c", libtsk_header_files, initialization="tsk_init();")
+
         build_ext.run(self)
 
 
@@ -182,19 +193,6 @@ class SDistCommand(sdist):
         if not os.access(libtsk_path, os.R_OK):
             subprocess.check_call(["git", "submodule", "init"])
             subprocess.check_call(["git", "submodule", "update"])
-
-        # Generate the Python binding code (pytsk3.c).
-        libtsk_header_files = [
-            os.path.join(libtsk_path, "libtsk.h"),
-            os.path.join(libtsk_path, "base", "tsk_base.h"),
-            os.path.join(libtsk_path, "fs", "tsk_fs.h"),
-            os.path.join(libtsk_path, "img", "tsk_img.h"),
-            os.path.join(libtsk_path, "vs", "tsk_vs.h"),
-            "tsk3.h"]
-
-        print("Generating bindings...")
-        generate_bindings.generate_bindings(
-            "pytsk3.c", libtsk_header_files, initialization="tsk_init();")
 
         sdist.run(self)
 
@@ -277,6 +275,21 @@ class UpdateCommand(Command):
         # Now derive the version based on the date.
         with open("version.txt", "w") as fd:
             fd.write(self.version)
+
+        libtsk_path = "sleuthkit/tsk"
+
+        # Generate the Python binding code (pytsk3.c).
+        libtsk_header_files = [
+            os.path.join(libtsk_path, "libtsk.h"),
+            os.path.join(libtsk_path, "base", "tsk_base.h"),
+            os.path.join(libtsk_path, "fs", "tsk_fs.h"),
+            os.path.join(libtsk_path, "img", "tsk_img.h"),
+            os.path.join(libtsk_path, "vs", "tsk_vs.h"),
+            "tsk3.h"]
+
+        print("Generating bindings...")
+        generate_bindings.generate_bindings(
+            "pytsk3.c", libtsk_header_files, initialization="tsk_init();")
 
 
 class TestCommand(Command):
