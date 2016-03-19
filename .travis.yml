@@ -10,9 +10,9 @@ before_install:
   - if test `uname -s` = 'Darwin'; then brew update && brew install gettext && brew link --force gettext; fi
   - if test `uname -s` = 'Linux'; then sudo apt-get update -q && sudo apt-get install -y autopoint; fi
 script:
-  - ./setup.py update
-  - ./setup.py build
+  - python setup.py update
+  - python setup.py build
   - PYTHONPATH=`echo build/lib.*-${TRAVIS_PYTHON_VERSION} | tr ' ' ':'` python run_tests.py
-  - ./setup.py sdist
-  - ./setup.py bdist
-  - mkdir -p ${PWD}/tmp/lib/python${TRAVIS_PYTHON_VERSION}/site-packages/ && PYTHONPATH=${PWD}/tmp/lib/python${TRAVIS_PYTHON_VERSION}/site-packages/ ./setup.py install --prefix=${PWD}/tmp/
+  - python setup.py sdist
+  - python setup.py bdist
+  - mkdir -p ${PWD}/tmp/lib/python${TRAVIS_PYTHON_VERSION}/site-packages/ && PYTHONPATH=${PWD}/tmp/lib/python${TRAVIS_PYTHON_VERSION}/site-packages/ python setup.py install --prefix=${PWD}/tmp/
