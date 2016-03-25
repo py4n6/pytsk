@@ -45,9 +45,16 @@ import generate_bindings
 import run_tests
 
 
+__version__ = open("version.txt").read().strip()
+
+# Command bdist_msi does not support the library version, neither a date
+# as a version but if we suffix it with .1 everything is fine.
+if 'bdist_msi' in sys.argv:
+  __version__ += '.1'
+
 setup_args = dict(
     name="pytsk3",
-    version=open("version.txt").read().strip(),
+    version=__version__,
     description="Python bindings for the sleuthkit",
     long_description=(
         "Python bindings for the sleuthkit (http://www.sleuthkit.org/)"),
