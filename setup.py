@@ -275,6 +275,9 @@ class UpdateCommand(Command):
                               cwd="sleuthkit")
         subprocess.check_call(["git", "checkout", "master"], cwd="sleuthkit")
         subprocess.check_call(["git", "pull"], cwd="sleuthkit")
+        subprocess.check_call(["git", "fetch", "--tags"], cwd="sleuthkit")
+        subprocess.check_call(["git", "checkout", "sleuthkit-4.3.0"],
+                              cwd="sleuthkit")
 
         self.patch_sleuthkit()
         subprocess.check_call(["./bootstrap"], cwd="sleuthkit")
