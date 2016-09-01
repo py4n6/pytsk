@@ -1246,14 +1246,13 @@ class IntegerUnsigned(Integer):
             return (
                 "    PyErr_Clear();\n"
                 "    {result:s} = PyList_New(0);\n"
-                "    {{\n"
-                "    for(int i=0; i<{array_size:s}; i++){{\n"
+                "    int i;\n"
+                "    for(i=0; i<{array_size:s}; i++){{\n"
                 "#if PY_MAJOR_VERSION >= 3\n"
                 "       PyList_Append({result:s}, PyLong_FromLong((long) {name:s}[i]));\n"
                 "#else\n"
                 "       PyList_Append({result:s}, PyInt_FromLong((long) {name:s}[i]));\n"
                 "#endif\n"
-                "    }}\n"
                 "    }}\n"
             ).format(**values_dict)
         else:
