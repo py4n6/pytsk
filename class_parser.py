@@ -235,7 +235,7 @@ import lexer
 DEBUG = 0
 
 # The pytsk3 version.
-VERSION = "20160721"
+VERSION = "20160904"
 
 # These functions are used to manage library memory.
 FREE = "aff4_free"
@@ -247,7 +247,7 @@ CONSTANTS_BLACKLIST = ["TSK3_H_"]
 DOCSTRING_RE = re.compile("[ ]*\n[ \t]+[*][ ]?")
 
 
-def dispatch(name, type):
+def dispatch(name, type, *args, **kwargs):
     if not type:
         return PVoid(name)
 
@@ -262,7 +262,7 @@ def dispatch(name, type):
         attributes.add(type_components.pop(0))
 
     type = " ".join(type_components)
-    result = type_dispatcher[type](name, type)
+    result = type_dispatcher[type](name, type, *args, **kwargs)
 
     result.attributes = attributes
 
@@ -302,6 +302,7 @@ class Module(object):
         self.function_definitions = set()
 
     init_string = ""
+
     def initialization(self):
         result = self.init_string + (
             "\n"
@@ -354,13 +355,13 @@ class Module(object):
  * Python wrappers. This is used to allow the correct wrapper to be
  * chosen depending on the object type found - regardless of the
  * prototype.
- * 
+ *
  * This is basically a safer way for us to cast the correct Python type
  * depending on context rather than assuming a type based on the .h
  * definition. For example consider the function
- * 
+ *
  * AFFObject Resolver.open(uri, mode)
- * 
+ *
  * The .h file implies that an AFFObject object is returned, but this is
  * not true as most of the time an object of a derived class will be
  * returned. In C we cast the returned value to the correct type. In the
@@ -530,10 +531,10 @@ static int check_error() {{
  * method defined in type. This is used to determine if a Python class is
  * extending this C type. If not, a proxy function is not written and C
  * calls are made directly.
- * 
+ *
  * This is an optimization to eliminate the need for a call into Python
  * in the case where Python objects do not actually extend any methods.
- * 
+ *
  * We basically just iterate over the MRO and determine if a method is
  * defined in each level until we reach the base class.
  */
@@ -724,7 +725,7 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
 
 """.format(**values_dict)
 
-    def initialise_class(self, class_name, out, done = None):
+    def initialise_class(self, class_name, out, done=None):
         if done and class_name in done:
             return
 
@@ -754,7 +755,8 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
                 "        goto on_error;\n"
                 "    }}\n"
                 "    Py_IncRef((PyObject *)&{name:s}_Type);\n"
-                "    PyModule_AddObject(module, \"{name:s}\", (PyObject *)&{name:s}_Type);\n").format(**values_dict))
+                "    PyModule_AddObject(module, \"{name:s}\", (PyObject *)&{name:s}_Type);\n").format(
+                    **values_dict))
 
     def write(self, out):
         # Write the headers
@@ -915,7 +917,7 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
         for constant, type in self.constants:
             if type == "integer":
                 out.write(
-                   "    tmp = PyLong_FromUnsignedLongLong((uint64_t) {0:s});\n".format(constant))
+                    "    tmp = PyLong_FromUnsignedLongLong((uint64_t) {0:s});\n".format(constant))
             elif type == "string":
                 if constant == "TSK_VERSION_STR":
                     out.write((
@@ -970,11 +972,12 @@ class Type(object):
     error_value = "return 0;"
     active = True
 
-    def __init__(self, name, type):
+    def __init__(self, name, type, *args, **kwargs):
         super(Type, self).__init__()
         self.name = name
         self.type = type
         self.attributes = set()
+        self.additional_args = kwargs
 
     def comment(self):
         return "{0:s} {1:s} ".format(self.type, self.name)
@@ -1003,8 +1006,12 @@ class Type(object):
             return "{0:s} {1:s}={2:s};\n".format(
                 self.type, self.name, default)
         else:
-            return "{0:s} UNUSED {1:s};\n".format(
-                self.type, self.name)
+            if "array_size" in self.additional_args:
+                return "{0:s} UNUSED *{1:s};\n".format(
+                    self.type, self.name)
+            else:
+                return "{0:s} UNUSED {1:s};\n".format(
+                    self.type, self.name)
 
     def local_definition(self, default=None, **kwargs):
         return ""
@@ -1053,15 +1060,14 @@ class String(Type):
     buildstr = "s"
     error_value = "return NULL;"
 
-    def __init__(self, name, type):
-        super(String, self).__init__(name, type)
+    def __init__(self, name, type, *args, **kwargs):
+        super(String, self).__init__(name, type, *args, **kwargs)
         self.length = "strlen({0:s})".format(name)
 
     def byref(self):
         return "&{0:s}".format(self.name)
 
     def to_python_object(self, name=None, result="Py_result", **kwargs):
-
         values_dict = {
             "length": self.length,
             "name": name or self.name,
@@ -1142,11 +1148,11 @@ class Char_and_Length(Type):
     buildstr = "s#"
     error_value = "return NULL;"
 
-    def __init__(self, data, data_type, length, length_type):
-        super(Char_and_Length, self).__init__(data, data_type)
+    def __init__(self, data, data_type, length, length_type, *args, **kwargs):
+        super(Char_and_Length, self).__init__(data, data_type, *args, **kwargs)
 
         self.name = data
-        self.data_type=data_type
+        self.data_type = data_type
         self.length = length
         self.length_type = length_type
 
@@ -1191,8 +1197,8 @@ class Integer(Type):
     buildstr = "i"
     int_type = "int"
 
-    def __init__(self, name, type):
-        super(Integer, self).__init__(name, type)
+    def __init__(self, name, type, *args, **kwargs):
+        super(Integer, self).__init__(name, type, *args, **kwargs)
         self.type = self.int_type
         self.original_type = type
 
@@ -1231,17 +1237,35 @@ class IntegerUnsigned(Integer):
     int_type = "unsigned int"
 
     def to_python_object(self, name=None, result="Py_result", **kwargs):
-        values_dict = {
-            "name": name or self.name,
-            "result": result}
-
-        return (
-            "    PyErr_Clear();\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    {result:s} = PyLong_FromLong((long) {name:s});\n"
-            "#else\n"
-            "    {result:s} = PyInt_FromLong((long) {name:s});\n"
-            "#endif\n").format(**values_dict)
+        if "array_size" in self.additional_args:
+            values_dict = {
+                "name": name or self.name,
+                "result": result,
+                "array_size": self.additional_args["array_size"]
+            }
+            return (
+                "    PyErr_Clear();\n"
+                "    {result:s} = PyList_New(0);\n"
+                "    int i;\n"
+                "    for(i=0; i<{array_size:s}; i++){{\n"
+                "#if PY_MAJOR_VERSION >= 3\n"
+                "       PyList_Append({result:s}, PyLong_FromLong((long) {name:s}[i]));\n"
+                "#else\n"
+                "       PyList_Append({result:s}, PyInt_FromLong((long) {name:s}[i]));\n"
+                "#endif\n"
+                "    }}\n"
+            ).format(**values_dict)
+        else:
+            values_dict = {
+                "name": name or self.name,
+                "result": result}
+            return (
+                "    PyErr_Clear();\n"
+                "#if PY_MAJOR_VERSION >= 3\n"
+                "    {result:s} = PyLong_FromLong((long) {name:s});\n"
+                "#else\n"
+                "    {result:s} = PyInt_FromLong((long) {name:s});\n"
+                "#endif\n").format(**values_dict)
 
     def from_python_object(self, source, destination, method, **kwargs):
         values_dict = {
@@ -1629,8 +1653,8 @@ class Char_and_Length_OUT(Char_and_Length):
 class TDB_DATA_P(Char_and_Length_OUT):
     bare_type = "TDB_DATA"
 
-    def __init__(self, name, type):
-        super(TDB_DATA_P, self).__init__(name, type)
+    def __init__(self, name, type, *args, **kwargs):
+        super(TDB_DATA_P, self).__init__(name, type, *args, **kwargs)
 
     def definition(self, default=None, **kwargs):
         return Type.definition(self)
@@ -1644,7 +1668,7 @@ class TDB_DATA_P(Char_and_Length_OUT):
     def call_arg(self):
         return Type.call_arg(self)
 
-    def to_python_object(self, name=None,result="Py_result", **kwargs):
+    def to_python_object(self, name=None, result="Py_result", **kwargs):
         values_dict = {
             "name": name or self.name,
             "result": result}
@@ -1721,7 +1745,7 @@ class TDB_DATA(TDB_DATA_P):
             "// We no longer need the Python object\n"
             "Py_DecRef({source:s});\n").format(**values_dict)
 
-    def to_python_object(self, name = None, result="Py_result", **kwargs):
+    def to_python_object(self, name=None, result="Py_result", **kwargs):
         values_dict = {
             "name": name or self.name,
             "result": result}
@@ -1734,13 +1758,14 @@ class TDB_DATA(TDB_DATA_P):
             "    {result:s} = PyString_FromStringAndSize((char *){name:s}.dptr, {name:s}.dsize);\n"
             "#endif\n").format(**values_dict)
 
+
 class Void(Type):
     buildstr = ""
     error_value = "return;"
     original_type = ""
 
-    def __init__(self, name, type="void", *args):
-        super(Void, self).__init__(name, type)
+    def __init__(self, name, type="void", *args, **kwargs):
+        super(Void, self).__init__(name, type, *args, **kwargs)
 
     def comment(self):
         return "void *ctx"
@@ -1749,7 +1774,7 @@ class Void(Type):
         return ""
 
     def to_python_object(self, name=None, result="Py_result", **kwargs):
-        return(
+        return (
             "Py_IncRef(Py_None);\n"
             "Py_result = Py_None;\n")
 
@@ -1763,7 +1788,7 @@ class Void(Type):
         # We don't assign the result to anything.
         return (
             "    Py_BEGIN_ALLOW_THREADS\n"
-            "    (void) {0:s};\n" 
+            "    (void) {0:s};\n"
             "    Py_END_ALLOW_THREADS\n").format(call)
 
     def return_value(self, value):
@@ -1771,8 +1796,8 @@ class Void(Type):
 
 
 class PVoid(Void):
-    def __init__(self, name, type="void *", *args):
-        super(PVoid, self).__init__(name, type)
+    def __init__(self, name, type="void *", *args, **kwargs):
+        super(PVoid, self).__init__(name, type, *args, **kwargs)
 
 
 class StringArray(String):
@@ -1874,9 +1899,8 @@ class Wrapper(Type):
         return "&wrapped_{0:s}".format(self.name)
 
     def definition(self, default="NULL", sense="in", **kwargs):
-        result = (
-            "    Gen_wrapper wrapped_{0:s} UNUSED = {1:s};\n").format(
-                self.name, default)
+        result = "    Gen_wrapper wrapped_{0:s} UNUSED = {1:s};\n".format(
+            self.name, default)
 
         if sense == "in" and not "OUT" in self.attributes:
             result += "    {0:s} UNUSED {1:s};\n".format(
@@ -1898,21 +1922,21 @@ class Wrapper(Type):
             "python_object_index": python_object_index}
 
         return (
-          "    if(wrapped_{name:s} == NULL || (PyObject *)wrapped_{name:s} == Py_None) {{\n"
-          "        {name:s} = NULL;\n"
-          "    }} else if(!type_check((PyObject *)wrapped_{name:s},&{original_type:s}_Type)) {{\n"
-          "        PyErr_Format(PyExc_RuntimeError, \"{name:s} must be derived from type {original_type:s}\");\n"
-          "        goto on_error;\n"
-          "    }} else if(wrapped_{name:s}->base == NULL) {{\n"
-          "        PyErr_Format(PyExc_RuntimeError, \"{original_type:s} instance is no longer valid (was it gc'ed?)\");\n"
-          "        goto on_error;\n"
-          "    }} else {{\n"
-          "        {name:s} = wrapped_{name:s}->base;\n"
-          "        if(self->python_object{python_object_index:d} == NULL) {{\n"
-          "            self->python_object{python_object_index:d} = (PyObject *) wrapped_{name:s};\n"
-          "            Py_IncRef(self->python_object{python_object_index:d});\n"
-          "        }}\n"
-          "    }}\n").format(**values_dict)
+            "    if(wrapped_{name:s} == NULL || (PyObject *)wrapped_{name:s} == Py_None) {{\n"
+            "        {name:s} = NULL;\n"
+            "    }} else if(!type_check((PyObject *)wrapped_{name:s},&{original_type:s}_Type)) {{\n"
+            "        PyErr_Format(PyExc_RuntimeError, \"{name:s} must be derived from type {original_type:s}\");\n"
+            "        goto on_error;\n"
+            "    }} else if(wrapped_{name:s}->base == NULL) {{\n"
+            "        PyErr_Format(PyExc_RuntimeError, \"{original_type:s} instance is no longer valid (was it gc'ed?)\");\n"
+            "        goto on_error;\n"
+            "    }} else {{\n"
+            "        {name:s} = wrapped_{name:s}->base;\n"
+            "        if(self->python_object{python_object_index:d} == NULL) {{\n"
+            "            self->python_object{python_object_index:d} = (PyObject *) wrapped_{name:s};\n"
+            "            Py_IncRef(self->python_object{python_object_index:d});\n"
+            "        }}\n"
+            "    }}\n").format(**values_dict)
 
     def assign(self, call, method, target=None, **kwargs):
         method.error_set = True;
@@ -1983,26 +2007,26 @@ class Wrapper(Type):
         return result
 
     def to_python_object(
-        self, name=None, result="Py_result", sense="in", **kwargs):
+            self, name=None, result="Py_result", sense="in", **kwargs):
         values_dict = {
             "name": name or self.name,
             "result": result}
 
-        if sense=="proxied":
+        if sense == "proxied":
             return (
                 "{result:s} = (PyObject *) new_class_wrapper((Object){name:s}, 0);\n").format(
                     **values_dict)
 
-        return (
-            "{result:s} = (PyObject *) wrapped_{name:s};\n").format(
-                **values_dict)
+        return "{result:s} = (PyObject *) wrapped_{name:s};\n".format(
+            **values_dict)
 
 
 class PointerWrapper(Wrapper):
     """ A pointer to a wrapped class """
-    def __init__(self, name, type):
+
+    def __init__(self, name, type, *args, **kwargs):
         type = type.split()[0]
-        super(PointerWrapper, self).__init__(name, type)
+        super(PointerWrapper, self).__init__(name, type, *args, **kwargs)
 
     def comment(self):
         return "{0:s} *{1:s}".format(self.type, self.name)
@@ -2041,8 +2065,8 @@ class StructWrapper(Wrapper):
     """ A wrapper for struct classes """
     active = False
 
-    def __init__(self, name, type):
-        super(StructWrapper, self).__init__(name, type)
+    def __init__(self, name, type, *args, **kwargs):
+        super(StructWrapper, self).__init__(name, type, *args, **kwargs)
         self.original_type = type.split()[0]
 
     def assign(self, call, method, target=None, borrowed=True, **kwargs):
@@ -2060,22 +2084,22 @@ class StructWrapper(Wrapper):
             "\n").format(**values_dict)
 
         if borrowed:
-          result += (
-              "        // Base is borrowed from another object.\n"
-              "        wrapped_{name:s}->base = {call:s};\n"
-              "        wrapped_{name:s}->base_is_python_object = 0;\n"
-              "        wrapped_{name:s}->base_is_internal = 0;\n"
-              "        wrapped_{name:s}->python_object1 = NULL;\n"
-              "        wrapped_{name:s}->python_object2 = NULL;\n"
-              "\n").format(**values_dict)
+            result += (
+                "        // Base is borrowed from another object.\n"
+                "        wrapped_{name:s}->base = {call:s};\n"
+                "        wrapped_{name:s}->base_is_python_object = 0;\n"
+                "        wrapped_{name:s}->base_is_internal = 0;\n"
+                "        wrapped_{name:s}->python_object1 = NULL;\n"
+                "        wrapped_{name:s}->python_object2 = NULL;\n"
+                "\n").format(**values_dict)
         else:
-          result += (
-              "        wrapped_{name:s}->base = {call:s};\n"
-              "        wrapped_{name:s}->base_is_python_object = 0;\n"
-              "        wrapped_{name:s}->base_is_internal = 1;\n"
-              "        wrapped_{name:s}->python_object1 = NULL;\n"
-              "        wrapped_{name:s}->python_object2 = NULL;\n"
-              "\n").format(**values_dict)
+            result += (
+                "        wrapped_{name:s}->base = {call:s};\n"
+                "        wrapped_{name:s}->base_is_python_object = 0;\n"
+                "        wrapped_{name:s}->base_is_internal = 1;\n"
+                "        wrapped_{name:s}->python_object1 = NULL;\n"
+                "        wrapped_{name:s}->python_object2 = NULL;\n"
+                "\n").format(**values_dict)
 
         if "NULL_OK" in self.attributes:
             result += (
@@ -2159,10 +2183,12 @@ class Timeval(Type):
             "{result:s} = PyFloat_FromDouble({name:s}_flt);\n").format(
                 **values_dict)
 
+
 class PyObject(Type):
     """Accept an opaque Python object."""
     interface = "opaque"
     buildstr = "O"
+
     def definition(self, default="NULL", **kwargs):
         self.default = default
         values_dict = {
@@ -2175,6 +2201,7 @@ class PyObject(Type):
 
     def byref(self):
         return "&{0:s}".format(self.name)
+
 
 type_dispatcher = {
     "IN unsigned char *": String,
@@ -2223,7 +2250,7 @@ type_dispatcher = {
     "struct timeval": Timeval,
     "char **": StringArray,
     "PyObject *": PyObject,
-    }
+}
 
 method_attributes = ["BORROWED", "DESTRUCTOR", "IGNORE"]
 
@@ -2282,7 +2309,7 @@ class Method(object):
             if return_type:
                 log("Unable to handle return type {0:s}.{1:s} {2:s}".format(
                     self.class_name, self.name, return_type))
-                #pdb.set_trace()
+                # pdb.set_trace()
             self.return_type = PVoid("func_return")
 
     def get_string(self):
@@ -2371,9 +2398,9 @@ class Method(object):
             out.write("\n")
             out.write(kwlist)
             out.write((
-               "\n"
-               "    if(!PyArg_ParseTupleAndKeywords(args, kwds, \"{0:s}\", ").format(
-                   parse_line))
+                "\n"
+                "    if(!PyArg_ParseTupleAndKeywords(args, kwds, \"{0:s}\", ").format(
+                    parse_line))
 
             tmp = ["kwlist"]
             for type in self.args:
@@ -2384,9 +2411,9 @@ class Method(object):
             out.write(",".join(tmp))
             self.error_set = True
             out.write(
-               ")) {\n"
-               "        goto on_error;\n"
-               "    }\n")
+                ")) {\n"
+                "        goto on_error;\n"
+                "    }\n")
 
     def error_condition(self):
         result = ""
@@ -2394,18 +2421,18 @@ class Method(object):
             result += "self->base = NULL;\n"
 
         if hasattr(self, "args"):
-          for type in self.args:
-            if hasattr(type, "error_cleanup"):
-              result += type.error_cleanup()
+            for type in self.args:
+                if hasattr(type, "error_cleanup"):
+                    result += type.error_cleanup()
 
         result += "    return NULL;\n";
         return result
 
     def write_definition(self, out):
         out.write(
-           "\n"
-           "/********************************************************\n"
-           "Autogenerated wrapper for function:\n")
+            "\n"
+            "/********************************************************\n"
+            "Autogenerated wrapper for function:\n")
         out.write(self.comment())
         out.write("********************************************************/\n")
 
@@ -2495,18 +2522,18 @@ class Method(object):
         results = [self.return_type.to_python_object()]
         for type in self.args:
             if type.sense == "OUT_DONE":
-                results.append(type.to_python_object(results = results))
+                results.append(type.to_python_object(results=results))
 
         # If all the results are returned by reference we dont need
         # to prepend the void return value at all.
-        if isinstance(self.return_type, Void) and len(results)>1:
+        if isinstance(self.return_type, Void) and len(results) > 1:
             results.pop(0)
 
         out.write(
             "\n"
             "    // prepare results\n")
         # Make a tuple of results and pass them back
-        if len(results)>1:
+        if len(results) > 1:
             out.write("returned_result = PyList_New(0);\n")
             for result in results:
                 out.write(result)
@@ -2558,7 +2585,6 @@ class Method(object):
                 else:
                     cls = Char_and_Length
 
-
                 cls = cls(
                     previous.name,
                     previous.type,
@@ -2591,7 +2617,8 @@ class Method(object):
             "method": self.name}
 
         out.write(
-           "static PyObject *py{class_name:s}_{method:s}(py{class_name:s} *self, PyObject *args, PyObject *kwds)".format(**values_dict))
+            "static PyObject *py{class_name:s}_{method:s}(py{class_name:s} *self, PyObject *args, PyObject *kwds)".format(
+                **values_dict))
 
     def PyMethodDef(self, out):
         docstring = self.comment() + "\n\n" + self.docstring.strip()
@@ -2628,7 +2655,7 @@ class IteratorMethod(Method):
 
         out.write(
             "static PyObject *py{class_name:s}_{method:s}(py{class_name:s} *self)".format(
-            **values_dict))
+                **values_dict))
 
     def PyMethodDef(self, out):
         # This method should not go in the method table as its linked
@@ -2721,7 +2748,7 @@ class ConstructorMethod(Method):
 
     def initialise_proxies(self, out):
         self.myclass.module.function_definitions.add(
-           "py{0:s}_initialize_proxies".format(self.class_name))
+            "py{0:s}_initialize_proxies".format(self.class_name))
 
         values_dict = {
             "class_name": self.class_name}
@@ -2754,10 +2781,10 @@ class ConstructorMethod(Method):
                     "proxied_name": method.proxied.get_name()}
 
                 out.write((
-                   "    if(check_method_override((PyObject *) self, &{class_name:s}_Type, \"{name:s}\")) {{\n"
-                   "        // Proxy the {name:s} method\n"
-                   "        (({definition_class_name:s}) target)->{name:s} = {proxied_name:s};\n"
-                   "    }}\n").format(**values_dict))
+                    "    if(check_method_override((PyObject *) self, &{class_name:s}_Type, \"{name:s}\")) {{\n"
+                    "        // Proxy the {name:s} method\n"
+                    "        (({definition_class_name:s}) target)->{name:s} = {proxied_name:s};\n"
+                    "    }}\n").format(**values_dict))
 
         out.write("}\n\n")
 
@@ -2773,20 +2800,20 @@ class ConstructorMethod(Method):
             "    {class_name:s} result_constructor = NULL;\n").format(
                 **values_dict))
 
-        #pdb.set_trace()
+        # pdb.set_trace()
         self.write_local_vars(out)
 
         # Assign the initialise_proxies handler
         out.write((
-           "    self->python_object1 = NULL;\n"
-           "    self->python_object2 = NULL;\n"
-           "\n"
-           "    /* Initialise is used to keep a reference on the object?\n"
-           "     * If not called no longer valid warnings have been seen\n"
-           "     * on Windows.\n"
-           "     */\n"
-           "    self->initialise = (void *) py{class_name:s}_initialize_proxies;\n"
-           "\n").format(**values_dict))
+            "    self->python_object1 = NULL;\n"
+            "    self->python_object2 = NULL;\n"
+            "\n"
+            "    /* Initialise is used to keep a reference on the object?\n"
+            "     * If not called no longer valid warnings have been seen\n"
+            "     * on Windows.\n"
+            "     */\n"
+            "    self->initialise = (void *) py{class_name:s}_initialize_proxies;\n"
+            "\n").format(**values_dict))
 
         # Precall preparations
         python_object_index = 1
@@ -2812,7 +2839,8 @@ class ConstructorMethod(Method):
             "\n"
             "    /* Now call the constructor */\n"
             "    Py_BEGIN_ALLOW_THREADS\n"
-            "    result_constructor = CONSTRUCT_INITIALIZE({class_name:s}, {definition_class_name:s}, Con, self->base").format(**values_dict))
+            "    result_constructor = CONSTRUCT_INITIALIZE({class_name:s}, {definition_class_name:s}, Con, self->base").format(
+                **values_dict))
 
         tmp = ""
         for type in self.args:
@@ -2896,11 +2924,11 @@ class GetattrMethod(Method):
         # the behavious should be. Python 3 requires the values to be set to
         # string types.
         if not new_name:
-          self.class_name = ""
-          self.name = ""
+            self.class_name = ""
+            self.name = ""
         else:
-          self.class_name = new_name
-          self.name = "py{0:s}_getattr".format(new_name)
+            self.class_name = new_name
+            self.name = "py{0:s}_getattr".format(new_name)
 
         for attribure in self._attributes:
             attribure[0] = new_name
@@ -2909,7 +2937,7 @@ class GetattrMethod(Method):
         for class_name, attr in self._attributes:
             try:
                 # If its not an active struct, skip it
-                if (not type_dispatcher[attr.type].active and 
+                if (not type_dispatcher[attr.type].active and
                     not attr.type in self.myclass.module.active_structs):
                     continue
 
@@ -2939,13 +2967,13 @@ class GetattrMethod(Method):
 
         # Define getters.
         for _, attr in self.get_attributes():
-          values_dict = {
-              "class_name": self.class_name,
-              "name": attr.name}
+            values_dict = {
+                "class_name": self.class_name,
+                "name": attr.name}
 
-          out.write(
-              "PyObject *py{class_name:s}_{name:s}_getter(py{class_name:s} *self, PyObject *arguments);\n".format(
-                  **values_dict))
+            out.write(
+                "PyObject *py{class_name:s}_{name:s}_getter(py{class_name:s} *self, PyObject *arguments);\n".format(
+                    **values_dict))
 
     def built_ins(self, out):
         """Check for some built in attributes we need to support."""
@@ -3086,13 +3114,13 @@ class GetattrMethod(Method):
 
             out.write((
                 "PyObject *py{class_name:s}_{name:s}_getter(py{class_name:s} *self, PyObject *arguments) {{\n"
-                  "    PyObject *Py_result = NULL;\n"
-                  "{python_def:s}\n"
-                  "\n"
-                  "{python_assign:s}\n"
-                  "{python_obj:s}\n"
-                  "\n"
-                  "    return Py_result;\n"
+                "    PyObject *Py_result = NULL;\n"
+                "{python_def:s}\n"
+                "\n"
+                "{python_assign:s}\n"
+                "{python_obj:s}\n"
+                "\n"
+                "    return Py_result;\n"
                 "\n").format(**values_dict))
 
             # Work-around for the String class that generates code that contains "goto on_error".
@@ -3105,20 +3133,20 @@ class GetattrMethod(Method):
 
     def PyGetSetDef(self, out):
         for _, attr in self.get_attributes():
-          # TODO: improve docstring.
-          docstring = "{0:s}.".format(attr.name)
-          values_dict = {
-              "class_name": self.class_name,
-              "docstring": format_as_docstring(docstring),
-              "name": attr.name}
+            # TODO: improve docstring.
+            docstring = "{0:s}.".format(attr.name)
+            values_dict = {
+                "class_name": self.class_name,
+                "docstring": format_as_docstring(docstring),
+                "name": attr.name}
 
-          out.write((
-              "    {{ \"{name:s}\",\n"
-              "      (getter) py{class_name:s}_{name:s}_getter,\n"
-              "      (setter) 0,\n"
-              "      \"{docstring:s}\",\n"
-              "      NULL }},\n"
-              "\n").format(**values_dict))
+            out.write((
+                "    {{ \"{name:s}\",\n"
+                "      (getter) py{class_name:s}_{name:s}_getter,\n"
+                "      (setter) 0,\n"
+                "      \"{docstring:s}\",\n"
+                "      NULL }},\n"
+                "\n").format(**values_dict))
 
 
 class ProxiedMethod(Method):
@@ -3214,18 +3242,18 @@ class ProxiedMethod(Method):
 
         # Sentinal
         out.write(
-           "NULL);\n"
-           "\n")
+            "NULL);\n"
+            "\n")
 
         self.error_set = True
         out.write((
-           "    /* Check for Python errors */\n"
-           "    if(PyErr_Occurred()) {{\n"
-           "        pytsk_fetch_error();\n"
-           "\n"
-           "        goto on_error;\n"
-           "    }}\n"
-           "\n").format(CURRENT_ERROR_FUNCTION))
+            "    /* Check for Python errors */\n"
+            "    if(PyErr_Occurred()) {{\n"
+            "        pytsk_fetch_error();\n"
+            "\n"
+            "        goto on_error;\n"
+            "    }}\n"
+            "\n").format(CURRENT_ERROR_FUNCTION))
 
         for arg in self.args:
             out.write(arg.python_proxy_post_call())
@@ -3291,6 +3319,7 @@ class StructConstructor(ConstructorMethod):
     """ A constructor for struct wrappers - basically just allocate
     memory for the struct.
     """
+
     def prototype(self, out):
         return Method.prototype(self, out)
 
@@ -3332,6 +3361,7 @@ class StructConstructor(ConstructorMethod):
             "}}\n"
             "\n").format(**values_dict))
 
+
 class EmptyConstructor(ConstructorMethod):
     def prototype(self, out):
         return Method.prototype(self, out)
@@ -3353,9 +3383,9 @@ class ClassGenerator(object):
     def __init__(self, class_name, base_class_name, module):
         self.class_name = class_name
         self.methods = []
-#       self.methods = [DefinitionMethod(
-#           class_name, base_class_name, "_definition", [], "",
-#           myclass=self)]
+        # self.methods = [DefinitionMethod(
+        #     class_name, base_class_name, "_definition", [], "",
+        #     myclass=self)]
         self.module = module
         self.constructor = EmptyConstructor(
             class_name, base_class_name, "Con", [], "", myclass=self)
@@ -3414,7 +3444,7 @@ class ClassGenerator(object):
 
         return result
 
-    def add_attribute(self, attr_name, attr_type, modifier):
+    def add_attribute(self, attr_name, attr_type, modifier, *args, **kwargs):
         try:
             if not self.module.classes[attr_type].is_active():
                 return
@@ -3425,7 +3455,7 @@ class ClassGenerator(object):
             # All attribute references are always borrowed - that
             # means we dont want to free them after accessing them
             type_class = dispatch(
-                attr_name, "BORROWED {0:s}".format(attr_type))
+                attr_name, "BORROWED {0:s}".format(attr_type), *args, **kwargs)
         except KeyError:
             # TODO: fix that self.class_name is None.
             log("Unknown attribute type {0:s} for {1!s}.{2:s}".format(
@@ -3442,23 +3472,23 @@ class ClassGenerator(object):
                 return_type, myclass=self)
             self.constructor.docstring = docstring
 
-    def struct(self,out):
+    def struct(self, out):
         values_dict = {
             "class_name": self.class_name}
 
         out.write((
-          "\n"
-          "typedef struct {{\n"
-          "    PyObject_HEAD\n"
-          "    {class_name:s} base;\n"
-          "    int base_is_python_object;\n"
-          "    int base_is_internal;\n"
-          "    PyObject *python_object1;\n"
-          "    PyObject *python_object2;\n"
-          "    int object_is_proxied;\n"
-          "\n"
-          "    void (*initialise)(Gen_wrapper self, void *item);\n"
-          "}} py{class_name:s};\n").format(**values_dict))
+            "\n"
+            "typedef struct {{\n"
+            "    PyObject_HEAD\n"
+            "    {class_name:s} base;\n"
+            "    int base_is_python_object;\n"
+            "    int base_is_internal;\n"
+            "    PyObject *python_object1;\n"
+            "    PyObject *python_object2;\n"
+            "    int object_is_proxied;\n"
+            "\n"
+            "    void (*initialise)(Gen_wrapper self, void *item);\n"
+            "}} py{class_name:s};\n").format(**values_dict))
 
     def code(self, out):
         if not self.constructor:
@@ -3488,7 +3518,7 @@ class ClassGenerator(object):
         if func_name in self.module.function_definitions:
             result += (
                 "python_wrappers[TOTAL_CLASSES].initialize_proxies = (void (*)(Gen_wrapper, void *)) &{0:s};\n").format(
-                    func_name)
+                func_name)
 
         result += "TOTAL_CLASSES++;\n"
         return result
@@ -3499,7 +3529,7 @@ class ClassGenerator(object):
                 self.class_name))
 
         if self.attributes:
-          self.attributes.PyGetSetDef(out)
+            self.attributes.PyGetSetDef(out)
 
         out.write(
             "    {NULL, NULL, NULL, NULL, NULL}  /* Sentinel */\n"
@@ -3558,7 +3588,7 @@ class ClassGenerator(object):
             definition = func()
             if definition:
                 out.write(definition)
-                args[type] = "{0:s}_{1:s}".format(self.class_name,type)
+                args[type] = "{0:s}_{1:s}".format(self.class_name, type)
             else:
                 args[type] = "0"
 
@@ -3930,7 +3960,7 @@ class Enum(StructGenerator):
             myclass=self)
         StructGenerator.prepare(self)
 
-    def struct(self,out):
+    def struct(self, out):
         values_dict = {
             "class_name": self.class_name}
 
@@ -3943,7 +3973,7 @@ class Enum(StructGenerator):
             "\n"
             "PyObject *{class_name:s}_Dict_lookup;\n"
             "PyObject *{class_name:s}_rev_lookup;\n").format(
-                **values_dict))
+            **values_dict))
 
     def PyGetSetDef(self, out):
         out.write((
@@ -3979,7 +4009,7 @@ class Enum(StructGenerator):
         result = (
             "{class_name:s}_Dict_lookup = PyDict_New();\n"
             "{class_name:s}_rev_lookup = PyDict_New();\n").format(
-                **values_dict)
+            **values_dict)
 
         if self.values:
             result += (
@@ -4014,8 +4044,8 @@ class Enum(StructGenerator):
 class EnumType(Integer):
     buildstr = "i"
 
-    def __init__(self, name, type):
-        super(EnumType, self).__init__(name, type)
+    def __init__(self, name, type, *args, **kwargs):
+        super(EnumType, self).__init__(name, type, *args, **kwargs)
         self.type = type
 
     def definition(self, default=None, **kwargs):
@@ -4058,10 +4088,11 @@ class EnumType(Integer):
             "    }}\n"
             "}}\n").format(**values_dict)
 
+
 class HeaderParser(lexer.SelfFeederMixIn):
     tokens = [
         ["INITIAL", r"#define\s+", "PUSH_STATE", "DEFINE"],
-        ["DEFINE", r"([A-Za-z_0-9]+)\s+[^\n]+", "DEFINE,POP_STATE", None ],
+        ["DEFINE", r"([A-Za-z_0-9]+)\s+[^\n]+", "DEFINE,POP_STATE", None],
         ["DEFINE", r"\n", "POP_STATE", None],
         # Ignore macros with args
         ["DEFINE", r"\([^\n]+", "POP_STATE", None],
@@ -4078,35 +4109,35 @@ class HeaderParser(lexer.SelfFeederMixIn):
         [".", r"\r?\n\r?\n", "CLEAR_COMMENT", None],
 
         # Ignore whitespace
-        [".", r"\s+", "SPACE", None ],
-        [".", r"\\\n", "SPACE", None ],
+        [".", r"\s+", "SPACE", None],
+        [".", r"\\\n", "SPACE", None],
 
         # Recognize CLASS() definitions
         ["INITIAL", r"^([A-Z]+)?\s*CLASS\(([A-Z_a-z0-9]+)\s*,\s*([A-Z_a-z0-9]+)\)",
-                     "PUSH_STATE,CLASS_START", "CLASS"],
+         "PUSH_STATE,CLASS_START", "CLASS"],
 
         ["CLASS", r"^\s*(FOREIGN|ABSTRACT|PRIVATE)?([0-9A-Z_a-z ]+( |\*))METHOD\(([A-Z_a-z0-9]+),\s*([A-Z_a-z0-9]+),?",
-                     "PUSH_STATE,METHOD_START", "METHOD"],
-        ["METHOD", r"\s*([0-9A-Z a-z_]+\s+\*?\*?)([0-9A-Za-z_]+),?", "METHOD_ARG", None ],
+         "PUSH_STATE,METHOD_START", "METHOD"],
+        ["METHOD", r"\s*([0-9A-Z a-z_]+\s+\*?\*?)([0-9A-Za-z_]+),?", "METHOD_ARG", None],
         ["METHOD", r"\);", "POP_STATE,METHOD_END", None],
 
         ["CLASS", r"^\s*(FOREIGN|ABSTRACT)?([0-9A-Z_a-z ]+\s+\*?)\s*([A-Z_a-z0-9]+)\s*;",
-                   "CLASS_ATTRIBUTE", None],
+         "CLASS_ATTRIBUTE", None],
         ["CLASS", "END_CLASS", "END_CLASS,POP_STATE", None],
 
         # Recognize struct definitions (With name)
         ["INITIAL", "([A-Z_a-z0-9 ]+)?struct\s+([A-Z_a-z0-9]+)\s+{",
-                     "PUSH_STATE,STRUCT_START", "STRUCT"],
+         "PUSH_STATE,STRUCT_START", "STRUCT"],
 
         # Without name (using typedef)
         ["INITIAL", "typedef\s+struct\s+{",
-                     "PUSH_STATE,TYPEDEF_STRUCT_START", "STRUCT"],
+         "PUSH_STATE,TYPEDEF_STRUCT_START", "STRUCT"],
 
-        ["STRUCT", r"^\s*([0-9A-Z_a-z ]+\s+\*?)\s*([A-Z_a-z0-9]+)\s*;",
-                     "STRUCT_ATTRIBUTE", None],
+        ["STRUCT", r"^\s*([0-9A-Z_a-z ]+\s+\*?)\s*([A-Z_a-z0-9]+)(?:\[([A-Z_a-z0-9]+)\])?\s*;",
+         "STRUCT_ATTRIBUTE", None],
 
         ["STRUCT", r"^\s*([0-9A-Z_a-z ]+)\*\s+([A-Z_a-z0-9]+)\s*;",
-                     "STRUCT_ATTRIBUTE_PTR", None],
+         "STRUCT_ATTRIBUTE_PTR", None],
 
         # Struct ended with typedef
         ["STRUCT", "}\s+([0-9A-Za-z_]+);", "POP_STATE,TYPEDEF_STRUCT_END", None],
@@ -4135,7 +4166,7 @@ class HeaderParser(lexer.SelfFeederMixIn):
         # Handle proxied directives
         ["INITIAL", r"PXXROXY_CLASS\(([A-Za-z0-9_]+)\)", "PROXY_CLASS", None],
 
-        ]
+    ]
 
     def __init__(self, name, verbose=1, base=""):
         self.module = Module(name)
@@ -4149,6 +4180,7 @@ class HeaderParser(lexer.SelfFeederMixIn):
         self.parse_fd(file_object)
 
     current_comment = ""
+
     def COMMENT(self, t, m):
         self.current_comment += m.group(1) + "\n"
 
@@ -4172,6 +4204,7 @@ class HeaderParser(lexer.SelfFeederMixIn):
             self.module.add_constant(name, type)
 
     current_class = None
+
     def CLASS_START(self, t, m):
         class_name = m.group(2).strip()
         base_class_name = m.group(3).strip()
@@ -4189,6 +4222,7 @@ class HeaderParser(lexer.SelfFeederMixIn):
         type_dispatcher[identifier] = PointerWrapper
 
     current_method = None
+
     def METHOD_START(self, t, m):
         return_type = m.group(2).strip()
         method_name = m.group(5).strip()
@@ -4256,6 +4290,7 @@ class HeaderParser(lexer.SelfFeederMixIn):
         self.current_class = None
 
     current_struct = None
+
     def STRUCT_START(self, t, m):
         self.current_struct = StructGenerator(m.group(2).strip(), self.module)
         self.current_struct.docstring = self.current_comment
@@ -4268,7 +4303,12 @@ class HeaderParser(lexer.SelfFeederMixIn):
     def STRUCT_ATTRIBUTE(self, t, m):
         name = m.group(2).strip()
         type = m.group(1).strip()
-        self.current_struct.add_attribute(name, type, "")
+        array_size = m.group(3)
+        if array_size is not None:
+            array_size = array_size.strip()
+            self.current_struct.add_attribute(name, type, "", array_size=array_size)
+        else:
+            self.current_struct.add_attribute(name, type, "")
 
     def STRUCT_ATTRIBUTE_PTR(self, t, m):
         type = "{0:s} *".format(m.group(1).strip())
@@ -4287,6 +4327,7 @@ class HeaderParser(lexer.SelfFeederMixIn):
         self.STRUCT_END(t, m)
 
     current_enum = None
+
     def ENUM_START(self, t, m):
         self.current_enum = Enum(m.group(1).strip(), self.module)
 
@@ -4306,7 +4347,7 @@ class HeaderParser(lexer.SelfFeederMixIn):
         for attr in self.current_enum.values:
             self.module.add_constant(attr, "integer")
 
-        #type_dispatcher[self.current_enum.name] = Integer
+        # type_dispatcher[self.current_enum.name] = Integer
         type_dispatcher[self.current_enum.name] = EnumType
         self.current_enum = None
 
@@ -4338,7 +4379,7 @@ class HeaderParser(lexer.SelfFeederMixIn):
                     base_class_name))
         current_class = ProxyClassGenerator(class_name,
                                             base_class_name, self.module)
-        #self.current_class.constructor.args += proxied_class.constructor.args
+        # self.current_class.constructor.args += proxied_class.constructor.args
         current_class.docstring = self.current_comment
 
         # Create proxies for all these methods
@@ -4362,22 +4403,22 @@ class HeaderParser(lexer.SelfFeederMixIn):
         file_object.close()
 
         if filename not in self.module.files:
-              if filename.startswith(self.base):
+            if filename.startswith(self.base):
                 filename = filename[len(self.base):]
 
-              self.module.headers += "#include \"{0:s}\"\n".format(filename)
-              self.module.files.append(filename)
+            self.module.headers += "#include \"{0:s}\"\n".format(filename)
+            self.module.files.append(filename)
 
     def write(self, out):
         try:
             self.module.write(out)
         except:
-            pdb.post_mortem()
+            # pdb.post_mortem()
             raise
 
     def write_headers(self):
         pass
-        #pdb.set_trace()
+        # pdb.set_trace()
 
 
 if __name__ == "__main__":
