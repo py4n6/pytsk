@@ -1005,13 +1005,14 @@ class Type(object):
         if default:
             return "{0:s} {1:s}={2:s};\n".format(
                 self.type, self.name, default)
+        elif "array_size" in self.additional_args:
+            return (
+                "int array_index = 0;\n"
+                "{0:s} UNUSED *{1:s};\n").format(
+                    self.type, self.name)
         else:
-            if "array_size" in self.additional_args:
-                return "{0:s} UNUSED *{1:s};\n".format(
-                    self.type, self.name)
-            else:
-                return "{0:s} UNUSED {1:s};\n".format(
-                    self.type, self.name)
+            return "{0:s} UNUSED {1:s};\n".format(
+                self.type, self.name)
 
     def local_definition(self, default=None, **kwargs):
         return ""
@@ -1246,12 +1247,11 @@ class IntegerUnsigned(Integer):
             return (
                 "    PyErr_Clear();\n"
                 "    {result:s} = PyList_New(0);\n"
-                "    int i;\n"
-                "    for(i=0; i<{array_size:s}; i++){{\n"
+                "    for(array_index = 0; array_index < {array_size:s}; array_index++) {{\n"
                 "#if PY_MAJOR_VERSION >= 3\n"
-                "       PyList_Append({result:s}, PyLong_FromLong((long) {name:s}[i]));\n"
+                "       PyList_Append({result:s}, PyLong_FromLong((long) {name:s}[array_index]));\n"
                 "#else\n"
-                "       PyList_Append({result:s}, PyInt_FromLong((long) {name:s}[i]));\n"
+                "       PyList_Append({result:s}, PyInt_FromLong((long) {name:s}[array_index]));\n"
                 "#endif\n"
                 "    }}\n"
             ).format(**values_dict)
