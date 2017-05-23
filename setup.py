@@ -354,8 +354,10 @@ class ProjectBuilder(object):
                     os.path.join(self._libtsk_path, library_name, extension)
                 ))
 
-        ext_modules = [Extension("pytsk3", sorted(self._source_files),
-                                 **self.extension_args)]
+        # Sort the soure files to make sure they are in consistent order when
+        # building.
+        source_files = sorted(self._source_files)
+        ext_modules = [Extension("pytsk3", source_files, **self.extension_args)]
 
         setup(
             cmdclass=dict(
