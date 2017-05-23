@@ -354,7 +354,7 @@ class ProjectBuilder(object):
                     os.path.join(self._libtsk_path, library_name, extension)
                 ))
 
-        ext_modules = [Extension("pytsk3", self._source_files,
+        ext_modules = [Extension("pytsk3", sorted(self._source_files),
                                  **self.extension_args)]
 
         setup(
