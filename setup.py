@@ -350,9 +350,9 @@ class ProjectBuilder(object):
         # Fetch all c and cpp files from the subdirs to compile.
         for library_name in self._sub_library_names:
             for extension in ["*.c", "*.cpp"]:
-                self._source_files.extend(glob.glob(
+                self._source_files.extend(sorted(glob.glob(
                     os.path.join(self._libtsk_path, library_name, extension)
-                ))
+                )))
 
         ext_modules = [Extension("pytsk3", sorted(self._source_files),
                                  **self.extension_args)]
