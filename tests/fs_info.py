@@ -1,36 +1,35 @@
 #!/usr/bin/python
-#
-# Copyright 2013, Joachim Metz <joachim.metz@gmail.com>.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# -*- coding: utf-8 -*-
+"""Tests for FS_Info."""
 
 import os
-import pytsk3
 import unittest
+
+import pytsk3
 
 import test_lib
 
 
-# fls -l ./test_data/image.raw 
-# d/d 11:	lost+found	2012-05-25 17:55:50 (CEST)	2012-05-25 17:55:50 (CEST)	2012-05-25 17:55:50 (CEST)	0000-00-00 00:00:00 (UTC)	12288	0	0
-# d/d 12:	a_directory	2012-05-25 17:59:23 (CEST)	2012-05-25 17:59:24 (CEST)	2012-05-25 17:59:23 (CEST)	0000-00-00 00:00:00 (UTC)	1024	5000	151107
-# r/r 15:	passwords.txt	2012-05-25 18:00:53 (CEST)	2012-05-25 18:00:53 (CEST)	2012-05-25 18:01:03 (CEST)	0000-00-00 00:00:00 (UTC)	116	5000	151107
-# r/- * 0:	passwords.txt~	0000-00-00 00:00:00 (UTC)	0000-00-00 00:00:00 (UTC)	0000-00-00 00:00:00 (UTC)	0000-00-00 00:00:00 (UTC)	0	0	0
-# d/d 17:	$OrphanFiles	0000-00-00 00:00:00 (UTC)	0000-00-00 00:00:00 (UTC)	0000-00-00 00:00:00 (UTC)	0000-00-00 00:00:00 (UTC)	0	0	0
+# fls -l ./test_data/image.raw
+# d/d 11:	lost+found	2012-05-25 17:55:50 (CEST)
+#	2012-05-25 17:55:50 (CEST)	2012-05-25 17:55:50 (CEST)
+#	0000-00-00 00:00:00 (UTC)	12288	0	0
+# d/d 12:	a_directory	2012-05-25 17:59:23 (CEST)
+#	2012-05-25 17:59:24 (CEST)	2012-05-25 17:59:23 (CEST)
+#	0000-00-00 00:00:00 (UTC)	1024	5000	151107
+# r/r 15:	passwords.txt	2012-05-25 18:00:53 (CEST)
+#	2012-05-25 18:00:53 (CEST)	2012-05-25 18:01:03 (CEST)
+#	0000-00-00 00:00:00 (UTC)	116	5000	151107
+# r/- * 0:	passwords.txt~	0000-00-00 00:00:00 (UTC)
+#	0000-00-00 00:00:00 (UTC)	0000-00-00 00:00:00 (UTC)
+#	0000-00-00 00:00:00 (UTC)	0	0	0
+# d/d 17:	$OrphanFiles	0000-00-00 00:00:00 (UTC)
+#	0000-00-00 00:00:00 (UTC)	0000-00-00 00:00:00 (UTC)
+#	0000-00-00 00:00:00 (UTC)	0	0	0
 
 
 class TSKFsInfoTestCase(unittest.TestCase):
-  """The test case for the FS_Info object."""
+  """FS_Info test case."""
 
   def _testInitialize(self, fs_info):
     """Test the initialize functionality.
@@ -57,7 +56,7 @@ class TSKFsInfoTestCase(unittest.TestCase):
 
 
 class TSKFsInfoTest(TSKFsInfoTestCase):
-  """The unit test for the FS_Info object."""
+  """FS_Info for testing."""
 
   def setUp(self):
     """Sets up the needed objects used throughout the test."""
@@ -76,7 +75,7 @@ class TSKFsInfoTest(TSKFsInfoTestCase):
 
 
 class TSKFsInfoBogusTest(TSKFsInfoTestCase):
-  """The unit test for the FS_Info object that should fail."""
+  """FS_Info for testing that fails."""
 
   def setUp(self):
     """Sets up the needed objects used throughout the test."""
@@ -86,11 +85,11 @@ class TSKFsInfoBogusTest(TSKFsInfoTestCase):
   def testInitialize(self):
     """Test the initialize functionality."""
     with self.assertRaises(IOError):
-      fs_info = pytsk3.FS_Info(self._img_info, offset=0)
+      pytsk3.FS_Info(self._img_info, offset=0)
 
 
 class TSKFsInfoFileObjectTest(TSKFsInfoTestCase):
-  """The unit test for the FS_Info object using an Img_Info file-like object."""
+  """Tests the FS_Info object using an Img_Info file-like object."""
 
   def setUp(self):
     """Sets up the needed objects used throughout the test."""
@@ -114,8 +113,7 @@ class TSKFsInfoFileObjectTest(TSKFsInfoTestCase):
 
 
 class TSKFsInfoFileObjectWithDetectTest(TSKFsInfoTestCase):
-  """The unit test for the FS_Info object using an Img_Info file-like object.
-     with image type: pytsk3.TSK_IMG_TYPE_DETECT."""
+  """Tests the FS_Info object with auto-detect Img_Info."""
 
   def setUp(self):
     """Sets up the needed objects used throughout the test."""
@@ -139,9 +137,8 @@ class TSKFsInfoFileObjectWithDetectTest(TSKFsInfoTestCase):
     self._testOpenMeta(fs_info)
 
 
-class TSKFsInfoFileObjectTest(TSKFsInfoTestCase):
-  """The unit test for the FS_Info object using an Img_Info file-like object
-     with a large size."""
+class TSKFsInfoFileObjectWithLargeSize(TSKFsInfoTestCase):
+  """Tests the FS_Info object with a large size Img_Info."""
 
   def setUp(self):
     """Sets up the needed objects used throughout the test."""

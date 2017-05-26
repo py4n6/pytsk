@@ -1,31 +1,20 @@
 #!/usr/bin/python
-#
-# Copyright 2013, Joachim Metz <joachim.metz@gmail.com>.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# -*- coding: utf-8 -*-
+"""Tests for Volume_Info."""
 
 import os
-import pytsk3
 import unittest
+
+import pytsk3
 
 import test_lib
 
 
-# mmls ../test_data/tsk_volume_system.raw 
+# mmls ../test_data/tsk_volume_system.raw
 # DOS Partition Table
 # Offset Sector: 0
 # Units are in 512-byte sectors
-# 
+#
 #      Slot    Start        End          Length       Description
 # 00:  Meta    0000000000   0000000000   0000000001   Primary Table (#0)
 # 01:  -----   0000000000   0000000000   0000000001   Unallocated
@@ -37,7 +26,8 @@ import test_lib
 
 
 class TSKVolumeInfoTestCase(unittest.TestCase):
-  """The test case for the Volume_Info object."""
+  """Volume_Info test case."""
+
   maxDiff = None
 
   def _testInitialize(self, volume_info):
@@ -83,7 +73,7 @@ class TSKVolumeInfoTestCase(unittest.TestCase):
 
 
 class TSKVolumeInfoTest(TSKVolumeInfoTestCase):
-  """The unit test for the Volume_Info object."""
+  """Volume_Info for testing."""
 
   def setUp(self):
     """Sets up the needed objects used throughout the test."""
@@ -102,7 +92,7 @@ class TSKVolumeInfoTest(TSKVolumeInfoTestCase):
 
 
 class TSKVolumeInfoBogusTest(TSKVolumeInfoTestCase):
-  """The unit test for the Volume_Info object that should fail."""
+  """Volume_Info for testing that fails."""
 
   def setUp(self):
     """Sets up the needed objects used throughout the test."""
@@ -112,11 +102,11 @@ class TSKVolumeInfoBogusTest(TSKVolumeInfoTestCase):
   def testInitialize(self):
     """Test the initialize functionality."""
     with self.assertRaises(IOError):
-      volume_info = pytsk3.Volume_Info(self._img_info)
+      pytsk3.Volume_Info(self._img_info)
 
 
 class TSKVolumeInfoFileObjectTest(TSKVolumeInfoTestCase):
-  """The unit test for the Volume_Info object using an Img_Info file-like object."""
+  """Tests the Volume_Info object using an Img_Info file-like object."""
 
   def setUp(self):
     """Sets up the needed objects used throughout the test."""
@@ -140,8 +130,7 @@ class TSKVolumeInfoFileObjectTest(TSKVolumeInfoTestCase):
 
 
 class TSKVolumeInfoFileObjectWithDetectTest(TSKVolumeInfoTestCase):
-  """The unit test for the Volume_Info object using an Img_Info file-like object.
-     with image type: pytsk3.TSK_IMG_TYPE_DETECT."""
+  """Tests the Volume_Info object with auto-detect Img_Info."""
 
   def setUp(self):
     """Sets up the needed objects used throughout the test."""
@@ -165,9 +154,8 @@ class TSKVolumeInfoFileObjectWithDetectTest(TSKVolumeInfoTestCase):
     self._testIterate(volume_info)
 
 
-class TSKVolumeInfoFileObjectTest(TSKVolumeInfoTestCase):
-  """The unit test for the Volume_Info object using an Img_Info file-like object
-     with a large size."""
+class TSKVolumeInfoFileObjectWithLargeSize(TSKVolumeInfoTestCase):
+  """Tests the Volume_Info object with a large size Img_Info."""
 
   def setUp(self):
     """Sets up the needed objects used throughout the test."""
