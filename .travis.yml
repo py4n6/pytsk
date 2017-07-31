@@ -25,5 +25,5 @@ script:
   - CFLAGS="-std=c99" python setup.py build
   - PYTHONPATH=`echo build/lib.*-${TRAVIS_PYTHON_VERSION} | tr ' ' ':'` python run_tests.py
   - python setup.py sdist
-  - python setup.py bdist
+  - CFLAGS="-std=c99" python setup.py bdist
   - mkdir -p ${PWD}/tmp/lib/python${TRAVIS_PYTHON_VERSION}/site-packages/ && PYTHONPATH=${PWD}/tmp/lib/python${TRAVIS_PYTHON_VERSION}/site-packages/ python setup.py install --prefix=${PWD}/tmp/
