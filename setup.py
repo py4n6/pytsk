@@ -335,7 +335,8 @@ class ProjectBuilder(object):
     self._libtsk_path = "sleuthkit/tsk"
 
     # paths under the tsk/ directory which contain files we need to compile.
-    self._sub_library_names = "auto  base  docs  fs  hashdb  img vs".split()
+    self._sub_library_names = [
+        "auto", "base", "docs", "fs", "hashdb", "img", "vs"]
 
     # The args for the extension builder.
     self.extension_args = {

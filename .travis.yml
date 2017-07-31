@@ -1,17 +1,28 @@
-sudo: required
-dist: trusty
-os:
-  - linux
 language: python
-python:
-  - "2.7"
-  - "3.4"
+matrix:
+  include:
+  - os: linux
+    dist: trusty
+    sudo: required
+    group: edge
+    python: 2.7
+    env: TOXENV=py27
+  - os: linux
+    dist: trusty
+    sudo: required
+    group: edge
+    python: 3.4
+    env: TOXENV=py34
+  - os: osx
+    osx_image: xcode8.1
+    language: generic
+    env: PYTHONPATH=/Library/Python/2.7/site-packages/
 before_install:
-  - if test `uname -s` = 'Darwin'; then brew update && brew install gettext && brew link --force gettext; fi
-  - if test `uname -s` = 'Linux'; then sudo apt-get update -q && sudo apt-get install -y autopoint; fi
+  - if test ${TRAVIS_OS_NAME} = "linux"; then sudo apt-get update -q && sudo apt-get install -y autopoint; fi
+  - if test ${TRAVIS_OS_NAME} = "osx"; then brew update && brew install gettext && brew link --force gettext; fi
 script:
   - python setup.py update
-  - python setup.py build
+  - CFLAGS="-std=c99" python setup.py build
   - PYTHONPATH=`echo build/lib.*-${TRAVIS_PYTHON_VERSION} | tr ' ' ':'` python run_tests.py
   - python setup.py sdist
   - python setup.py bdist
