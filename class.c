@@ -22,7 +22,7 @@
 // Noone should instantiate Object directly. this should be already
 // allocated therefore:
 
-DLL_PUBLIC PYTSK_INLINE void Object_init(Object this) {
+DLL_PUBLIC void Object_init(Object this) {
   this->__class__ = &__Object;
   this->__super__ = NULL;
 };
