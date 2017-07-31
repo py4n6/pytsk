@@ -242,18 +242,44 @@ class UpdateCommand(Command):
   files = {
       "sleuthkit/configure.ac": [
           ("([a-z_/]+)/Makefile",
-           lambda m: m.group(0) if m.group(1).startswith("tsk") else "")
+           lambda m: m.group(0) if m.group(1).startswith("tsk") else ""),
       ],
-
       "sleuthkit/Makefile.am": [
           ("SUBDIRS = .+", "SUBDIRS = tsk"),
       ],
       "class_parser.py": [
-          ('VERSION = "[^"]+"', 'VERSION = "%s"' % version)
+          ('VERSION = "[^"]+"', 'VERSION = "%s"' % version),
       ],
       "dpkg/changelog": [
           (r"pytsk3 \([^\)]+\)", "pytsk3 (%s-1)" % version),
           ("(<[^>]+>).+", r"\1  %s" % version_pkg),
+      ],
+      "sleuthkit/tsk/fs/fs_name.c": [
+          ('#include "tsk_fs_i.h"', (
+              '#include "tsk_fs_i.h"\n'
+              '\n'
+              '#include <time.h>\n'
+              '\n'
+              '#ifndef __USE_POSIX\n'
+              '#define TZNAME __tzname\n'
+              '#endif')),
+      ],
+      "tsk/img/raw.c": [
+          ('#include "raw.h"', (
+              '#include "raw.h"\n'
+              '\n'
+              '#include <sys/types.h>\n'
+              '#include <sys/stat.h>\n'
+              '#include <unistd.h>\n'
+              '#include <fcntl.h>\n'
+              '\n'
+              '#ifndef S_IFMT\n'
+              '#define S_IFMT __S_IFMT\n'
+              '#endif\n'
+              '\n'
+              '#ifndef S_IFDIR\n'
+              '#define S_IFDIR __S_IFDIR\n'
+              '#endif')),
       ],
   }
 
@@ -266,9 +292,6 @@ class UpdateCommand(Command):
 
       with open(filename, "w") as fd:
         fd.write(data)
-
-    for patch_file in glob.glob(os.path.join("patches", "*.patch")):
-      subprocess.check_call(["git", "apply", "-p0", patch_file])
 
   def run(self):
     subprocess.check_call(["git", "stash"], cwd="sleuthkit")
