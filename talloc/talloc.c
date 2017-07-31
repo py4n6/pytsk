@@ -33,6 +33,8 @@
 #include "replace.h"
 #include "talloc.h"
 
+#include <sys/types.h>
+
 #ifdef TALLOC_BUILD_VERSION_MAJOR
 #if (TALLOC_VERSION_MAJOR != TALLOC_BUILD_VERSION_MAJOR)
 #error "TALLOC_VERSION_MAJOR != TALLOC_BUILD_VERSION_MAJOR"
