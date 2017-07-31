@@ -264,7 +264,7 @@ class UpdateCommand(Command):
               '#define TZNAME __tzname\n'
               '#endif')),
       ],
-      "tsk/img/raw.c": [
+      "sleuthkit/tsk/img/raw.c": [
           ('#include "raw.h"', (
               '#include "raw.h"\n'
               '\n'
