@@ -1,10 +1,14 @@
-include *
+include LICENSE version.txt
+include *.c
+include *.h
+include *.py
+exclude .gitignore
+exclude .gitmodules
+exclude .travis.yml
+exclude *.pyc
 recursive-include dpkg *
-recursive-include sleuthkit *
 recursive-include examples *.py
-recursive-include talloc *
-
-recursive-exclude test_data *
+recursive-include sleuthkit *
 recursive-exclude sleuthkit/bindings *
 recursive-exclude sleuthkit/autom4te.cache *
 recursive-exclude sleuthkit/framework *
@@ -17,3 +21,5 @@ recursive-exclude sleuthkit/tools *
 recursive-exclude sleuthkit/unit_tests *
 recursive-exclude sleuthkit/win32 *
 recursive-exclude sleuthkit/xcode *
+recursive-include talloc *
+recursive-exclude test_data *

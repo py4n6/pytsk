@@ -468,7 +468,8 @@ python method calls on the proxied object.
   // appropriately and it can be free'd from under us.
 #define FOREIGN
 
-#endif
 #ifdef __cplusplus
 } /* closing brace for extern "C" */
 #endif
+
+#endif /* ifndef __CLASS_H__ */
