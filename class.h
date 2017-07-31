@@ -281,16 +281,6 @@ extern "C" {
 
 // The following only initialises the class if the __super__ element
 // is NULL. This is fast as it wont call the initaliser unnecessaily
-#if 0
-#define CONSTRUCT(class, virt_class, constructor, context, ... )        \
-  (class)( __## class.__super__ == NULL ?                               \
-           class ## _init((Object)&__ ## class) : 0,                    \
-           __## virt_class.__super__ == NULL ?                          \
-           virt_class ## _init((Object)&__ ## virt_class): 0,           \
-             ((virt_class)(&__ ## class))->constructor(                 \
-                       (virt_class)_talloc_memdup(context, &__ ## class, sizeof(struct class ## _t),  __location__ "(" #class ")"), \
-				   ## __VA_ARGS__) )
-#endif
 
   // This requires the class initializers to have been called
   // previously. Therefore they are not exported.

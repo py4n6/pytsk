@@ -341,6 +341,7 @@ class ProjectBuilder(object):
     # The args for the extension builder.
     self.extension_args = {
         "define_macros": [],
+        "extra_compile_args": ["-std=c99"],
         "include_dirs": ["talloc", "sleuthkit/tsk", "sleuthkit", "."],
         "library_dirs": [],
         "libraries": []}
