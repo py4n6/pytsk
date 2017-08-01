@@ -35,6 +35,8 @@ import subprocess
 import sys
 import time
 
+import distutils.ccompiler
+
 from distutils.ccompiler import new_compiler
 from setuptools import setup, Command, Extension
 from setuptools.command.build_ext import build_ext
@@ -178,7 +180,7 @@ class BuildExtCommand(build_ext):
     # pylint: disable=attribute-defined-outside-init
     self.define = self.configure_source_tree(compiler)
 
-    libtsk_path = "sleuthkit/tsk"
+    libtsk_path = os.path.join("sleuthkit", "tsk")
 
     if not os.access("pytsk3.c", os.R_OK):
       # Generate the Python binding code (pytsk3.c).
@@ -200,7 +202,7 @@ class BuildExtCommand(build_ext):
 class SDistCommand(sdist):
   """Custom handler for generating source dist."""
   def run(self):
-    libtsk_path = "sleuthkit/tsk"
+    libtsk_path = os.path.join("sleuthkit", "tsk")
 
     # sleuthkit submodule is not there, probably because this has been
     # freshly checked out.
@@ -269,18 +271,43 @@ class UpdateCommand(Command):
               '#endif')),
       ],
       "sleuthkit/tsk/fs/fs_open.c": [
-          ('if \(a_img_info == NULL\) {',
-           'int i = 0;\n\n    if (a_img_info == NULL) {'),
+          # Note that the list order is important here.
+          ('const char \*name_first;', '/* const char \*name_first; */'),
+          ('        const struct {', '        /* const struct {'),
+          ('        };', '        }; */'),
+          ('if \(a_img_info == NULL\) {', (
+               'int i = 0;\n'
+               '    const char *name_first;\n'
+               '    const struct {\n'
+               '        char* name;\n'
+               '        TSK_FS_INFO* (*open)(TSK_IMG_INFO*, TSK_OFF_T,\n'
+               '                             TSK_FS_TYPE_ENUM, uint8_t);\n'
+               '        TSK_FS_TYPE_ENUM type;\n'
+               '    } FS_OPENERS[] = {\n'
+               '        { "NTFS",     ntfs_open,    TSK_FS_TYPE_NTFS_DETECT    },\n'
+               '        { "FAT",      fatfs_open,   TSK_FS_TYPE_FAT_DETECT     },\n'
+               '        { "EXT2/3/4", ext2fs_open,  TSK_FS_TYPE_EXT_DETECT     },\n'
+               '        { "UFS",      ffs_open,     TSK_FS_TYPE_FFS_DETECT     },\n'
+               '        { "YAFFS2",   yaffs2_open,  TSK_FS_TYPE_YAFFS2_DETECT  },\n'
+               '#if TSK_USE_HFS\n'
+               '        { "HFS",      hfs_open,     TSK_FS_TYPE_HFS_DETECT     },\n'
+               '#endif\n'
+               '        { "ISO9660",  iso9660_open, TSK_FS_TYPE_ISO9660_DETECT }\n'
+               '    };\n'
+               '\n'
+               '    if (a_img_info == NULL) {')),
           ('for \(int i = 0;', 'for (i = 0;'),
       ],
       "sleuthkit/tsk/img/raw.c": [
           ('#include "raw.h"', (
               '#include "raw.h"\n'
               '\n'
+              '#ifndef TSK_WIN32\n'
               '#include <sys/types.h>\n'
               '#include <sys/stat.h>\n'
               '#include <unistd.h>\n'
               '#include <fcntl.h>\n'
+              '#endif\n'
               '\n'
               '#ifndef S_IFMT\n'
               '#define S_IFMT __S_IFMT\n'
@@ -295,9 +322,19 @@ class UpdateCommand(Command):
   def patch_sleuthkit(self):
     """Applies patches to the SleuthKit source code."""
     for filename, rules in iter(self.files.items()):
-      data = open(filename).read()
+      filename = os.path.join(*filename.split("/"))
+
+      with open(filename, "r") as file_object:
+        data = file_object.read()
+
       for search, replace in rules:
         data = re.sub(search, replace, data)
+
+      if filename == os.path.join("sleuthkit", "tsk", "img", "raw.c"):
+        lines = data.split("\n")
+        swap = lines.pop(381)
+        lines.insert(372, swap)
+        data = "\n".join(lines)
 
       with open(filename, "w") as fd:
         fd.write(data)
@@ -319,13 +356,16 @@ class UpdateCommand(Command):
         ["git", "checkout", "tags/sleuthkit-4.4.1"], cwd="sleuthkit")
 
     self.patch_sleuthkit()
-    subprocess.check_call(["./bootstrap"], cwd="sleuthkit")
+
+    compiler_type = distutils.ccompiler.get_default_compiler()
+    if compiler_type != "msvc":
+      subprocess.check_call(["./bootstrap"], cwd="sleuthkit")
 
     # Now derive the version based on the date.
     with open("version.txt", "w") as fd:
       fd.write(self.version)
 
-    libtsk_path = "sleuthkit/tsk"
+    libtsk_path = os.path.join("sleuthkit", "tsk")
 
     # Generate the Python binding code (pytsk3.c).
     libtsk_header_files = [
@@ -349,17 +389,18 @@ class ProjectBuilder(object):
     self._project_config = project_config
     self._argv = argv
 
-    # The path to the "tsk" directory.
-    self._libtsk_path = "sleuthkit/tsk"
+    # The path to the sleuthkit/tsk directory.
+    self._libtsk_path = os.path.join("sleuthkit", "tsk")
 
-    # paths under the tsk/ directory which contain files we need to compile.
+    # Paths under the sleuthkit/tsk directory which contain files we need
+    # to compile.
     self._sub_library_names = [
         "auto", "base", "docs", "fs", "hashdb", "img", "vs"]
 
     # The args for the extension builder.
     self.extension_args = {
         "define_macros": [],
-        "include_dirs": ["talloc", "sleuthkit/tsk", "sleuthkit", "."],
+        "include_dirs": ["talloc", self._libtsk_path, "sleuthkit", "."],
         "library_dirs": [],
         "libraries": []}
 

@@ -10,6 +10,5 @@ build_script:
   - "%PYTHON%\\python.exe setup.py build"
 
 test_script:
-  - dir build\
-  - set PYTHONPATH=build\lib.win*-2.7
+  - set PYTHONPATH="build\\lib.win32-2.7"
   - "%PYTHON%\\python.exe run_tests.py"

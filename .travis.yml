@@ -21,7 +21,7 @@ before_install:
 script:
   - python setup.py update
   - python setup.py build
-  - PYTHONPATH=`echo build/lib.*-${TRAVIS_PYTHON_VERSION} | tr ' ' ':'` python run_tests.py
+  - PYTHONPATH=`ls -1d build/lib.*` python run_tests.py
   - python setup.py sdist
   - python setup.py bdist
   - if test ${TRAVIS_OS_NAME} = "linux"; then mkdir -p ${PWD}/tmp/lib/python${TRAVIS_PYTHON_VERSION}/site-packages/ && PYTHONPATH=${PWD}/tmp/lib/python${TRAVIS_PYTHON_VERSION}/site-packages/ python setup.py install --prefix=${PWD}/tmp/; fi
