@@ -1,0 +1,15 @@
+environment:
+  matrix:
+    - PYTHON: "C:\\Python27"
+
+install:
+  - cmd: '"C:\Program Files\Microsoft SDKs\Windows\v7.1\Bin\SetEnv.cmd" /x86 /release'
+
+build_script:
+  - "%PYTHON%\\python.exe setup.py update"
+  - "%PYTHON%\\python.exe setup.py build"
+
+test_script:
+  - dir build\
+  - set PYTHONPATH=build\lib.win*-2.7
+  - "%PYTHON%\\python.exe run_tests.py"

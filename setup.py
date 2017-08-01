@@ -264,7 +264,7 @@ class UpdateCommand(Command):
               '\n'
               '#include <time.h>\n'
               '\n'
-              '#ifndef __USE_POSIX\n'
+              '#ifndef TZNAME\n'
               '#define TZNAME __tzname\n'
               '#endif')),
       ],
