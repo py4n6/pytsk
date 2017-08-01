@@ -208,6 +208,10 @@ class SDistCommand(sdist):
       subprocess.check_call(["git", "submodule", "init"])
       subprocess.check_call(["git", "submodule", "update"])
 
+    if not os.path.exists(os.path.join("sleuthkit", "configure")):
+      raise RuntimeError(
+          "Missing: sleuthkit/configure run 'setup.py build' first.")
+
     sdist.run(self)
 
 
@@ -263,6 +267,11 @@ class UpdateCommand(Command):
               '#ifndef __USE_POSIX\n'
               '#define TZNAME __tzname\n'
               '#endif')),
+      ],
+      "sleuthkit/tsk/fs/fs_open.c": [
+          ('if \(a_img_info == NULL\) {',
+           'int i = 0;\n\n    if (a_img_info == NULL) {'),
+          ('for \(int i = 0;', 'for (i = 0;'),
       ],
       "sleuthkit/tsk/img/raw.c": [
           ('#include "raw.h"', (
