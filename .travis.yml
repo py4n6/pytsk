@@ -24,4 +24,4 @@ script:
   - PYTHONPATH=`echo build/lib.*-${TRAVIS_PYTHON_VERSION} | tr ' ' ':'` python run_tests.py
   - python setup.py sdist
   - python setup.py bdist
-  - mkdir -p ${PWD}/tmp/lib/python${TRAVIS_PYTHON_VERSION}/site-packages/ && PYTHONPATH=${PWD}/tmp/lib/python${TRAVIS_PYTHON_VERSION}/site-packages/ python setup.py install --prefix=${PWD}/tmp/
+  - if test ${TRAVIS_OS_NAME} = "linux"; then mkdir -p ${PWD}/tmp/lib/python${TRAVIS_PYTHON_VERSION}/site-packages/ && PYTHONPATH=${PWD}/tmp/lib/python${TRAVIS_PYTHON_VERSION}/site-packages/ python setup.py install --prefix=${PWD}/tmp/; fi

@@ -341,20 +341,6 @@ class UpdateCommand(Command):
         "pytsk3.c", libtsk_header_files, initialization="tsk_init();")
 
 
-class TestCommand(Command):
-  """Command to run tests."""
-  user_options = []
-
-  def initialize_options(self):
-    self._dir = os.getcwd()
-
-  def finalize_options(self):
-    pass
-
-  def run(self):
-    run_tests.RunTests(os.path.join(".", "tests"))
-
-
 class ProjectBuilder(object):
   """Class to help build the project."""
 
@@ -404,8 +390,7 @@ class ProjectBuilder(object):
             "bdist_msi": BdistMSICommand,
             "bdist_rpm": BdistRPMCommand,
             "sdist": SDistCommand,
-            "update": UpdateCommand,
-            "test": TestCommand},
+            "update": UpdateCommand},
         ext_modules=ext_modules,
         **self._project_config)
 
