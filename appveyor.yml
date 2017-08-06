@@ -1,6 +1,11 @@
 environment:
   matrix:
-    - PYTHON: "C:\\Python27"
+    - TARGET: "Python 2.7"
+      PYTHON: "C:\\Python27"
+      PYTHON_VERSION: "2.7"
+    - TARGET: "Python 3.6"
+      PYTHON: "C:\\Python36"
+      PYTHON_VERSION: "3.6"
 
 install:
   - cmd: '"C:\Program Files\Microsoft SDKs\Windows\v7.1\Bin\SetEnv.cmd" /x86 /release'
@@ -10,5 +15,5 @@ build_script:
   - "%PYTHON%\\python.exe setup.py build"
 
 test_script:
-  - "set PYTHONPATH=build\\lib.win32-2.7"
+  - "set PYTHONPATH=build\\lib.win32-%PYTHON_VERSION%"
   - "%PYTHON%\\python.exe run_tests.py"
