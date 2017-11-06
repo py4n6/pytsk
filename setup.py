@@ -273,14 +273,11 @@ class UpdateCommand(Command):
       for search, replace in rules:
         data = re.sub(search, replace, data)
 
-      if filename == os.path.join("sleuthkit", "tsk", "img", "raw.c"):
-        lines = data.split("\n")
-        swap = lines.pop(381)
-        lines.insert(372, swap)
-        data = "\n".join(lines)
-
       with open(filename, "w") as fd:
         fd.write(data)
+
+    patch_file = os.path.join("..", "sleuthkit-4.5.0.patch")
+    subprocess.check_call(["git", "apply", patch_file], cwd="sleuthkit")
 
   def run(self):
     subprocess.check_call(["git", "stash"], cwd="sleuthkit")
