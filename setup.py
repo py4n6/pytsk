@@ -260,63 +260,6 @@ class UpdateCommand(Command):
           (r"pytsk3 \([^\)]+\)", "pytsk3 (%s-1)" % version),
           ("(<[^>]+>).+", r"\1  %s" % version_pkg),
       ],
-      "sleuthkit/tsk/fs/fs_name.c": [
-          ('#include "tsk_fs_i.h"', (
-              '#include "tsk_fs_i.h"\n'
-              '\n'
-              '#include <time.h>\n'
-              '\n'
-              '#ifndef TZNAME\n'
-              '#define TZNAME __tzname\n'
-              '#endif')),
-      ],
-      "sleuthkit/tsk/fs/fs_open.c": [
-          # Note that the list order is important here.
-          ('const char \*name_first;', '/* const char \*name_first; */'),
-          ('        const struct {', '        /* const struct {'),
-          ('        };', '        }; */'),
-          ('if \(a_img_info == NULL\) {', (
-               'int i = 0;\n'
-               '    const char *name_first;\n'
-               '    const struct {\n'
-               '        char* name;\n'
-               '        TSK_FS_INFO* (*open)(TSK_IMG_INFO*, TSK_OFF_T,\n'
-               '                             TSK_FS_TYPE_ENUM, uint8_t);\n'
-               '        TSK_FS_TYPE_ENUM type;\n'
-               '    } FS_OPENERS[] = {\n'
-               '        { "NTFS",     ntfs_open,    TSK_FS_TYPE_NTFS_DETECT    },\n'
-               '        { "FAT",      fatfs_open,   TSK_FS_TYPE_FAT_DETECT     },\n'
-               '        { "EXT2/3/4", ext2fs_open,  TSK_FS_TYPE_EXT_DETECT     },\n'
-               '        { "UFS",      ffs_open,     TSK_FS_TYPE_FFS_DETECT     },\n'
-               '        { "YAFFS2",   yaffs2_open,  TSK_FS_TYPE_YAFFS2_DETECT  },\n'
-               '#if TSK_USE_HFS\n'
-               '        { "HFS",      hfs_open,     TSK_FS_TYPE_HFS_DETECT     },\n'
-               '#endif\n'
-               '        { "ISO9660",  iso9660_open, TSK_FS_TYPE_ISO9660_DETECT }\n'
-               '    };\n'
-               '\n'
-               '    if (a_img_info == NULL) {')),
-          ('for \(int i = 0;', 'for (i = 0;'),
-      ],
-      "sleuthkit/tsk/img/raw.c": [
-          ('#include "raw.h"', (
-              '#include "raw.h"\n'
-              '\n'
-              '#ifndef TSK_WIN32\n'
-              '#include <sys/types.h>\n'
-              '#include <sys/stat.h>\n'
-              '#include <unistd.h>\n'
-              '#include <fcntl.h>\n'
-              '#endif\n'
-              '\n'
-              '#ifndef S_IFMT\n'
-              '#define S_IFMT __S_IFMT\n'
-              '#endif\n'
-              '\n'
-              '#ifndef S_IFDIR\n'
-              '#define S_IFDIR __S_IFDIR\n'
-              '#endif')),
-      ],
   }
 
   def patch_sleuthkit(self):
@@ -353,7 +296,7 @@ class UpdateCommand(Command):
     subprocess.check_call(["git", "pull"], cwd="sleuthkit")
     subprocess.check_call(["git", "fetch", "--tags"], cwd="sleuthkit")
     subprocess.check_call(
-        ["git", "checkout", "tags/sleuthkit-4.4.2"], cwd="sleuthkit")
+        ["git", "checkout", "tags/sleuthkit-4.5.0"], cwd="sleuthkit")
 
     self.patch_sleuthkit()
 
