@@ -276,8 +276,8 @@ class UpdateCommand(Command):
       with open(filename, "w") as fd:
         fd.write(data)
 
-    patch_file = os.path.join("..", "sleuthkit-4.5.0.patch")
-    subprocess.check_call(["git", "apply", patch_file], cwd="sleuthkit")
+    # patch_file = os.path.join("..", "sleuthkit-4.6.0.patch")
+    # subprocess.check_call(["git", "apply", patch_file], cwd="sleuthkit")
 
   def run(self):
     subprocess.check_call(["git", "stash"], cwd="sleuthkit")
@@ -293,7 +293,7 @@ class UpdateCommand(Command):
     subprocess.check_call(["git", "pull"], cwd="sleuthkit")
     subprocess.check_call(["git", "fetch", "--tags"], cwd="sleuthkit")
     subprocess.check_call(
-        ["git", "checkout", "tags/sleuthkit-4.5.0"], cwd="sleuthkit")
+        ["git", "checkout", "tags/sleuthkit-4.6.0"], cwd="sleuthkit")
 
     self.patch_sleuthkit()
 
