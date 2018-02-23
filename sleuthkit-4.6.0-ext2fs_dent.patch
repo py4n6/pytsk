@@ -1,0 +1,134 @@
+diff --git a/tsk/fs/ext2fs_dent.c b/tsk/fs/ext2fs_dent.c
+index c752c17f..5578f291 100644
+--- a/tsk/fs/ext2fs_dent.c
++++ b/tsk/fs/ext2fs_dent.c
+@@ -10,7 +10,7 @@
+ **
+ ** TASK
+ ** Copyright (c) 2002 Brian Carrier, @stake Inc.  All rights reserved
+-**
++*
+ ** TCTUTILS
+ ** Copyright (c) 2001 Brian Carrier.  All rights reserved
+ **
+@@ -35,49 +35,51 @@ ext2fs_dent_copy(EXT2FS_INFO * ext2fs,
+     char *ext2_dent, TSK_FS_NAME * fs_name)
+ {
+     TSK_FS_INFO *fs = &(ext2fs->fs_info);
++    ext2fs_dentry1 *dir1 = NULL;
++    ext2fs_dentry2 *dir2 = NULL;
+ 
+     if (ext2fs->deentry_type == EXT2_DE_V1) {
+-        ext2fs_dentry1 *dir = (ext2fs_dentry1 *) ext2_dent;
++        dir1 = (ext2fs_dentry1 *) ext2_dent;
+ 
+-        fs_name->meta_addr = tsk_getu32(fs->endian, dir->inode);
++        fs_name->meta_addr = tsk_getu32(fs->endian, dir1->inode);
+ 
+         /* ext2 does not null terminate */
+-        if (tsk_getu16(fs->endian, dir->name_len) >= fs_name->name_size) {
++        if (tsk_getu16(fs->endian, dir1->name_len) >= fs_name->name_size) {
+             tsk_error_reset();
+             tsk_error_set_errno(TSK_ERR_FS_ARG);
+             tsk_error_set_errstr
+                 ("ext2fs_dent_copy: Name Space too Small %d %" PRIuSIZE "",
+-                tsk_getu16(fs->endian, dir->name_len), fs_name->name_size);
++                tsk_getu16(fs->endian, dir1->name_len), fs_name->name_size);
+             return 1;
+         }
+ 
+         /* Copy and Null Terminate */
+-        strncpy(fs_name->name, dir->name, tsk_getu16(fs->endian,
+-                dir->name_len));
+-        fs_name->name[tsk_getu16(fs->endian, dir->name_len)] = '\0';
++        strncpy(fs_name->name, dir1->name, tsk_getu16(fs->endian,
++                dir1->name_len));
++        fs_name->name[tsk_getu16(fs->endian, dir1->name_len)] = '\0';
+ 
+         fs_name->type = TSK_FS_NAME_TYPE_UNDEF;
+     }
+     else {
+-        ext2fs_dentry2 *dir = (ext2fs_dentry2 *) ext2_dent;
++        dir2 = (ext2fs_dentry2 *) ext2_dent;
+ 
+-        fs_name->meta_addr = tsk_getu32(fs->endian, dir->inode);
++        fs_name->meta_addr = tsk_getu32(fs->endian, dir2->inode);
+ 
+         /* ext2 does not null terminate */
+-        if (dir->name_len >= fs_name->name_size) {
++        if (dir2->name_len >= fs_name->name_size) {
+             tsk_error_reset();
+             tsk_error_set_errno(TSK_ERR_FS_ARG);
+             tsk_error_set_errstr
+                 ("ext2_dent_copy: Name Space too Small %d %" PRIuSIZE "",
+-                dir->name_len, fs_name->name_size);
++                dir2->name_len, fs_name->name_size);
+             return 1;
+         }
+ 
+         /* Copy and Null Terminate */
+-        strncpy(fs_name->name, dir->name, dir->name_len);
+-        fs_name->name[dir->name_len] = '\0';
++        strncpy(fs_name->name, dir2->name, dir2->name_len);
++        fs_name->name[dir2->name_len] = '\0';
+ 
+-        switch (dir->type) {
++        switch (dir2->type) {
+         case EXT2_DE_REG:
+             fs_name->type = TSK_FS_NAME_TYPE_REG;
+             break;
+@@ -129,6 +131,7 @@ ext2fs_dent_parse_block(EXT2FS_INFO * ext2fs, TSK_FS_DIR * a_fs_dir,
+     char *dirPtr;
+     TSK_FS_NAME *fs_name;
+     int minreclen = 4;
++    unsigned int namelen;
+ 
+     if ((fs_name = tsk_fs_name_alloc(EXT2FS_MAXNAMLEN + 1, 0)) == NULL)
+         return TSK_ERR;
+@@ -138,7 +141,6 @@ ext2fs_dent_parse_block(EXT2FS_INFO * ext2fs, TSK_FS_DIR * a_fs_dir,
+      */
+     for (idx = 0; idx <= len - EXT2FS_DIRSIZ_lcl(1); idx += minreclen) {
+ 
+-        unsigned int namelen;
+         dirPtr = &buf[idx];
+ 
+         if (ext2fs->deentry_type == EXT2_DE_V1) {
+@@ -242,8 +244,12 @@ ext2fs_dir_open_meta(TSK_FS_INFO * a_fs, TSK_FS_DIR ** a_fs_dir,
+     EXT2FS_INFO *ext2fs = (EXT2FS_INFO *) a_fs;
+     char *dirbuf;
+     TSK_OFF_T size;
++    TSK_OFF_T offset = 0;
+     TSK_FS_DIR *fs_dir;
++    TSK_FS_NAME *fs_name = NULL;
+     TSK_LIST *list_seen = NULL;
++    int cnt = 0;
++    int len = 0;
+ 
+     /* If we get corruption in one of the blocks, then continue processing.
+      * retval_final will change when corruption is detected.  Errors are
+@@ -318,13 +324,12 @@ ext2fs_dir_open_meta(TSK_FS_INFO * a_fs, TSK_FS_DIR ** a_fs_dir,
+     }
+ 
+     size = roundup(fs_dir->fs_file->meta->size, a_fs->block_size);
+-    TSK_OFF_T offset = 0;
++    offset = 0;
+ 
+     while ((int64_t) size > 0) {
+-        int len =
+-            (a_fs->block_size < size) ? a_fs->block_size : (int) size;
++        len = (a_fs->block_size < size) ? a_fs->block_size : (int) size;
+ 
+-        int cnt = tsk_fs_file_read(fs_dir->fs_file, offset, dirbuf, len, (TSK_FS_FILE_READ_FLAG_ENUM)0);
++        cnt = tsk_fs_file_read(fs_dir->fs_file, offset, dirbuf, len, (TSK_FS_FILE_READ_FLAG_ENUM)0);
+         if (cnt != len) {
+             printf("  Failed - read 0x%x bytes\n", cnt);
+             tsk_error_reset();
+@@ -358,7 +363,7 @@ ext2fs_dir_open_meta(TSK_FS_INFO * a_fs, TSK_FS_DIR ** a_fs_dir,
+ 
+     // if we are listing the root directory, add the Orphan directory entry
+     if (a_addr == a_fs->root_inum) {
+-        TSK_FS_NAME *fs_name = tsk_fs_name_alloc(256, 0);
++        fs_name = tsk_fs_name_alloc(256, 0);
+         if (fs_name == NULL)
+             return TSK_ERR;
+ 
