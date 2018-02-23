@@ -151,6 +151,7 @@ class BuildExtCommand(build_ext):
       return define_macros + [
           ("WIN32", "1"),
           ("UNICODE", "1"),
+          ("_CRT_SECURE_NO_WARNINGS", "1"),
       ]
 
     # We want to build as much as possible self contained Python
