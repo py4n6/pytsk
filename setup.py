@@ -277,8 +277,11 @@ class UpdateCommand(Command):
       with open(filename, "w") as fd:
         fd.write(data)
 
-    # patch_file = os.path.join("..", "sleuthkit-4.6.0.patch")
-    # subprocess.check_call(["git", "apply", patch_file], cwd="sleuthkit")
+    patch_file = os.path.join("..", "sleuthkit-4.6.0-ext2fs.patch")
+    subprocess.check_call(["git", "apply", patch_file], cwd="sleuthkit")
+
+    patch_file = os.path.join("..", "sleuthkit-4.6.0-lzvn.patch")
+    subprocess.check_call(["git", "apply", patch_file], cwd="sleuthkit")
 
   def run(self):
     subprocess.check_call(["git", "stash"], cwd="sleuthkit")
