@@ -281,6 +281,7 @@ class UpdateCommand(Command):
         "sleuthkit-4.6.0-ext2fs.patch",
         "sleuthkit-4.6.0-ext2fs_dent.patch",
         "sleuthkit-4.6.0-ffs_dent.patch",
+        "sleuthkit-4.6.0-gpt.patch",
         "sleuthkit-4.6.0-hfs.patch",
         "sleuthkit-4.6.0-lzvn.patch",
         "sleuthkit-4.6.0-ntfs.patch"]

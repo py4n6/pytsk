@@ -1,0 +1,69 @@
+diff --git a/tsk/vs/gpt.c b/tsk/vs/gpt.c
+index cf6bc4ac..0a830bec 100644
+--- a/tsk/vs/gpt.c
++++ b/tsk/vs/gpt.c
+@@ -36,6 +36,15 @@ gpt_load_table(TSK_VS_INFO * vs, GPT_LOCATION_ENUM gpt_type)
+     TSK_DADDR_T gpt_relative_addr;
+     TSK_DADDR_T gpt_absolute_addr;
+ 
++    TSK_DADDR_T dos_sect_relative_addr = 0;
++    TSK_DADDR_T dos_sect_absolute_addr = 0;
++
++    char *name;
++
++    UTF16 *name16;
++    UTF8 *name8;
++    int retVal;
++
+     if(gpt_type == PRIMARY_TABLE){
+         gpt_relative_addr = GPT_PART_SOFFSET + 1;
+         gpt_absolute_addr = vs->offset / vs->block_size + GPT_PART_SOFFSET + 1;
+@@ -52,8 +61,8 @@ gpt_load_table(TSK_VS_INFO * vs, GPT_LOCATION_ENUM gpt_type)
+         return 1;
+ 
+     if(gpt_type == PRIMARY_TABLE){
+-        TSK_DADDR_T dos_sect_relative_addr = GPT_PART_SOFFSET;
+-        TSK_DADDR_T dos_sect_absolute_addr = vs->offset / vs->block_size + GPT_PART_SOFFSET;
++        dos_sect_relative_addr = GPT_PART_SOFFSET;
++        dos_sect_absolute_addr = vs->offset / vs->block_size + GPT_PART_SOFFSET;
+         dos_part = (dos_sect *) sect_buf;
+ 
+         cnt = tsk_vs_read_block
+@@ -194,8 +203,6 @@ gpt_load_table(TSK_VS_INFO * vs, GPT_LOCATION_ENUM gpt_type)
+ 
+     i = 0;
+     for (a = 0; i < tsk_getu32(vs->endian, &head->tab_num_ent); a++) {
+-        char *name;
+-
+         /* Read a sector */
+         cnt = tsk_vs_read_block(vs,
+             tsk_getu64(vs->endian, &head->tab_start_lba) + a,
+@@ -218,10 +225,6 @@ gpt_load_table(TSK_VS_INFO * vs, GPT_LOCATION_ENUM gpt_type)
+         for (; (uintptr_t) ent < (uintptr_t) ent_buf + vs->block_size &&
+             i < tsk_getu32(vs->endian, &head->tab_num_ent); i++) {
+ 
+-            UTF16 *name16;
+-            UTF8 *name8;
+-            int retVal;
+-
+             if (tsk_verbose)
+                 tsk_fprintf(stderr,
+                     "gpt_load: %d  Starting Sector: %" PRIu64
+@@ -305,6 +308,8 @@ tsk_vs_gpt_open(TSK_IMG_INFO * img_info, TSK_DADDR_T offset)
+ {
+     TSK_VS_INFO *vs;
+ 
++    int found = 0;
++
+     // clean up any errors that are lying around
+     tsk_error_reset();
+ 
+@@ -339,7 +344,7 @@ tsk_vs_gpt_open(TSK_IMG_INFO * img_info, TSK_DADDR_T offset)
+     /* Load the partitions into the sorted list */
+     if (gpt_load_table(vs, PRIMARY_TABLE)) {
+         tsk_vs_part_free(vs);
+-        int found = 0;
++        found = 0;
+         if (tsk_verbose)
+             tsk_fprintf(stderr, "gpt_open: Trying other sector sizes\n");
+ 
