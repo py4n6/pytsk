@@ -277,20 +277,17 @@ class UpdateCommand(Command):
       with open(filename, "w") as fd:
         fd.write(data)
 
-    patch_file = os.path.join("..", "sleuthkit-4.6.0-ext2fs.patch")
-    subprocess.check_call(["git", "apply", patch_file], cwd="sleuthkit")
+    patch_files = [
+        "sleuthkit-4.6.0-ext2fs.patch",
+        "sleuthkit-4.6.0-ext2fs_dent.patch",
+        "sleuthkit-4.6.0-ffs_dent.patch",
+        "sleuthkit-4.6.0-hfs.patch",
+        "sleuthkit-4.6.0-lzvn.patch",
+        "sleuthkit-4.6.0-ntfs.patch"]
 
-    patch_file = os.path.join("..", "sleuthkit-4.6.0-ext2fs_dent.patch")
-    subprocess.check_call(["git", "apply", patch_file], cwd="sleuthkit")
-
-    patch_file = os.path.join("..", "sleuthkit-4.6.0-ffs_dent.patch")
-    subprocess.check_call(["git", "apply", patch_file], cwd="sleuthkit")
-
-    patch_file = os.path.join("..", "sleuthkit-4.6.0-hfs.patch")
-    subprocess.check_call(["git", "apply", patch_file], cwd="sleuthkit")
-
-    patch_file = os.path.join("..", "sleuthkit-4.6.0-lzvn.patch")
-    subprocess.check_call(["git", "apply", patch_file], cwd="sleuthkit")
+    for patch_file in patch_files:
+      patch_file = os.path.join("..", patch_file)
+      subprocess.check_call(["git", "apply", patch_file], cwd="sleuthkit")
 
   def run(self):
     subprocess.check_call(["git", "stash"], cwd="sleuthkit")
