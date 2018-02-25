@@ -8,6 +8,7 @@ exclude .travis.yml
 exclude *.pyc
 recursive-include dpkg *
 recursive-include examples *.py
+recursive-include patches *.patch
 recursive-include sleuthkit *
 recursive-exclude sleuthkit/bindings *
 recursive-exclude sleuthkit/autom4te.cache *

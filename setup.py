@@ -287,7 +287,7 @@ class UpdateCommand(Command):
         "sleuthkit-4.6.0-ntfs.patch"]
 
     for patch_file in patch_files:
-      patch_file = os.path.join("..", patch_file)
+      patch_file = os.path.join("..", "patches", patch_file)
       subprocess.check_call(["git", "apply", patch_file], cwd="sleuthkit")
 
   def run(self):
