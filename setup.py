@@ -286,6 +286,9 @@ class UpdateCommand(Command):
     patch_file = os.path.join("..", "sleuthkit-4.6.0-ffs_dent.patch")
     subprocess.check_call(["git", "apply", patch_file], cwd="sleuthkit")
 
+    patch_file = os.path.join("..", "sleuthkit-4.6.0-hfs.patch")
+    subprocess.check_call(["git", "apply", patch_file], cwd="sleuthkit")
+
     patch_file = os.path.join("..", "sleuthkit-4.6.0-lzvn.patch")
     subprocess.check_call(["git", "apply", patch_file], cwd="sleuthkit")
 
