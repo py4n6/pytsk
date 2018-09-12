@@ -510,7 +510,7 @@ static Directory File_as_directory(File self) {
         RaiseError(EInvalidParameter, "Invalid parameter: self->info.");
         return NULL;
     }
-    if(self->info->meta == NULL || self->info->meta->type != TSK_FS_META_TYPE_DIR) {
+    if(self->info->meta == NULL || !(TSK_FS_IS_DIR_META(self->info->meta->type))) {
         RaiseError(EIOError, "Not a directory");
         return NULL;
     }
