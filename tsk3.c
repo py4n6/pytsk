@@ -484,7 +484,7 @@ static uint64_t File_read_random(File self, TSK_OFF_T offset,
     RaiseError(EInvalidParameter, "id parameter is invalid.");
     return 0;
   };
-  if(id >= 0) {
+  if(id > 0) {
     result = tsk_fs_file_read_type(self->info, type, (uint16_t) id, offset, buff, len, flags);
   } else {
     result = tsk_fs_file_read(self->info, offset, buff, len, flags);
