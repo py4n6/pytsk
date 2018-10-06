@@ -480,14 +480,14 @@ static uint64_t File_read_random(File self, TSK_OFF_T offset,
                                 TSK_FS_FILE_READ_FLAG_ENUM flags) {
   ssize_t result;
 
-  if(id > 0xffff) {
+  if((id < -1) || (id > 0xffff)) {
     RaiseError(EInvalidParameter, "id parameter is invalid.");
     return 0;
   };
-  if(id > 0) {
-    result = tsk_fs_file_read_type(self->info, type, (uint16_t) id, offset, buff, len, flags);
-  } else {
+  if(id == -1) {
     result = tsk_fs_file_read(self->info, offset, buff, len, flags);
+  } else {
+    result = tsk_fs_file_read_type(self->info, type, (uint16_t) id, offset, buff, len, flags);
   };
 
   if(result < 0) {
