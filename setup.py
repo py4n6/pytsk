@@ -238,13 +238,15 @@ class UpdateCommand(Command):
   version_pkg = '%s %s' % (
       time.strftime('%a, %d %b %Y %H:%M:%S'), timezone_string)
 
-  user_options = []
+  user_options = [
+  ('bleedingedge', None, 'Use bleeding edge version of sleuthkit'),
+  ]
 
   def initialize_options(self):
-    pass
+    self.bleedingedge = False
 
   def finalize_options(self):
-    pass
+    self.bleedingedge = bool(self.bleedingedge)
 
   files = {
       "sleuthkit/configure.ac": [
@@ -302,11 +304,15 @@ class UpdateCommand(Command):
         ["git", "clean", "-x", "-f", "-d"], cwd="sleuthkit")
     subprocess.check_call(["git", "checkout", "master"], cwd="sleuthkit")
     subprocess.check_call(["git", "pull"], cwd="sleuthkit")
-    subprocess.check_call(["git", "fetch", "--tags"], cwd="sleuthkit")
-    subprocess.check_call(
+    if self.bleedingedge == False:
+      print('Pulling from tag 4.6.0')
+      subprocess.check_call(["git", "fetch", "--tags"], cwd="sleuthkit")
+      subprocess.check_call(
         ["git", "checkout", "tags/sleuthkit-4.6.0"], cwd="sleuthkit")
 
-    self.patch_sleuthkit()
+      self.patch_sleuthkit()
+    else:
+      print('Using latest/bleeding edge code')
 
     compiler_type = distutils.ccompiler.get_default_compiler()
     if compiler_type != "msvc":

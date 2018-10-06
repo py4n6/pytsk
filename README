@@ -35,6 +35,10 @@ If downloaded pytsk using git you'll have to first run:
 
 python setup.py update
 
+If you want to use a bleeding edge version of sleuthkit, use the --bleedingedge parameter:
+
+python setup.py update --bleedingedge
+
 To build the bindings just use the standard Python distutils method:
 
 python setup.py build
