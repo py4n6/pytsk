@@ -66,7 +66,7 @@ else:
       """Builds an MSI."""
       # Command bdist_msi does not support the library version, neither a date
       # as a version but if we suffix it with .1 everything is fine.
-      self.distribution.metadata.version += '.1'
+      self.distribution.metadata.version += ".1"
 
       bdist_msi.run(self)
 
@@ -96,9 +96,9 @@ else:
         elif line.startswith("BuildRequires: "):
           line = "BuildRequires: {0}-setuptools".format(python_package)
 
-        elif line.startswith('Requires: '):
-          if python_package == 'python3':
-            line = line.replace('python', 'python3')
+        elif line.startswith("Requires: "):
+          if python_package == "python3":
+            line = line.replace("python", "python3")
 
         elif line.startswith("%description"):
           in_description = True
@@ -223,6 +223,8 @@ class UpdateCommand(Command):
 
   This is normally only run by packagers to make a new release.
   """
+  _SLEUTHKIT_GIT_TAG = "4.6.0"
+
   version = time.strftime("%Y%m%d")
 
   timezone_minutes, _ = divmod(time.timezone, 60)
@@ -231,20 +233,22 @@ class UpdateCommand(Command):
   # If timezone_hours is -1 %02d will format as -1 instead of -01
   # hence we detect the sign and force a leading zero.
   if timezone_hours < 0:
-    timezone_string = '-%02d%02d' % (-timezone_hours, timezone_minutes)
+    timezone_string = "-%02d%02d" % (-timezone_hours, timezone_minutes)
   else:
-    timezone_string = '+%02d%02d' % (timezone_hours, timezone_minutes)
+    timezone_string = "+%02d%02d" % (timezone_hours, timezone_minutes)
 
-  version_pkg = '%s %s' % (
-      time.strftime('%a, %d %b %Y %H:%M:%S'), timezone_string)
+  version_pkg = "%s %s" % (
+      time.strftime("%a, %d %b %Y %H:%M:%S"), timezone_string)
 
-  user_options = []
+  user_options = [("use-head", None, (
+      "Use the latest version of Sleuthkit checked into git (HEAD) instead of "
+      "tag: {0:s}".format(_SLEUTHKIT_GIT_TAG)))]
 
   def initialize_options(self):
-    pass
+    self.use_head = False
 
   def finalize_options(self):
-    pass
+    self.use_head = bool(self.use_head)
 
   files = {
       "sleuthkit/configure.ac": [
@@ -278,13 +282,13 @@ class UpdateCommand(Command):
         fd.write(data)
 
     patch_files = [
-        "sleuthkit-4.6.0-ext2fs.patch",
-        "sleuthkit-4.6.0-ext2fs_dent.patch",
-        "sleuthkit-4.6.0-ffs_dent.patch",
-        "sleuthkit-4.6.0-gpt.patch",
-        "sleuthkit-4.6.0-hfs.patch",
-        "sleuthkit-4.6.0-lzvn.patch",
-        "sleuthkit-4.6.0-ntfs.patch"]
+        "sleuthkit-{0:s}-ext2fs.patch".format(self._SLEUTHKIT_GIT_TAG),
+        "sleuthkit-{0:s}-ext2fs_dent.patch".format(self._SLEUTHKIT_GIT_TAG),
+        "sleuthkit-{0:s}-ffs_dent.patch".format(self._SLEUTHKIT_GIT_TAG),
+        "sleuthkit-{0:s}-gpt.patch".format(self._SLEUTHKIT_GIT_TAG),
+        "sleuthkit-{0:s}-hfs.patch".format(self._SLEUTHKIT_GIT_TAG),
+        "sleuthkit-{0:s}-lzvn.patch".format(self._SLEUTHKIT_GIT_TAG),
+        "sleuthkit-{0:s}-ntfs.patch".format(self._SLEUTHKIT_GIT_TAG)]
 
     for patch_file in patch_files:
       patch_file = os.path.join("..", "patches", patch_file)
@@ -298,15 +302,18 @@ class UpdateCommand(Command):
 
     print("Updating sleuthkit")
     subprocess.check_call(["git", "reset", "--hard"], cwd="sleuthkit")
-    subprocess.check_call(
-        ["git", "clean", "-x", "-f", "-d"], cwd="sleuthkit")
+    subprocess.check_call(["git", "clean", "-x", "-f", "-d"], cwd="sleuthkit")
     subprocess.check_call(["git", "checkout", "master"], cwd="sleuthkit")
     subprocess.check_call(["git", "pull"], cwd="sleuthkit")
-    subprocess.check_call(["git", "fetch", "--tags"], cwd="sleuthkit")
-    subprocess.check_call(
-        ["git", "checkout", "tags/sleuthkit-4.6.0"], cwd="sleuthkit")
+    if self.use_head:
+      print("Pulling from HEAD")
+    else:
+      print("Pulling from tag: {0:s}".format(self._SLEUTHKIT_GIT_TAG))
+      subprocess.check_call(["git", "fetch", "--tags"], cwd="sleuthkit")
+      git_tag_path = "tags/sleuthkit-{0:s}".format(self._SLEUTHKIT_GIT_TAG)
+      subprocess.check_call(["git", "checkout", git_tag_path], cwd="sleuthkit")
 
-    self.patch_sleuthkit()
+      self.patch_sleuthkit()
 
     compiler_type = distutils.ccompiler.get_default_compiler()
     if compiler_type != "msvc":

@@ -35,6 +35,11 @@ If downloaded pytsk using git you'll have to first run:
 
 python setup.py update
 
+If you want to use the latest version of Sleuthkit that is checked into git
+(also known as HEAD), instead of the currently supported version, you can run:
+
+python setup.py update --use-head
+
 To build the bindings just use the standard Python distutils method:
 
 python setup.py build
