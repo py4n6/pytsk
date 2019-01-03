@@ -157,7 +157,7 @@ class BuildExtCommand(build_ext):
     # We want to build as much as possible self contained Python
     # binding.
     command = ["sh", "configure", "--disable-java", "--without-afflib",
-               "--without-libewf", "--without-zlib"]
+               "--without-libewf", "--without-libpq", "--without-zlib"]
 
     output = subprocess.check_output(command, cwd="sleuthkit")
     print_line = False
@@ -223,7 +223,7 @@ class UpdateCommand(Command):
 
   This is normally only run by packagers to make a new release.
   """
-  _SLEUTHKIT_GIT_TAG = "4.6.0"
+  _SLEUTHKIT_GIT_TAG = "4.6.4"
 
   version = time.strftime("%Y%m%d")
 
@@ -251,10 +251,6 @@ class UpdateCommand(Command):
     self.use_head = bool(self.use_head)
 
   files = {
-      "sleuthkit/configure.ac": [
-          ("([a-z_/]+)/Makefile",
-           lambda m: m.group(0) if m.group(1).startswith("tsk") else ""),
-      ],
       "sleuthkit/Makefile.am": [
           ("SUBDIRS = .+", "SUBDIRS = tsk"),
       ],
@@ -282,16 +278,23 @@ class UpdateCommand(Command):
         fd.write(data)
 
     patch_files = [
+        "sleuthkit-{0:s}-configure.ac".format(self._SLEUTHKIT_GIT_TAG),
         "sleuthkit-{0:s}-ext2fs.patch".format(self._SLEUTHKIT_GIT_TAG),
         "sleuthkit-{0:s}-ext2fs_dent.patch".format(self._SLEUTHKIT_GIT_TAG),
         "sleuthkit-{0:s}-ffs_dent.patch".format(self._SLEUTHKIT_GIT_TAG),
         "sleuthkit-{0:s}-gpt.patch".format(self._SLEUTHKIT_GIT_TAG),
         "sleuthkit-{0:s}-hfs.patch".format(self._SLEUTHKIT_GIT_TAG),
+        "sleuthkit-{0:s}-hfs_dent.patch".format(self._SLEUTHKIT_GIT_TAG),
         "sleuthkit-{0:s}-lzvn.patch".format(self._SLEUTHKIT_GIT_TAG),
         "sleuthkit-{0:s}-ntfs.patch".format(self._SLEUTHKIT_GIT_TAG)]
 
     for patch_file in patch_files:
-      patch_file = os.path.join("..", "patches", patch_file)
+      patch_file = os.path.join("patches", patch_file)
+      if not os.path.exists(patch_file):
+        print("No such patch file: {0:s}".format(patch_file))
+        continue
+
+      patch_file = os.path.join("..", patch_file)
       subprocess.check_call(["git", "apply", patch_file], cwd="sleuthkit")
 
   def run(self):

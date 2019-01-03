@@ -1,0 +1,69 @@
+diff --git a/configure.ac b/configure.ac
+index dc9026ed..0170a0f5 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -132,9 +132,33 @@ AS_IF([test "x$ac_cv_lib_sqlite3_sqlite3_open" = "xyes"],
+       [AC_MSG_RESULT([bundled])])
+ AM_CONDITIONAL([HAVE_LIBSQLITE3],
+                [test "x$ac_cv_lib_sqlite3_sqlite3_open" = "xyes"])
+-dnl check for postgresql	
+-AC_CHECK_HEADERS([postgresql/libpq-fe.h],AC_CHECK_LIB([pq],[PQlibVersion]))      
+-AC_CHECK_HEADERS([libpq-fe.h],AC_CHECK_LIB([pq],[PQlibVersion]))
++
++# Check if we should link postgresql.
++AC_ARG_WITH([libpq],
++    [AS_HELP_STRING([--without-libpq],[Do not use postgresql even if it is installed])]
++    [AS_HELP_STRING([--with-libpq=dir],[Specify that postgresql is installed in directory 'dir'])],
++    dnl If --with-libpq or --without-libpq is given
++    [],
++    dnl If --with-libpq or --without-libpq is given
++    [with_libpq=yes])
++
++dnl check for the lib if they did not specify no
++AS_IF([test "x$with_libpq" != "xno"],
++    dnl Test the dir if they specified something beyond yes/no
++    [AS_IF([test "x$with_libpq" != "xyes"],
++        [AS_IF([test -d ${with_libpq}/include],
++            [CPPFLAGS="$CPPFLAGS -I${with_libpq}/include"
++                LDFLAGS="$LDFLAGS -L${with_libpq}/lib"],
++            dnl Dir given was not correct
++            [AC_MSG_FAILURE([postgresql directory not found at ${with_libpq}])])
++        ]
++    )]
++    dnl check for postgresql
++    [AC_CHECK_HEADERS([postgresql/libpq-fe.h],AC_CHECK_LIB([pq],[PQlibVersion]))
++     AC_CHECK_HEADERS([libpq-fe.h],AC_CHECK_LIB([pq],[PQlibVersion]))
++    ]
++)
++
+ AM_CONDITIONAL([HAVE_POSTGRESQL],[test "x$ac_cv_lib_pq_PQlibVersion" = "xyes"])
+ AM_COND_IF([HAVE_POSTGRESQL],[ax_libpq=yes],[ax_libpq=no])
+ AM_COND_IF([HAVE_POSTGRESQL], [AC_DEFINE([HAVE_LIBPQ_], [1], [Define if using libpq.])])
+@@ -399,26 +423,7 @@ AC_CONFIG_FILES([
+     tsk/vs/Makefile
+     tsk/fs/Makefile
+     tsk/hashdb/Makefile
+-    tsk/auto/Makefile
+-    tools/Makefile
+-    tools/imgtools/Makefile
+-    tools/vstools/Makefile
+-    tools/fstools/Makefile
+-    tools/hashtools/Makefile
+-    tools/srchtools/Makefile
+-    tools/autotools/Makefile
+-    tools/sorter/Makefile
+-    tools/timeline/Makefile
+-    tools/fiwalk/Makefile
+-    tools/fiwalk/src/Makefile
+-    tools/fiwalk/plugins/Makefile
+-    tests/Makefile
+-    samples/Makefile
+-    man/Makefile
+-    bindings/java/Makefile
+-    bindings/java/jni/Makefile
+-    unit_tests/Makefile
+-    unit_tests/base/Makefile])
++    tsk/auto/Makefile])
+ 
+ AC_OUTPUT
+ 

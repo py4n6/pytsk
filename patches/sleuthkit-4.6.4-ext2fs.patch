@@ -1,8 +1,25 @@
 diff --git a/tsk/fs/ext2fs.c b/tsk/fs/ext2fs.c
-index 7feec481..1b9a287a 100644
+index d40a64be..574e0b41 100644
 --- a/tsk/fs/ext2fs.c
 +++ b/tsk/fs/ext2fs.c
-@@ -554,12 +554,20 @@ static uint8_t
+@@ -62,6 +62,8 @@ debug_print_buf(unsigned char *buf, int len)
+ static uint8_t
+ test_root(uint32_t a, uint32_t b)
+ {
++    uint32_t b2;
++
+     if (a == 0) {
+         return (b == 0);
+     }
+@@ -77,7 +79,6 @@ test_root(uint32_t a, uint32_t b)
+     }
+  
+     // keep on multiplying b by itself 
+-    uint32_t b2;
+     for (b2 = b; b2 < a; b2 *= b) {}
+  
+     // was it an exact match?
+@@ -583,12 +584,20 @@ static uint8_t
  ext2fs_dinode_copy(EXT2FS_INFO * ext2fs, TSK_FS_META * fs_meta,
      TSK_INUM_T inum, const ext2fs_inode * dino_buf)
  {
@@ -25,7 +42,7 @@ index 7feec481..1b9a287a 100644
  
      if (dino_buf == NULL) {
          tsk_error_reset();
-@@ -694,7 +702,6 @@ ext2fs_dinode_copy(EXT2FS_INFO * ext2fs, TSK_FS_META * fs_meta,
+@@ -723,7 +732,6 @@ ext2fs_dinode_copy(EXT2FS_INFO * ext2fs, TSK_FS_META * fs_meta,
      }
  
      if (tsk_getu32(fs->endian, dino_buf->i_flags) & EXT2_IN_EXTENTS) {
@@ -33,7 +50,7 @@ index 7feec481..1b9a287a 100644
          fs_meta->content_type = TSK_FS_META_CONTENT_TYPE_EXT4_EXTENTS;
          /* NOTE TSK_DADDR_T != uint32_t, so lets make sure we use uint32_t */
          addr_ptr = (uint32_t *) fs_meta->content_ptr;
-@@ -703,10 +710,9 @@ ext2fs_dinode_copy(EXT2FS_INFO * ext2fs, TSK_FS_META * fs_meta,
+@@ -732,10 +740,9 @@ ext2fs_dinode_copy(EXT2FS_INFO * ext2fs, TSK_FS_META * fs_meta,
          }
      }
      else {
@@ -46,7 +63,7 @@ index 7feec481..1b9a287a 100644
  
          /* set the link string
           * the size check prevents us from trying to allocate a huge amount of
-@@ -714,20 +720,17 @@ ext2fs_dinode_copy(EXT2FS_INFO * ext2fs, TSK_FS_META * fs_meta,
+@@ -743,20 +750,17 @@ ext2fs_dinode_copy(EXT2FS_INFO * ext2fs, TSK_FS_META * fs_meta,
           */
          if ((fs_meta->type == TSK_FS_META_TYPE_LNK)
              && (fs_meta->size < EXT2FS_MAXPATHLEN) && (fs_meta->size >= 0)) {
@@ -69,7 +86,7 @@ index 7feec481..1b9a287a 100644
                      for (j = 0; j < 4 && count < fs_meta->size; j++) {
                          fs_meta->link[count++] = a_ptr[j];
                      }
-@@ -740,11 +743,11 @@ ext2fs_dinode_copy(EXT2FS_INFO * ext2fs, TSK_FS_META * fs_meta,
+@@ -769,11 +773,11 @@ ext2fs_dinode_copy(EXT2FS_INFO * ext2fs, TSK_FS_META * fs_meta,
  
              /* it is in blocks */
              else {
@@ -86,7 +103,7 @@ index 7feec481..1b9a287a 100644
  
                  if ((data_buf = tsk_malloc(fs->block_size)) == NULL) {
                      return 1;
-@@ -754,10 +757,8 @@ ext2fs_dinode_copy(EXT2FS_INFO * ext2fs, TSK_FS_META * fs_meta,
+@@ -783,10 +787,8 @@ ext2fs_dinode_copy(EXT2FS_INFO * ext2fs, TSK_FS_META * fs_meta,
                   * on path length */
                  for (i = 0; i < EXT2FS_NDADDR && total_read < fs_meta->size;
                      i++) {
@@ -98,7 +115,7 @@ index 7feec481..1b9a287a 100644
  
                      if (cnt != fs->block_size) {
                          if (cnt >= 0) {
-@@ -766,12 +767,12 @@ ext2fs_dinode_copy(EXT2FS_INFO * ext2fs, TSK_FS_META * fs_meta,
+@@ -795,12 +797,12 @@ ext2fs_dinode_copy(EXT2FS_INFO * ext2fs, TSK_FS_META * fs_meta,
                          }
                          tsk_error_set_errstr2
                              ("ext2fs_dinode_copy: symlink destination from %"

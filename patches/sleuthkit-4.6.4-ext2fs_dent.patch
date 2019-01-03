@@ -1,5 +1,5 @@
 diff --git a/tsk/fs/ext2fs_dent.c b/tsk/fs/ext2fs_dent.c
-index c752c17f..5578f291 100644
+index f590bd07..9034d234 100644
 --- a/tsk/fs/ext2fs_dent.c
 +++ b/tsk/fs/ext2fs_dent.c
 @@ -10,7 +10,7 @@
@@ -101,29 +101,27 @@ index c752c17f..5578f291 100644
      TSK_FS_DIR *fs_dir;
 +    TSK_FS_NAME *fs_name = NULL;
      TSK_LIST *list_seen = NULL;
-+    int cnt = 0;
-+    int len = 0;
++    ssize_t len = 0;
++    ssize_t cnt = 0;
  
      /* If we get corruption in one of the blocks, then continue processing.
       * retval_final will change when corruption is detected.  Errors are
-@@ -318,13 +324,12 @@ ext2fs_dir_open_meta(TSK_FS_INFO * a_fs, TSK_FS_DIR ** a_fs_dir,
+@@ -318,11 +324,11 @@ ext2fs_dir_open_meta(TSK_FS_INFO * a_fs, TSK_FS_DIR ** a_fs_dir,
      }
  
      size = roundup(fs_dir->fs_file->meta->size, a_fs->block_size);
 -    TSK_OFF_T offset = 0;
 +    offset = 0;
  
-     while ((int64_t) size > 0) {
--        int len =
--            (a_fs->block_size < size) ? a_fs->block_size : (int) size;
-+        len = (a_fs->block_size < size) ? a_fs->block_size : (int) size;
- 
--        int cnt = tsk_fs_file_read(fs_dir->fs_file, offset, dirbuf, len, (TSK_FS_FILE_READ_FLAG_ENUM)0);
+     while (size > 0) {
+-        ssize_t len = (a_fs->block_size < size) ? a_fs->block_size : size;
+-        ssize_t cnt = tsk_fs_file_read(fs_dir->fs_file, offset, dirbuf, len, (TSK_FS_FILE_READ_FLAG_ENUM)0);
++        len = (a_fs->block_size < size) ? a_fs->block_size : size;
 +        cnt = tsk_fs_file_read(fs_dir->fs_file, offset, dirbuf, len, (TSK_FS_FILE_READ_FLAG_ENUM)0);
          if (cnt != len) {
-             printf("  Failed - read 0x%x bytes\n", cnt);
              tsk_error_reset();
-@@ -358,7 +363,7 @@ ext2fs_dir_open_meta(TSK_FS_INFO * a_fs, TSK_FS_DIR ** a_fs_dir,
+             tsk_error_set_errno(TSK_ERR_FS_FWALK);
+@@ -354,7 +360,7 @@ ext2fs_dir_open_meta(TSK_FS_INFO * a_fs, TSK_FS_DIR ** a_fs_dir,
  
      // if we are listing the root directory, add the Orphan directory entry
      if (a_addr == a_fs->root_inum) {

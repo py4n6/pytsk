@@ -1,0 +1,119 @@
+diff --git a/tsk/fs/hfs_dent.c b/tsk/fs/hfs_dent.c
+index 8402b302..0eb5c286 100644
+--- a/tsk/fs/hfs_dent.c
++++ b/tsk/fs/hfs_dent.c
+@@ -106,6 +106,9 @@ hfs_UTF16toUTF8(TSK_FS_INFO * fs, uint8_t * uni, int ulen, char *asc,
+     int i;
+     TSKConversionResult r;
+ 
++    uint16_t uc;
++    int changed;
++
+     // remove nulls from the Unicode string
+     // convert / to :
+     uniclean = (uint8_t *) tsk_malloc(ulen * 2);
+@@ -115,10 +118,9 @@ hfs_UTF16toUTF8(TSK_FS_INFO * fs, uint8_t * uni, int ulen, char *asc,
+     memcpy(uniclean, uni, ulen * 2);
+ 
+     for (i = 0; i < ulen; ++i) {
+-        uint16_t uc = tsk_getu16(fs->endian, uniclean + i * 2);
+-
++        uc = tsk_getu16(fs->endian, uniclean + i * 2);
+ 
+-        int changed = 0;
++        changed = 0;
+         if (uc == UTF16_NULL) {
+             uc = UTF16_NULL_REPLACE;
+             changed = 1;
+@@ -201,6 +203,20 @@ hfs_dir_open_meta_cb(HFS_INFO * hfs, int8_t level_type,
+     const hfs_btree_key_cat * cur_key,
+     TSK_OFF_T key_off, void *ptr)
+ {
++    uint8_t *rec_buf;
++    uint16_t rec_type;
++    size_t rec_off2;
++
++    hfs_file *file;
++    unsigned char is_err;
++    TSK_INUM_T file_cnid;
++    TSK_INUM_T target_cnid;
++
++    HFS_ENTRY entry;
++    uint8_t lkup;   // lookup result
++
++    int32_t nameLength;
++
+     HFS_DIR_OPEN_META_INFO *info = (HFS_DIR_OPEN_META_INFO *) ptr;
+     TSK_FS_INFO *fs = &hfs->fs_info;
+ 
+@@ -221,9 +237,7 @@ hfs_dir_open_meta_cb(HFS_INFO * hfs, int8_t level_type,
+         }
+     }
+     else {
+-        uint8_t *rec_buf = (uint8_t *) cur_key;
+-        uint16_t rec_type;
+-        size_t rec_off2;
++        rec_buf = (uint8_t *) cur_key;
+ 
+         if (tsk_getu32(hfs->fs_info.endian,
+                 cur_key->parent_cnid) < info->cnid) {
+@@ -266,7 +280,7 @@ hfs_dir_open_meta_cb(HFS_INFO * hfs, int8_t level_type,
+             // Make sure there is enough space in cur_key for the name 
+             // (name is unicode so each characters is two bytes; 6 bytes
+             // of non-name characters)
+-            const int32_t nameLength =
++            nameLength =
+                 tsk_getu16(hfs->fs_info.endian, cur_key->name.length);
+ 
+             if (2*nameLength > tsk_getu16(hfs->fs_info.endian, cur_key->key_len) - 6) {
+@@ -283,12 +297,11 @@ hfs_dir_open_meta_cb(HFS_INFO * hfs, int8_t level_type,
+ 
+         /* This is a normal file in the folder */
+         else if (rec_type == HFS_FILE_RECORD) {
+-            hfs_file *file = (hfs_file *) & rec_buf[rec_off2];
++            file = (hfs_file *) & rec_buf[rec_off2];
+             // This could be a hard link.  We need to test this CNID, and follow it if necessary.
+-            unsigned char is_err;
+-            TSK_INUM_T file_cnid =
++            file_cnid =
+                 tsk_getu32(hfs->fs_info.endian, file->std.cnid);
+-            TSK_INUM_T target_cnid =
++            target_cnid =
+                 hfs_follow_hard_link(hfs, file, &is_err);
+             if (is_err > 1) {
+                 error_returned
+@@ -296,9 +309,6 @@ hfs_dir_open_meta_cb(HFS_INFO * hfs, int8_t level_type,
+                 return HFS_BTREE_CB_ERR;
+             }
+             if (target_cnid != file_cnid) {
+-                HFS_ENTRY entry;
+-                uint8_t lkup;   // lookup result
+-
+                 // This is a hard link.  We need to fill in the name->type and name->meta_addr from the target
+                 info->fs_name->meta_addr = target_cnid;
+                 // get the Catalog entry for the target CNID
+@@ -327,7 +337,7 @@ hfs_dir_open_meta_cb(HFS_INFO * hfs, int8_t level_type,
+             // Make sure there is enough space in cur_key for the name 
+             // (name is unicode so each characters is two bytes; 6 bytes
+             // of non-name characters)
+-            const int32_t nameLength =
++            nameLength =
+                 tsk_getu16(hfs->fs_info.endian, cur_key->name.length);
+             if (2*nameLength > tsk_getu16(hfs->fs_info.endian, cur_key->key_len) - 6) {
+                 error_returned
+@@ -379,6 +389,7 @@ hfs_dir_open_meta(TSK_FS_INFO * fs, TSK_FS_DIR ** a_fs_dir,
+     TSK_FS_NAME *fs_name;
+     HFS_DIR_OPEN_META_INFO info;
+ 
++    int i;
+ 
+     tsk_error_reset();
+ 
+@@ -433,7 +444,6 @@ hfs_dir_open_meta(TSK_FS_INFO * fs, TSK_FS_DIR ** a_fs_dir,
+ 
+     // if we are listing the root directory, add the Orphan directory and special HFS file entries
+     if (a_addr == fs->root_inum) {
+-        int i;
+         for (i = 0; i < 6; i++) {
+             switch (i) {
+             case 0:
