@@ -79,43 +79,94 @@ else:
 
     def make_spec_file(self, spec_file):
       """Make an RPM Spec file."""
-      if sys.version_info[0] < 3:
-        python_package = "python"
+      # Note that bdist_rpm can be an old style class.
+      if issubclass(BdistRPMCommand, object):
+        spec_file = super(BdistRPMCommand, self)._make_spec_file()
       else:
-        python_package = "python3"
+        spec_file = bdist_rpm._make_spec_file(self)
+
+      if sys.version_info[0] < 3:
+        python_package = 'python2'
+      else:
+        python_package = 'python3'
 
       description = []
-      summary = ""
+      requires = ''
+      summary = ''
       in_description = False
 
       python_spec_file = []
-      for line in spec_file:
-        if line.startswith("Summary: "):
+      for line in iter(spec_file):
+        if line.startswith('Summary: '):
           summary = line
 
-        elif line.startswith("BuildRequires: "):
-          line = "BuildRequires: {0}-setuptools".format(python_package)
-
-        elif line.startswith("Requires: "):
-          if python_package == "python3":
-            line = line.replace("python", "python3")
-
-        elif line.startswith("%description"):
-          in_description = True
-
-        elif line.startswith("%files"):
-          line = "%files -f INSTALLED_FILES {0}".format(
+        elif line.startswith('BuildRequires: '):
+          line = 'BuildRequires: {0:s}-setuptools, {0:s}-devel'.format(
               python_package)
 
-        elif line.startswith("%prep"):
+        elif line.startswith('Requires: '):
+          requires = line[10:]
+          if python_package == 'python3':
+            requires = requires.replace('python-', 'python3-')
+            requires = requires.replace('python2-', 'python3-')
+
+        elif line.startswith('%description'):
+          in_description = True
+
+        elif line.startswith('python setup.py build'):
+          if python_package == 'python3':
+            line = '%py3_build'
+          else:
+            line = '%py2_build'
+
+        elif line.startswith('python setup.py install'):
+          if python_package == 'python3':
+            line = '%py3_install'
+          else:
+            line = '%py2_install'
+
+        elif line.startswith('%files'):
+          lines = [
+              '%files -n {0:s}-%{{name}}'.format(python_package),
+              '%defattr(644,root,root,755)',
+              '%license LICENSE',
+              '%doc README']
+
+          if python_package == 'python3':
+            lines.extend([
+                '%{_libdir}/python3*/site-packages/*.so',
+                '%{_libdir}/python3*/site-packages/pytsk3*.egg-info/*',
+                '',
+                '%exclude %{_prefix}/share/doc/*'])
+
+          else:
+            lines.extend([
+                '%{_libdir}/python2*/site-packages/*.so',
+                '%{_libdir}/python2*/site-packages/pytsk3*.egg-info/*',
+                '',
+                '%exclude %{_prefix}/share/doc/*'])
+
+          python_spec_file.extend(lines)
+          break
+
+        elif line.startswith('%prep'):
           in_description = False
 
           python_spec_file.append(
-              "%package {0}".format(python_package))
-          python_spec_file.append("{0}".format(summary))
-          python_spec_file.append("")
-          python_spec_file.append(
-              "%description {0}".format(python_package))
+              '%package -n {0:s}-%{{name}}'.format(python_package))
+          if python_package == 'python2':
+            python_spec_file.extend([
+                'Obsoletes: python-pytsk3 < %{version}',
+                'Provides: python-pytsk3 = %{version}'])
+
+          if requires:
+            python_spec_file.append('Requires: {0:s}'.format(requires))
+
+          python_spec_file.extend([
+              '{0:s}'.format(summary),
+              '',
+              '%description -n {0:s}-%{{name}}'.format(python_package)])
+
           python_spec_file.extend(description)
 
         elif in_description:
