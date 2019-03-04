@@ -207,8 +207,10 @@ class BuildExtCommand(build_ext):
 
     # We want to build as much as possible self contained Python
     # binding.
-    command = ["sh", "configure", "--disable-java", "--without-afflib",
-               "--without-libewf", "--without-libpq", "--without-zlib"]
+    command = [
+        "sh", "configure", "--disable-java", "--without-afflib",
+        "--without-libewf", "--without-libpq", "--without-libvhdi",
+        "--without-libvmdk", "--without-zlib"]
 
     output = subprocess.check_output(command, cwd="sleuthkit")
     print_line = False
