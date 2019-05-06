@@ -203,8 +203,8 @@ static FS_Info FS_Info_Con(FS_Info self, Img_Info img, TSK_OFF_T offset,
     self->info = tsk_fs_open_img((TSK_IMG_INFO *) self->extended_img_info, offset, type);
 
     if(!self->info) {
-        RaiseError(EIOError, "Unable to open the image as a filesystem: %s",
-                   tsk_error_get());
+        RaiseError(EIOError, "Unable to open the image as a filesystem at offset: 0x%08" PRIxOFF " with error: %s",
+                   offset, tsk_error_get());
         tsk_error_reset();
         return NULL;
     }
