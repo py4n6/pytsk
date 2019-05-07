@@ -10,11 +10,15 @@ recursive-include dpkg *
 recursive-include examples *.py
 recursive-include patches *.patch
 recursive-include sleuthkit *
-recursive-exclude sleuthkit/bindings *
 recursive-exclude sleuthkit/autom4te.cache *
+recursive-exclude sleuthkit/bindings *
+recursive-exclude sleuthkit/config *
+recursive-exclude sleuthkit/debian *
+recursive-exclude sleuthkit/docs *
 recursive-exclude sleuthkit/framework *
 recursive-exclude sleuthkit/man *
 recursive-exclude sleuthkit/packages *
+recursive-exclude sleuthkit/rejistry++ *
 recursive-exclude sleuthkit/release *
 recursive-exclude sleuthkit/samples *
 recursive-exclude sleuthkit/tests *
