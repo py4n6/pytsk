@@ -2,17 +2,16 @@ include LICENSE version.txt
 include *.c
 include *.h
 include *.py
-exclude .gitignore
-exclude .gitmodules
-exclude .travis.yml
 exclude *.pyc
+exclude .git .gitignore .gitmodules
+exclude .travis.yml
+exclude API-CHANGES.txt config.log ruleset.xml setupDevRepos.py travis_build.sh
 recursive-include dpkg *
 recursive-include examples *.py
 recursive-include patches *.patch
 recursive-include sleuthkit *
 recursive-exclude sleuthkit/autom4te.cache *
 recursive-exclude sleuthkit/bindings *
-recursive-exclude sleuthkit/config *
 recursive-exclude sleuthkit/debian *
 recursive-exclude sleuthkit/docs *
 recursive-exclude sleuthkit/framework *
