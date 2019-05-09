@@ -1,27 +1,77 @@
 language: python
 matrix:
   include:
-  - os: linux
+  - name: "Ubuntu 16.04 (Xenial) with Python 2.7"
+    env: TARGET="linux"
+    os: linux
     dist: xenial
     sudo: required
     group: edge
     python: 2.7
-  - os: linux
+  - name: "Ubuntu 16.04 (Xenial) with Python 3.5"
+    env: TARGET="linux"
+    os: linux
     dist: xenial
     sudo: required
     group: edge
     python: 3.5
-  - os: osx
+  - name: "Mac OS with Python 2.7"
+    env: TARGET="macos"
+    os: osx
     osx_image: xcode8.3
     language: generic
     env: PYTHONPATH=/Library/Python/2.7/site-packages/
-before_install:
-  - if test ${TRAVIS_OS_NAME} = "linux"; then sudo apt-get update -q && sudo apt-get install -y autopoint; fi
-  - if test ${TRAVIS_OS_NAME} = "osx"; then brew update && brew install gettext && brew link --force gettext; fi
+  - name: "Centos 7 (Docker) with Python 2.7"
+    env: CENTOS_VERSION="7"
+    os: linux
+    dist: xenial
+    sudo: required
+    group: edge
+    language: python
+    python: 2.7
+    services:
+    - docker
+  - name: "Fedora Core 29 (Docker) with Python 2.7"
+    env: FEDORA_VERSION="29"
+    os: linux
+    dist: xenial
+    sudo: required
+    group: edge
+    language: python
+    python: 2.7
+    services:
+    - docker
+  - name: "Fedora Core 29 (Docker) with Python 3.7"
+    env: FEDORA_VERSION="29"
+    os: linux
+    dist: xenial
+    sudo: required
+    group: edge
+    language: python
+    python: 3.7
+    services:
+    - docker
+  - name: "Ubuntu Bionic (18.04) (Docker) with Python 2.7"
+    env: UBUNTU_VERSION="18.04"
+    os: linux
+    dist: xenial
+    sudo: required
+    group: edge
+    language: python
+    python: 2.7
+    services:
+    - docker
+  - name: "Ubuntu Bionic (18.04) (Docker) with Python 3.6"
+    env: UBUNTU_VERSION="18.04"
+    os: linux
+    dist: xenial
+    sudo: required
+    group: edge
+    language: python
+    python: 3.6
+    services:
+    - docker
+install:
+- ./travis/install.sh
 script:
-  - python setup.py update
-  - python setup.py build
-  - PYTHONPATH=`ls -1d build/lib.*` python run_tests.py
-  - python setup.py sdist
-  - python setup.py bdist
-  - if test ${TRAVIS_OS_NAME} = "linux"; then mkdir -p ${PWD}/tmp/lib/python${TRAVIS_PYTHON_VERSION}/site-packages/ && PYTHONPATH=${PWD}/tmp/lib/python${TRAVIS_PYTHON_VERSION}/site-packages/ python setup.py install --prefix=${PWD}/tmp/; fi
+- ./travis/run_tests.sh
