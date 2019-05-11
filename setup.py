@@ -331,7 +331,9 @@ class UpdateCommand(Command):
         fd.write(data)
 
     patch_files = [
-        "sleuthkit-{0:s}-configure.ac".format(self._SLEUTHKIT_GIT_TAG),
+        "sleuthkit-{0:s}-auto-Makefile.am.patch".format(
+            self._SLEUTHKIT_GIT_TAG),
+        "sleuthkit-{0:s}-configure.ac.path".format(self._SLEUTHKIT_GIT_TAG),
         "sleuthkit-{0:s}-ext2fs.patch".format(self._SLEUTHKIT_GIT_TAG),
         "sleuthkit-{0:s}-ext2fs_dent.patch".format(self._SLEUTHKIT_GIT_TAG),
         "sleuthkit-{0:s}-ffs_dent.patch".format(self._SLEUTHKIT_GIT_TAG),
