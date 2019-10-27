@@ -28,6 +28,7 @@ SLEUTHKIT_PATH: A path to the locally build sleuthkit source tree. If not
 
 from __future__ import print_function
 
+import copy
 import glob
 import re
 import os
@@ -64,8 +65,12 @@ else:
 
     def run(self):
       """Builds an MSI."""
-      # Command bdist_msi does not support the library version, neither a date
-      # as a version but if we suffix it with .1 everything is fine.
+      # Make a deepcopy of distribution so the following version changes
+      # only apply to bdist_msi.
+      self.distribution = copy.deepcopy(self.distribution)
+
+      # bdist_msi does not support the library version so we add ".1"
+      # as a work around.
       self.distribution.metadata.version += ".1"
 
       bdist_msi.run(self)
