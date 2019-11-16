@@ -1,5 +1,5 @@
 diff --git a/tsk/fs/ext2fs.c b/tsk/fs/ext2fs.c
-index d40a64be..574e0b41 100644
+index 7950b364..65726ecb 100755
 --- a/tsk/fs/ext2fs.c
 +++ b/tsk/fs/ext2fs.c
 @@ -62,6 +62,8 @@ debug_print_buf(unsigned char *buf, int len)
