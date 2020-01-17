@@ -215,7 +215,7 @@ class BuildExtCommand(build_ext):
     command = [
         "sh", "configure", "--disable-java", "--without-afflib",
         "--without-libewf", "--without-libpq", "--without-libvhdi",
-        "--without-libvmdk", "--without-zlib", "CPPFLAGS=-std=c++11"]
+        "--without-libvmdk", "--without-zlib", "CFLAGS=-std=c++11"]
 
     output = subprocess.check_output(command, cwd="sleuthkit")
     print_line = False
