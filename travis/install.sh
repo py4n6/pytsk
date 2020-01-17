@@ -30,7 +30,7 @@ then
 	# Install packages.
 	docker exec ${CONTAINER_NAME} dnf groupinstall -y "Development Tools";
 
-	RPM_PACKAGES="autoconf automake gcc-c++ git libtool libstdc++-devel python3 python3-devel";
+	RPM_PACKAGES="autoconf automake gcc-c++ git libtool libstdc++-devel python3 python3-devel python3-setuptools";
 
 	docker exec ${CONTAINER_NAME} dnf install -y ${RPM_PACKAGES};
 

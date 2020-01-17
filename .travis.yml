@@ -7,8 +7,8 @@ matrix:
     sudo: required
     group: edge
     python: 3.5
-  - name: "Fedora Core 29 (Docker) with Python 3.7"
-    env: FEDORA_VERSION="29"
+  - name: "Fedora Core 31 (Docker) with Python 3.7"
+    env: FEDORA_VERSION="31"
     os: linux
     dist: bionic
     sudo: required
