@@ -25,11 +25,7 @@ interface:
 The new binding just links to libtsk which should make it easier to
 maintain against newer versions. We should be able to rewrite all the
 SleuthKit tools in Python (using the library and bindings) as a
-demonstration of what is possible with the new bindings. This page
-documents how to use the binding from a practical point of view - we
-want to show examples of how to do some common tasks. There are lots
-of sample programs in the samples directory to demonstrate how these
-bindings can be used.
+demonstration of what is possible with the new bindings.
 
 If downloaded pytsk using git you'll have to first run:
 
