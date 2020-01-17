@@ -215,7 +215,7 @@ class BuildExtCommand(build_ext):
     command = [
         "sh", "configure", "--disable-java", "--without-afflib",
         "--without-libewf", "--without-libpq", "--without-libvhdi",
-        "--without-libvmdk", "--without-zlib", "CFLAGS=-std=c++11"]
+        "--without-libvmdk", "--without-zlib"]
 
     output = subprocess.check_output(command, cwd="sleuthkit")
     print_line = False
@@ -405,8 +405,7 @@ class ProjectBuilder(object):
 
     # Paths under the sleuthkit/tsk directory which contain files we need
     # to compile.
-    self._sub_library_names = [
-        "auto", "base", "docs", "fs", "hashdb", "img", "vs"]
+    self._sub_library_names = ["base", "docs", "fs", "img", "vs"]
 
     # The args for the extension builder.
     self.extension_args = {
