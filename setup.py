@@ -336,15 +336,7 @@ class UpdateCommand(Command):
         fd.write(data)
 
     patch_files = [
-        "sleuthkit-{0:s}-configure.ac".format(self._SLEUTHKIT_GIT_TAG),
-        "sleuthkit-{0:s}-ext2fs.patch".format(self._SLEUTHKIT_GIT_TAG),
-        "sleuthkit-{0:s}-ext2fs_dent.patch".format(self._SLEUTHKIT_GIT_TAG),
-        "sleuthkit-{0:s}-ffs_dent.patch".format(self._SLEUTHKIT_GIT_TAG),
-        "sleuthkit-{0:s}-gpt.patch".format(self._SLEUTHKIT_GIT_TAG),
-        "sleuthkit-{0:s}-hfs.patch".format(self._SLEUTHKIT_GIT_TAG),
-        "sleuthkit-{0:s}-hfs_dent.patch".format(self._SLEUTHKIT_GIT_TAG),
-        "sleuthkit-{0:s}-lzvn.patch".format(self._SLEUTHKIT_GIT_TAG),
-        "sleuthkit-{0:s}-ntfs.patch".format(self._SLEUTHKIT_GIT_TAG)]
+        "sleuthkit-{0:s}-configure.ac".format(self._SLEUTHKIT_GIT_TAG)]
 
     for patch_file in patch_files:
       patch_file = os.path.join("patches", patch_file)
