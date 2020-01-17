@@ -10,7 +10,7 @@ matrix:
   - name: "Fedora Core 29 (Docker) with Python 3.7"
     env: FEDORA_VERSION="29"
     os: linux
-    dist: xenial
+    dist: bionic
     sudo: required
     group: edge
     language: python
@@ -20,7 +20,7 @@ matrix:
   - name: "Ubuntu Bionic (18.04) (Docker) with Python 3.6"
     env: UBUNTU_VERSION="18.04"
     os: linux
-    dist: xenial
+    dist: bionic
     sudo: required
     group: edge
     language: python

@@ -28,6 +28,7 @@ SLEUTHKIT_PATH: A path to the locally build sleuthkit source tree. If not
 
 from __future__ import print_function
 
+import copy
 import glob
 import re
 import os
@@ -56,6 +57,14 @@ import generate_bindings
 import run_tests
 
 
+version_tuple = (sys.version_info[0], sys.version_info[1])
+if version_tuple < (3, 5):
+  print((
+      'Unsupported Python version: {0:s}, version 3.5 or higher '
+      'required.').format(sys.version))
+  sys.exit(1)
+
+
 if not bdist_msi:
   BdistMSICommand = None
 else:
@@ -64,8 +73,12 @@ else:
 
     def run(self):
       """Builds an MSI."""
-      # Command bdist_msi does not support the library version, neither a date
-      # as a version but if we suffix it with .1 everything is fine.
+      # Make a deepcopy of distribution so the following version changes
+      # only apply to bdist_msi.
+      self.distribution = copy.deepcopy(self.distribution)
+
+      # bdist_msi does not support the library version so we add ".1"
+      # as a work around.
       self.distribution.metadata.version += ".1"
 
       bdist_msi.run(self)
@@ -276,7 +289,7 @@ class UpdateCommand(Command):
 
   This is normally only run by packagers to make a new release.
   """
-  _SLEUTHKIT_GIT_TAG = "4.6.6"
+  _SLEUTHKIT_GIT_TAG = "4.7.0"
 
   version = time.strftime("%Y%m%d")
 
@@ -331,15 +344,7 @@ class UpdateCommand(Command):
         fd.write(data)
 
     patch_files = [
-        "sleuthkit-{0:s}-configure.ac".format(self._SLEUTHKIT_GIT_TAG),
-        "sleuthkit-{0:s}-ext2fs.patch".format(self._SLEUTHKIT_GIT_TAG),
-        "sleuthkit-{0:s}-ext2fs_dent.patch".format(self._SLEUTHKIT_GIT_TAG),
-        "sleuthkit-{0:s}-ffs_dent.patch".format(self._SLEUTHKIT_GIT_TAG),
-        "sleuthkit-{0:s}-gpt.patch".format(self._SLEUTHKIT_GIT_TAG),
-        "sleuthkit-{0:s}-hfs.patch".format(self._SLEUTHKIT_GIT_TAG),
-        "sleuthkit-{0:s}-hfs_dent.patch".format(self._SLEUTHKIT_GIT_TAG),
-        "sleuthkit-{0:s}-lzvn.patch".format(self._SLEUTHKIT_GIT_TAG),
-        "sleuthkit-{0:s}-ntfs.patch".format(self._SLEUTHKIT_GIT_TAG)]
+        "sleuthkit-{0:s}-configure.ac".format(self._SLEUTHKIT_GIT_TAG)]
 
     for patch_file in patch_files:
       patch_file = os.path.join("patches", patch_file)
@@ -408,8 +413,7 @@ class ProjectBuilder(object):
 
     # Paths under the sleuthkit/tsk directory which contain files we need
     # to compile.
-    self._sub_library_names = [
-        "auto", "base", "docs", "fs", "hashdb", "img", "vs"]
+    self._sub_library_names = ["base", "docs", "fs", "img", "vs"]
 
     # The args for the extension builder.
     self.extension_args = {
