@@ -13,12 +13,8 @@ then
 	CONTAINER_NAME="centos${CENTOS_VERSION}";
 	CONTAINER_OPTIONS="-e LANG=en_US.UTF-8";
 
-	if test ${TRAVIS_PYTHON_VERSION} = "2.7";
-	then
-		TEST_COMMAND="./travis/run_python2.sh";
-	else
-		TEST_COMMAND="./travis/run_python3.sh";
-	fi
+	TEST_COMMAND="./travis/run_python3.sh";
+
 	# Note that exec options need to be defined before the container name.
 	docker exec ${CONTAINER_OPTIONS} ${CONTAINER_NAME} sh -c "cd pytsk && ${TEST_COMMAND}";
 
@@ -27,12 +23,8 @@ then
 	CONTAINER_NAME="fedora${FEDORA_VERSION}";
 	CONTAINER_OPTIONS="-e LANG=en_US.UTF-8";
 
-	if test ${TRAVIS_PYTHON_VERSION} = "2.7";
-	then
-		TEST_COMMAND="./travis/run_python2.sh";
-	else
-		TEST_COMMAND="./travis/run_python3.sh";
-	fi
+	TEST_COMMAND="./travis/run_python3.sh";
+
 	# Note that exec options need to be defined before the container name.
 	docker exec ${CONTAINER_OPTIONS} ${CONTAINER_NAME} sh -c "cd pytsk && ${TEST_COMMAND}";
 
@@ -41,20 +33,16 @@ then
 	CONTAINER_NAME="ubuntu${UBUNTU_VERSION}";
 	CONTAINER_OPTIONS="-e LANG=en_US.UTF-8";
 
-	if test ${TRAVIS_PYTHON_VERSION} = "2.7";
-	then
-		TEST_COMMAND="./travis/run_python.sh";
-	else
-		TEST_COMMAND="./travis/run_python3.sh";
-	fi
+	TEST_COMMAND="./travis/run_python3.sh";
+
 	# Note that exec options need to be defined before the container name.
 	docker exec ${CONTAINER_OPTIONS} ${CONTAINER_NAME} sh -c "cd pytsk && ${TEST_COMMAND}";
 
-elif test ${TARGET} = "linux" || test ${TARGET} = "macos";
+elif test ${TRAVIS_OS_NAME} = "linux" || test ${TRAVIS_OS_NAME} = "osx";
 then
 	./travis/run_python.sh;
 
-	if test ${TARGET} = "linux";
+	if test ${TRAVIS_OS_NAME} = "linux";
 	then
 		mkdir -p ${PWD}/tmp/lib/python${TRAVIS_PYTHON_VERSION}/site-packages/;
 
