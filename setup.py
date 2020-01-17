@@ -57,6 +57,14 @@ import generate_bindings
 import run_tests
 
 
+version_tuple = (sys.version_info[0], sys.version_info[1])
+if version_tuple < (3, 5):
+  print((
+      'Unsupported Python version: {0:s}, version 3.5 or higher '
+      'required.').format(sys.version))
+  sys.exit(1)
+
+
 if not bdist_msi:
   BdistMSICommand = None
 else:
