@@ -215,7 +215,7 @@ class BuildExtCommand(build_ext):
     command = [
         "sh", "configure", "--disable-java", "--without-afflib",
         "--without-libewf", "--without-libpq", "--without-libvhdi",
-        "--without-libvmdk", "--without-zlib"]
+        "--without-libvmdk", "--without-zlib", "CPPFLAGS=-std=c++11"]
 
     output = subprocess.check_output(command, cwd="sleuthkit")
     print_line = False
@@ -411,7 +411,6 @@ class ProjectBuilder(object):
     # The args for the extension builder.
     self.extension_args = {
         "define_macros": [],
-        "extra_compile_args": ["-std=c++11"],
         "include_dirs": ["talloc", self._libtsk_path, "sleuthkit", "."],
         "library_dirs": [],
         "libraries": []}
