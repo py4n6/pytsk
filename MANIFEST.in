@@ -26,5 +26,5 @@ recursive-exclude sleuthkit/unit_tests *
 recursive-exclude sleuthkit/win32 *
 recursive-exclude sleuthkit/xcode *
 recursive-include talloc *
+recursive-include test_data *
 recursive-include travis *
-recursive-exclude test_data *
