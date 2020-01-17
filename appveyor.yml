@@ -1,11 +1,20 @@
 environment:
   matrix:
-    - TARGET: "Python 2.7"
-      PYTHON: "C:\\Python27"
-      PYTHON_VERSION: "2.7"
+    - TARGET: "Python 3.5"
+      PYTHON: "C:\\Python35"
+      PYTHON_VERSION: "3.5"
     - TARGET: "Python 3.6"
       PYTHON: "C:\\Python36"
       PYTHON_VERSION: "3.6"
+    - TARGET: "Python 3.7"
+      PYTHON: "C:\\Python37"
+      PYTHON_VERSION: "3.7"
+    - TARGET: "Python 3.8"
+      PYTHON: "C:\\Python38"
+      PYTHON_VERSION: "3.8"
+    - TARGET: "Python 3.9"
+      PYTHON: "C:\\Python38"
+      PYTHON_VERSION: "3.9"
 
 install:
   - cmd: '"C:\Program Files\Microsoft SDKs\Windows\v7.1\Bin\SetEnv.cmd" /x86 /release'
