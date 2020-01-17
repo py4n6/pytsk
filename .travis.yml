@@ -3,7 +3,7 @@ matrix:
   include:
   - name: "Ubuntu 16.04 (Xenial) with Python 3.5"
     os: linux
-    dist: bionic
+    dist: xenial
     sudo: required
     group: edge
     python: 3.5
