@@ -12,9 +12,6 @@ environment:
     - TARGET: "Python 3.8"
       PYTHON: "C:\\Python38"
       PYTHON_VERSION: "3.8"
-    - TARGET: "Python 3.9"
-      PYTHON: "C:\\Python39"
-      PYTHON_VERSION: "3.9"
 
 install:
   - cmd: '"C:\Program Files\Microsoft SDKs\Windows\v7.1\Bin\SetEnv.cmd" /x86 /release'
