@@ -38,14 +38,23 @@ then
 	# Note that exec options need to be defined before the container name.
 	docker exec ${CONTAINER_OPTIONS} ${CONTAINER_NAME} sh -c "cd pytsk && ${TEST_COMMAND}";
 
-elif test ${TRAVIS_OS_NAME} = "linux" || test ${TRAVIS_OS_NAME} = "osx";
+elif test ${TRAVIS_OS_NAME} = "linux";
 then
-	./travis/run_python.sh;
+	python setup.py update
 
-	if test ${TRAVIS_OS_NAME} = "linux";
-	then
-		mkdir -p ${PWD}/tmp/lib/python${TRAVIS_PYTHON_VERSION}/site-packages/;
+	python setup.py build
 
-		PYTHONPATH=${PWD}/tmp/lib/python${TRAVIS_PYTHON_VERSION}/site-packages/ python setup.py install --prefix=${PWD}/tmp/;
-	fi
+	PYTHONPATH=`ls -1d build/lib.*` python run_tests.py
+
+	python setup.py sdist
+
+	python setup.py bdist
+
+	mkdir -p ${PWD}/tmp/lib/python${TRAVIS_PYTHON_VERSION}/site-packages/;
+
+	PYTHONPATH=${PWD}/tmp/lib/python${TRAVIS_PYTHON_VERSION}/site-packages/ python setup.py install --prefix=${PWD}/tmp/;
+
+elif test ${TRAVIS_OS_NAME} = "osx";
+then
+	./travis/run_python3.sh;
 fi
