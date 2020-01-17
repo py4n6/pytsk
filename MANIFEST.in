@@ -7,7 +7,6 @@ exclude .git .gitignore .gitmodules
 exclude .travis.yml
 exclude API-CHANGES.txt config.log ruleset.xml setupDevRepos.py travis_build.sh
 recursive-include dpkg *
-recursive-include examples *.py
 recursive-include patches *.patch
 recursive-include sleuthkit *
 recursive-exclude sleuthkit/autom4te.cache *
