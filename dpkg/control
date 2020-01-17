@@ -2,26 +2,10 @@ Source: pytsk3
 Section: python
 Priority: extra
 Maintainer: Joachim Metz <joachim.metz@gmail.com>
-Build-Depends: debhelper (>= 9), dh-autoreconf, dh-python, python-all (>= 2.7~), python-all-dev, python-setuptools, python3-all (>= 3.2~), python3-all-dev, python3-setuptools
+Build-Depends: debhelper (>= 9), dh-autoreconf, dh-python, python3-all (>= 3.2~), python3-all-dev, python3-setuptools
 Standards-Version: 3.9.5
-X-Python-Version: >= 2.7
 X-Python3-Version: >= 3.2
 Homepage: https://github.com/py4n6/pytsk/
-
-Package: python-pytsk3
-Architecture: any
-Depends: ${shlibs:Depends}, ${misc:Depends}
-Conflicts: python-tsk
-Replaces: python-tsk
-Description: Python 2 bindings for the SleuthKit (libtsk)
- Python 2 bindings for the SleuthKit (libtsk).
-
-Package: python-pytsk3-dbg
-Architecture: any
-Section: debug
-Depends: python-pytsk3 (= ${binary:Version}), ${misc:Depends}
-Description: Debugging symbols for python-pytsk3
- Debugging symbols for python-pytsk3.
 
 Package: python3-pytsk3
 Architecture: any
