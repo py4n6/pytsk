@@ -16,7 +16,7 @@ override_dh_auto_clean:
 	set -ex; for python in $(shell py3versions -r); do \
 		$$python setup.py clean -a; \
 	done;
-	rm -rf build pytsk3.egg-info/SOURCES.txt pytsk3.egg-info/PKG-INFO
+	rm -rf __pycache__ build pytsk3.egg-info/SOURCES.txt pytsk3.egg-info/PKG-INFO
 
 .PHONY: override_dh_auto_build
 override_dh_auto_build:
