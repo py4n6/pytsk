@@ -206,46 +206,56 @@ else:
 class BuildExtCommand(build_ext):
   """Custom handler for the build_ext command."""
 
-  def configure_source_tree(self, compiler):
-    """Configures the source and returns a dict of defines."""
-    define_macros = []
-    define_macros.append(("HAVE_TSK_LIBTSK_H", ""))
+  def configure_source(self, compiler):
+    """Configures the source.
+
+    Args:
+      compiler: distutils compiler object.
+    """
+    define_macros = [("HAVE_TSK_LIBTSK_H", "")]
+    # TODO: ("TSK_MULTITHREAD_LIB", "1")
 
     if compiler.compiler_type == "msvc":
-      return define_macros + [
+      define_macros.extend([
           ("WIN32", "1"),
           ("UNICODE", "1"),
-          ("_CRT_SECURE_NO_WARNINGS", "1"),
-      ]
+          ("NOMINMAX", "1"),
+          ("_CRT_SECURE_NO_WARNINGS", "1")])
 
-    # We want to build as much as possible self contained Python
-    # binding.
-    command = [
-        "sh", "configure", "--disable-java", "--without-afflib",
-        "--without-libewf", "--without-libpq", "--without-libvhdi",
-        "--without-libvmdk", "--without-zlib"]
+      # TODO: ("GUID_WINDOWS", "1"),
 
-    output = subprocess.check_output(command, cwd="sleuthkit")
-    print_line = False
-    for line in output.split(b"\n"):
-      line = line.rstrip()
-      if line == b"configure:":
-        print_line = True
+    else:
+      # We want to build as much as possible self contained Python
+      # binding.
+      command = [
+          "sh", "configure", "--disable-java", "--without-afflib",
+          "--without-libewf", "--without-libpq", "--without-libvhdi",
+          "--without-libvmdk", "--without-zlib"]
 
-      if print_line:
-        if sys.version_info[0] >= 3:
-          line = line.decode("ascii")
-        print(line)
+      output = subprocess.check_output(command, cwd="sleuthkit")
+      print_line = False
+      for line in output.split(b"\n"):
+        line = line.rstrip()
+        if line == b"configure:":
+          print_line = True
 
-    return define_macros + [
-        ("HAVE_CONFIG_H", "1"),
-        ("LOCALEDIR", "\"/usr/share/locale\""),
-    ]
+        if print_line:
+          if sys.version_info[0] >= 3:
+            line = line.decode("ascii")
+          print(line)
+
+      define_macros.extend([
+          ("HAVE_CONFIG_H", "1"),
+          ("LOCALEDIR", "\"/usr/share/locale\"")])
+
+      self.libraries = ["stdc++"]
+
+    self.define = define_macros
 
   def run(self):
     compiler = new_compiler(compiler=self.compiler)
     # pylint: disable=attribute-defined-outside-init
-    self.define = self.configure_source_tree(compiler)
+    self.configure_source(compiler)
 
     libtsk_path = os.path.join("sleuthkit", "tsk")
 
@@ -289,7 +299,8 @@ class UpdateCommand(Command):
 
   This is normally only run by packagers to make a new release.
   """
-  _SLEUTHKIT_GIT_TAG = "4.7.0"
+  _SLEUTHKIT_VERSION = "4.8.0"
+  _SLEUTHKIT_GIT_TAG = "4.8.0-fixed"
 
   version = time.strftime("%Y%m%d")
 
@@ -344,7 +355,7 @@ class UpdateCommand(Command):
         fd.write(data)
 
     patch_files = [
-        "sleuthkit-{0:s}-configure.ac".format(self._SLEUTHKIT_GIT_TAG)]
+        "sleuthkit-{0:s}-configure.ac".format(self._SLEUTHKIT_VERSION)]
 
     for patch_file in patch_files:
       patch_file = os.path.join("patches", patch_file)
@@ -413,14 +424,16 @@ class ProjectBuilder(object):
 
     # Paths under the sleuthkit/tsk directory which contain files we need
     # to compile.
-    self._sub_library_names = ["base", "docs", "fs", "img", "vs"]
+    self._sub_library_names = ["base", "docs", "fs", "img", "pool", "util", "vs"]
 
     # The args for the extension builder.
+    # Note that defining extra_compile_args in BuildExtCommand does not appear
+    # to work for Ubuntu 16.04 (Xenial). Hence it is defined here although that
+    # generates a warning on Windows.
     self.extension_args = {
-        "define_macros": [],
+        "extra_compile_args": ["-std=c++14"],
         "include_dirs": ["talloc", self._libtsk_path, "sleuthkit", "."],
-        "library_dirs": [],
-        "libraries": []}
+        "library_dirs": []}
 
     # The sources to build.
     self._source_files = [
@@ -432,6 +445,10 @@ class ProjectBuilder(object):
   def build(self):
     """Build everything."""
     # Fetch all c and cpp files from the subdirs to compile.
+    extension_file = os.path.join(
+        self._libtsk_path, "auto", "guid.cpp")
+    self._source_files.append(extension_file)
+
     for library_name in self._sub_library_names:
       for extension in ("*.c", "*.cpp"):
         extension_glob = os.path.join(

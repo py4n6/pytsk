@@ -127,12 +127,8 @@ typedef _W64 int ssize_t;
 #if defined( WIN32 )
 #define MSG_NOSIGNAL 0
 typedef  unsigned long int in_addr_t;
-typedef int bool;
-
 #else
 #define O_BINARY 0
-typedef int bool;
-
 #endif
 
 #define true 1

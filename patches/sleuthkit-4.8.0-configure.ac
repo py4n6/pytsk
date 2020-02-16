@@ -1,8 +1,8 @@
 diff --git a/configure.ac b/configure.ac
-index c89e0029..24a9c6bf 100644
+index 47aa7f5c..1eb1f7c1 100644
 --- a/configure.ac
 +++ b/configure.ac
-@@ -135,9 +135,33 @@ AS_IF([test "x$ac_cv_lib_sqlite3_sqlite3_open" = "xyes"],
+@@ -134,9 +134,33 @@ AS_IF([test "x$ac_cv_lib_sqlite3_sqlite3_open" = "xyes"],
        [AC_MSG_RESULT([bundled])])
  AM_CONDITIONAL([HAVE_LIBSQLITE3],
                 [test "x$ac_cv_lib_sqlite3_sqlite3_open" = "xyes"])
@@ -39,13 +39,14 @@ index c89e0029..24a9c6bf 100644
  AM_CONDITIONAL([HAVE_POSTGRESQL],[test "x$ac_cv_lib_pq_PQlibVersion" = "xyes"])
  AM_COND_IF([HAVE_POSTGRESQL],[ax_libpq=yes],[ax_libpq=no])
  AM_COND_IF([HAVE_POSTGRESQL], [AC_DEFINE([HAVE_LIBPQ_], [1], [Define if using libpq.])])
-@@ -400,28 +424,7 @@ AC_CONFIG_FILES([
-     tsk/base/Makefile
+@@ -413,30 +437,9 @@ AC_CONFIG_FILES([
      tsk/img/Makefile
      tsk/vs/Makefile
--    tsk/fs/Makefile
+     tsk/fs/Makefile
 -    tsk/hashdb/Makefile
--    tsk/auto/Makefile
+     tsk/auto/Makefile
+     tsk/pool/Makefile
+-    tsk/util/Makefile
 -    tools/Makefile
 -    tools/imgtools/Makefile
 -    tools/vstools/Makefile
@@ -53,6 +54,7 @@ index c89e0029..24a9c6bf 100644
 -    tools/hashtools/Makefile
 -    tools/srchtools/Makefile
 -    tools/autotools/Makefile
+-    tools/pooltools/Makefile
 -    tools/sorter/Makefile
 -    tools/timeline/Makefile
 -    tools/fiwalk/Makefile
@@ -65,7 +67,7 @@ index c89e0029..24a9c6bf 100644
 -    bindings/java/jni/Makefile
 -    unit_tests/Makefile
 -    unit_tests/base/Makefile])
-+    tsk/fs/Makefile])
++    tsk/util/Makefile])
  
  AC_OUTPUT
  

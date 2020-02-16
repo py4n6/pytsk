@@ -1,15 +1,23 @@
 environment:
   matrix:
     - TARGET: "Python 3.5"
+      APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
+      VisualStudioVersion: 14.0
       PYTHON: "C:\\Python35"
       PYTHON_VERSION: "3.5"
     - TARGET: "Python 3.6"
+      APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
+      VisualStudioVersion: 14.0
       PYTHON: "C:\\Python36"
       PYTHON_VERSION: "3.6"
     - TARGET: "Python 3.7"
+      APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
+      VisualStudioVersion: 14.0
       PYTHON: "C:\\Python37"
       PYTHON_VERSION: "3.7"
     - TARGET: "Python 3.8"
+      APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
+      VisualStudioVersion: 14.0
       PYTHON: "C:\\Python38"
       PYTHON_VERSION: "3.8"
 

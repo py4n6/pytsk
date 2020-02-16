@@ -56,5 +56,14 @@ then
 
 elif test ${TRAVIS_OS_NAME} = "osx";
 then
-	./travis/run_python3.sh;
+	python3 setup.py update
+
+	# Note that clang is no longer supported as of SleuthKit 4.8.0.
+	python3 setup.py build
+
+	PYTHONPATH=`ls -1d build/lib.*` python3 run_tests.py
+
+	python3 setup.py sdist
+
+	python3 setup.py bdist
 fi
