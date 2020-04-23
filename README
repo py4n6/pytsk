@@ -19,8 +19,7 @@ to make the binding reflect the TSK API as much as possible in
 capabilities, while at the same time having a nice Pythonic OO
 interface:
 
-4.2: http://www.sleuthkit.org/sleuthkit/docs/api-docs/4.2/
-4.3: http://www.sleuthkit.org/sleuthkit/docs/api-docs/4.3/
+4.7.0: http://www.sleuthkit.org/sleuthkit/docs/api-docs/4.7.0/
 
 The new binding just links to libtsk which should make it easier to
 maintain against newer versions. We should be able to rewrite all the
