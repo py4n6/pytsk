@@ -1,4 +1,4 @@
-include LICENSE version.txt
+include AUTHORS LICENSE version.txt
 include *.c
 include *.h
 include *.py
