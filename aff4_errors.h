@@ -19,6 +19,10 @@
 
 #include "class.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Some helpful little things
 #define ERROR_BUFFER_SIZE 1024
 
@@ -38,7 +42,7 @@
   // Reserved for impossible conditions
 #define  EProgrammingError 10
 
-DLL_PUBLIC void *aff4_raise_errors(int t, char *string,  ...);
+DLL_PUBLIC void *aff4_raise_errors(int t, const char *string,  ...);
 
 /** We only set the error state if its not already set */
 #define RaiseError(t, message, ...)                                     \
@@ -71,5 +75,9 @@ DLL_PUBLIC int *aff4_get_current_error(char **error_str);
 #define PUSH_ERROR_STATE { int *tmp_error_p = aff4_get_current_error(NULL); int tmp_error = *tmp_error_p; int exception __attribute__((unused));
 
 #define POP_ERROR_STATE *tmp_error_p = tmp_error;};
+
+#ifdef __cplusplus
+} /* closing brace for extern "C" */
+#endif
 
 #endif /* !AFF4_ERRORS_H_ */

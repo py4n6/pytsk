@@ -59,7 +59,7 @@ void error_init(void) {
 };
 #endif
 
-DLL_PUBLIC void *aff4_raise_errors(int t, char *reason, ...) {
+DLL_PUBLIC void *aff4_raise_errors(int t, const char *reason, ...) {
   char *error_buffer;
   char tmp[ERROR_BUFF_SIZE];
   // This has to succeed:
@@ -101,22 +101,22 @@ DLL_PUBLIC int *aff4_get_current_error(char **error_buffer) {
   int *type;
 
   (void) pthread_once(&error_once, error_init);
-  type = pthread_getspecific(error_value_slot);
+  type = (int *) pthread_getspecific(error_value_slot);
 
   // This is optional
   if(error_buffer != NULL) {
-    *error_buffer = pthread_getspecific(error_str_slot);
+    *error_buffer = (char *) pthread_getspecific(error_str_slot);
 
     // If TLS buffers are not set we need to create them
     // TODO: the TLS buffers need to be freed on exit.
     if(*error_buffer == NULL) {
-      *error_buffer = talloc_size(NULL, ERROR_BUFF_SIZE);
+      *error_buffer = (char *) talloc_size(NULL, ERROR_BUFF_SIZE);
       pthread_setspecific(error_str_slot, *error_buffer);
     };
   };
 
   if(!type) {
-    type = talloc_size(NULL, ERROR_BUFF_SIZE);
+    type = (int *) talloc_size(NULL, ERROR_BUFF_SIZE);
     pthread_setspecific(error_value_slot, type);
   };
 

@@ -14,8 +14,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef __CLASS_H__
-#define __CLASS_H__
+#ifndef __PYTSK_CCLASS_H__
+#define __PYTSK_CCLASS_H__
 
 /*
   Classes and objects in C
@@ -30,7 +30,7 @@
 
   Example::
 
-CLASS(Foo, Object)
+CCLASS(Foo, Object)
     int x;
     int y;
 
@@ -39,14 +39,14 @@ CLASS(Foo, Object)
     Foo METHOD(Foo, Con, int x, int y);
     int METHOD(Foo, add);
 
-END_CLASS
+END_CCLASS
 
 Now we need to define some functions for the constructor and
-methods. Note that the constuctor is using ALLOCATE_CLASS to allocate
+methods. Note that the constuctor is using ALLOCATE_CCLASS to allocate
 space for the class structures. Callers may call with self==NULL to
 force allocation of a new class. Note that we do not call the
 constructor of our superclass implicitly here. (Calling the sperclass
-constructor is optional, but ALLOCATE_CLASS is not.).
+constructor is optional, but ALLOCATE_CCLASS is not.).
 
 Foo Foo_Con(Foo self,int x,int y) {
   self->x = x;
@@ -55,12 +55,12 @@ Foo Foo_Con(Foo self,int x,int y) {
   return self;
 };
 
-int Foo_add(Foo this) {
-  return (this->x + this->y);
+int Foo_add(Foo cthis) {
+  return (cthis->x + cthis->y);
 };
 
 Now we need to define the Virtual function table - These are those
-functions and attributes which are defined in this class (over its
+functions and attributes which are defined in the class (over its
 superclass). Basically these are all those things in the class
 definition above, with real function names binding them. (Note that by
 convention we preceed the name of the method with the name of the
@@ -73,9 +73,9 @@ END_VIRTUAL
 
 We can use inheritance too:
 
-CLASS(Bar, Foo)
+CCLASS(Bar, Foo)
    Bar METHOD(Bar, Con, char *something)
-END_CLASS
+END_CCLASS
 
 Here Bar extends Foo and defines a new constructor with a different prototype:
 
@@ -87,9 +87,9 @@ If there is a function which expects a Foo, we will need to over ride
 the Foo constructor in the Bar, so the function will not see the
 difference between the Foo and Bar:
 
-CLASS(Bar,Foo)
+CCLASS(Bar,Foo)
   int bar_attr;
-END_CLASS
+END_CCLASS
 
 Foo Bar_Con(Foo self, int x, int y) {
 ...
@@ -114,9 +114,9 @@ In this case, we need to make a type cast to convice C that self is
 actually a Bar not a Foo:
 
 Foo Bar_Con(Foo self, int x, int y) {
-   Bar this = (Bar)self;
+   Bar cthis = (Bar)self;
 
-   this->bar_attr=1
+   cthis->bar_attr=1
 };
 
 This allows us to access bars attributes.
@@ -143,9 +143,9 @@ fact it was over ridden).
 
 For example:
 
-CLASS(Derived, Foo)
+CCLASS(Derived, Foo)
       int METHOD(Derived, add);
-END_CLASS
+END_CCLASS
 
 VIRTUAL(Derived, Foo)
    VMETHOD(add) = Derived_add
@@ -170,61 +170,61 @@ extern "C" {
 
 #include <talloc.h>
 
-#define CLASS(class,super_class)                                        \
-  typedef struct class ## _t *class;                                    \
-  DLL_PUBLIC class alloc_ ## class(void); /* Allocates object memory */ \
-  DLL_PUBLIC int class ## _init(Object self); /* Class initializer */   \
-  DLL_PUBLIC extern struct class ## _t __ ## class; /* Public class template */ \
-  struct class ## _t {                                                  \
-  struct super_class ## _t super;  /* Superclass Fields we inherit */   \
-  class   __class__;       /* Pointer to our own class */               \
-  super_class  __super__;  /* Pointer to our superclass */
+#define CCLASS(cclass,super_cclass)                                        \
+  typedef struct cclass ## _t *cclass;                                    \
+  DLL_PUBLIC cclass alloc_ ## cclass(void); /* Allocates object memory */ \
+  DLL_PUBLIC int cclass ## _init(Object self); /* Class initializer */   \
+  DLL_PUBLIC extern struct cclass ## _t __ ## cclass; /* Public C class template */ \
+  struct cclass ## _t {                                                  \
+  struct super_cclass ## _t super;  /* Super C class Fields we inherit */   \
+  cclass   __class__;       /* Pointer to our own C class */               \
+  super_cclass  __super__;  /* Pointer to our super C class */
 
 #define METHOD(cls, name, ... )		\
   (* name)(cls self, ## __VA_ARGS__ )
 
-  // Class methods are attached to the class but are not called with
-  // an instance. This is similar to the python class method or java
+  // Class methods are attached to the C class but are not called with
+  // an instance. This is similar to the Python class method or java
   // static methods.
-#define CLASS_METHOD(name, ... )                \
+#define CCLASS_METHOD(name, ... )                \
   (*name)(__VA_ARGS__)
 
 /* This is a convenience macro which may be used if x if really large */
 #define CALL(x, method, ... )			\
   (x)->method((x), ## __VA_ARGS__)
 
-#define END_CLASS };
+#define END_CCLASS };
 
-/* This is used to set the classes up for use:
+/* This is used to set the C classes up for use:
  *
- * class_init = checks the class template (__class) to see if it has
+ * cclass_init = checks the C class template (__class) to see if it has
  * been allocated. otherwise allocates it in the global context.
  *
- * class_Alloc = Allocates new memory for an instance of the
- * class. This is a recursive function calling each super class in
- * turn and setting the currently over ridden defaults. So for eample
- * suppose this class (foo) derives from bar, we first fill the
+ * cclass_Alloc = Allocates new memory for an instance of the C class
+ * This is a recursive function calling each super C class in turn
+ * and setting the currently over ridden defaults. So for eample
+ * suppose the C class (foo) derives from bar, we first fill the
  * template with bars methods, and attributes. Then we over write
  * those with foos methods and attributes.
  */
-#define VIRTUAL(class,superclass)                                       \
-  struct class ## _t __ ## class;                                       \
+#define VIRTUAL(cclass,supercclass)                                       \
+  struct cclass ## _t __ ## cclass;                                       \
                                                                         \
-  DLL_PUBLIC  class alloc_ ## class(void) {				\
-    class result = talloc_memdup(NULL, &__## class, sizeof(__## class)); \
+  DLL_PUBLIC  cclass alloc_ ## cclass(void) {				\
+    cclass result = (cclass) talloc_memdup(NULL, (const void *) &__## cclass, sizeof(__## cclass)); \
     return result;                                                      \
   };                                                                    \
                                                                         \
-  DLL_PUBLIC int class ## _init(Object this) {                          \
-  class self = (class)this;                                             \
+  DLL_PUBLIC int cclass ## _init(Object cthis) {                          \
+  cclass self = (cclass)cthis;                                             \
   if(self->__super__) return 1;                                         \
-  superclass ##_init(this);                                             \
-  this->__class__ = (Object)&__ ## class;                               \
-  self->__class__ = (class)&__ ## class;                               \
-  this->__super__ = (Object)&__ ## superclass;                          \
-  self->__super__ = (superclass)&__ ## superclass;                      \
-  this->__size = sizeof(struct class ## _t);                            \
-  this->__name__ = #class;
+  supercclass ##_init(cthis);                                             \
+  cthis->__class__ = (Object)&__ ## cclass;                               \
+  self->__class__ = (cclass)&__ ## cclass;                               \
+  cthis->__super__ = (Object)&__ ## supercclass;                          \
+  self->__super__ = (supercclass)&__ ## supercclass;                      \
+  cthis->__size = sizeof(struct cclass ## _t);                            \
+  cthis->__name__ = #cclass;
 
 #define SET_DOCSTRING(string)			\
   ((Object)self)->__doc__ = string
@@ -237,7 +237,7 @@ extern "C" {
 #define VMETHOD_BASE(base, method)		\
   (((base)self)->method)
 
-#define CLASS_ATTR(self, base, method)		\
+#define CCLASS_ATTR(self, base, method)		\
   (((base)self)->method)
 
 #define VATTR(attribute)			\
@@ -252,85 +252,85 @@ extern "C" {
 #define DOCSTRING(obj)				\
   ((Object)obj)->__doc__
 
-#define INIT_CLASS(class)                       \
-  class ## _init((Object)&__ ## class)
+#define INIT_CCLASS(cclass)                       \
+  cclass ## _init((Object)&__ ## cclass)
 
 /* This MACRO is used to construct a new Class using a constructor.
  *
  * This is done to try and hide the bare (unbound) method names in
  * order to prevent name space pollution. (Bare methods may be
  * defined as static within the implementation file). This macro
- * ensures that class structures are initialised properly before
+ * ensures that C class structures are initialised properly before
  * calling their constructors.
  *
  * We require the following args:
- *  class - the type of class to make
- *  virt_class - The class where the method was defined
+ *  cclass - the type of C class to make
+ *  virt_cclass - The C class where the method was defined
  *  constructors - The constructor method to use
  *  context - a talloc context to use.
  *
- *  Note that the class and virt_class do not have to be the same if
- *  the method was not defined in the current class. For example
+ *  Note that the cclass and virt_cclass do not have to be the same if
+ *  the method was not defined in the current C class. For example
  *  suppose Foo extends Bar, but method is defined in Bar but
  *  inherited in Foo:
  *
  *  CONSTRUCT(Foo, Bar, super.method, context)
  *
- *  virt_class is Bar because thats where method was defined.
+ *  virt_cclass is Bar because thats where method was defined.
  */
 
-// The following only initialises the class if the __super__ element
+// The following only initialises the C class if the __super__ element
 // is NULL. This is fast as it wont call the initaliser unnecessaily
 
-  // This requires the class initializers to have been called
+  // This requires the C class initializers to have been called
   // previously. Therefore they are not exported.
-#define CONSTRUCT(class, virt_class, constructor, context, ...) \
-    (class)(((virt_class) (&__ ## class))->constructor( \
-        (virt_class) _talloc_memdup( \
-            context, &__ ## class, \
-            sizeof(struct class ## _t), \
-            __location__ "(" #class ")"), \
+#define CONSTRUCT(cclass, virt_cclass, constructor, context, ...) \
+    (cclass)(((virt_cclass) (&__ ## cclass))->constructor( \
+        (virt_cclass) _talloc_memdup( \
+            context, &__ ## cclass, \
+            sizeof(struct cclass ## _t), \
+            __location__ "(" #cclass ")"), \
         ## __VA_ARGS__) )
 
 /* _talloc_memdup version
-#define CONSTRUCT_CREATE(class, virt_class, context) \
-     (virt_class) _talloc_memdup(context, &__ ## class, sizeof(struct class ## _t), __location__ "(" #class ")")
+#define CONSTRUCT_CREATE(cclass, virt_cclass, context) \
+     (virt_cclass) _talloc_memdup(context, &__ ## cclass, sizeof(struct cclass ## _t), __location__ "(" #cclass ")")
 */
 
-#define CONSTRUCT_CREATE(class, virt_class, context) \
-     (virt_class) talloc_memdup(context, &__ ## class, sizeof(struct class ## _t))
+#define CONSTRUCT_CREATE(cclass, virt_cclass, context) \
+     (virt_cclass) talloc_memdup(context, &__ ## cclass, sizeof(struct cclass ## _t))
 
-#define CONSTRUCT_INITIALIZE(class, virt_class, constructor, object, ...) \
-    (class)(((virt_class) (&__ ## class))->constructor(object, ## __VA_ARGS__))
+#define CONSTRUCT_INITIALIZE(cclass, virt_cclass, constructor, object, ...) \
+    (cclass)(((virt_cclass) (&__ ## cclass))->constructor(object, ## __VA_ARGS__))
 
-/* This variant is useful when all we have is a class reference
- *   (GETCLASS(Foo)) or &__Foo
+/* This variant is useful when all we have is a C class reference
+ *   (GETCCLASS(Foo)) or &__Foo
  */
-#define CONSTRUCT_FROM_REFERENCE(class, constructor, context, ... )	\
-  ( (class)->constructor(						\
-                       (void *)_talloc_memdup(context, ((Object)class), ((Object)class)->__size,  __location__ "(" #class "." #constructor ")"), \
+#define CONSTRUCT_FROM_REFERENCE(cclass, constructor, context, ... )	\
+  ( (cclass)->constructor(						\
+                       (void *)_talloc_memdup(context, ((Object)cclass), ((Object)cclass)->__size,  __location__ "(" #cclass "." #constructor ")"), \
 		      ## __VA_ARGS__) )
 
-/* Finds the size of the class in x */
-#define CLASS_SIZE(class)			\
-  ((Object)class)->__size
+/* Finds the size of the C class in x */
+#define CCLASS_SIZE(cclass)			\
+  ((Object)cclass)->__size
 
 typedef struct Object_t *Object;
 
 struct Object_t {
-  //A reference to a class instance - this is useful to be able to
-  //tell which class an object really belongs to:
+  //A reference to a C class instance - this is useful to be able to
+  //tell which C class an object really belongs to:
   Object __class__;
 
-  //And its super class:
+  //And its super C class:
   Object __super__;
 
-  char *__name__;
+  const char *__name__;
 
   /** Objects may have a doc string associated with them. */
-  char *__doc__;
+  const char *__doc__;
 
-  //How large the class is:
+  //How large the C class is:
   int __size;
 
   /* A pointer to an extension - An extension is some other arbitrary
@@ -342,39 +342,39 @@ struct Object_t {
 #define SUPER(base, imp, method, ...)            \
   ((base)&__ ## imp)->method((base)self, ## __VA_ARGS__)
 
-#define GETCLASS(class)				\
-  (Object)&__ ## class
+#define GETCCLASS(cclass)				\
+  (Object)&__ ## cclass
 
-// Returns true if the obj belongs to the class
-#define ISINSTANCE(obj,class)			\
-  (((Object)obj)->__class__ == GETCLASS(class))
+// Returns true if the obj belongs to the C class
+#define ISINSTANCE(obj,cclass)			\
+  (((Object)obj)->__class__ == GETCCLASS(cclass))
 
 // This is a string comparison version of ISINSTANCE which works
 // across different shared objects.
-#define ISNAMEINSTANCE(obj, class)		\
-  (obj && !strcmp(class, NAMEOF(obj)))
+#define ISNAMEINSTANCE(obj, cclass)		\
+  (obj && !strcmp(cclass, NAMEOF(obj)))
 
-// We need to ensure that class was properly initialised:
-#define ISSUBCLASS(obj,class)			\
-  issubclass((Object)obj, (Object)&__ ## class)
+// We need to ensure that C class was properly initialised:
+#define ISSUBCCLASS(obj,cclass)			\
+  issubcclass((Object)obj, (Object)&__ ## cclass)
 
-#define CLASSOF(obj)				\
+#define CCLASSOF(obj)				\
   ((Object)obj)->__class__
 
 DLL_PUBLIC void Object_init(Object);
 
 DLL_PUBLIC extern struct Object_t __Object;
 
-/** Find out if obj is an instance of cls or a derived class.
+/** Find out if obj is an instance of cls or a derived C class.
 
     Use like this:
 
-    if(issubclass(obj, (Object)&__FileLikeObject)) {
+    if(issubcclass(obj, (Object)&__FileLikeObject)) {
        ...
     };
 
 
-    You can also do this in a faster way if you already know the class
+    You can also do this in a faster way if you already know the C class
     hierarchy (but it could break if the hierarchy changes):
     {
      Object cls = ((Object)obj)->__class__;
@@ -386,12 +386,12 @@ DLL_PUBLIC extern struct Object_t __Object;
      };
     };
  */
-int issubclass(Object obj, Object class);
+int issubcclass(Object obj, Object cclass);
 
 DLL_PUBLIC extern void unimplemented(Object self);
 
-#define UNIMPLEMENTED(class, method)             \
-  ((class)self)->method = (void *)unimplemented;
+#define UNIMPLEMENTED(cclass, method)             \
+  ((cclass)self)->method = (void *)unimplemented;
 
 #define ZSTRING_NO_NULL(str) str , (strlen(str))
 #define ZSTRING(str) str , (strlen(str)+1)
@@ -403,9 +403,9 @@ DLL_PUBLIC extern void unimplemented(Object self);
 #define OUT
 #define IN
 
-  // This modifier before a class means that the class is abstract and
+  // This modifier before a C class means that the C class is abstract and
   // does not have an implementation - we do not generate bindings for
-  // that class then.
+  // that C class then.
 #define ABSTRACT
 
   // This modifier indicates that the following pointer is pointing to
@@ -415,7 +415,7 @@ DLL_PUBLIC extern void unimplemented(Object self);
   // This tells the autobinder to generated bindings to this struct
 #define BOUND
 
-  // This tells the autobinder to ignore this class as it should be
+  // This tells the autobinder to ignore this C class as it should be
   // private to the implementation - external callers should not
   // access this.
 #define PRIVATE
@@ -435,19 +435,19 @@ DLL_PUBLIC extern void unimplemented(Object self);
 typedef char * ZString;
 
   /* The following is a direction for the autogenerator to proxy the
-     given class. This is done in the following way:
+     given C class. This is done in the following way:
 
-1) a new python type is created called Proxy_class_name() with a
+1) a new python type is created called Proxy_cclass_name() with a
 constructor which takes a surrogate object.
 
-2) The proxy class contains a member "base" of the type of the proxied
+2) The proxy C class contains a member "base" of the type of the proxied
 C class.
 
 3) The returned python object may be passed to any C functions which
-expect the proxied class, and internal C calls will be converted to
+expect the proxied C class, and internal C calls will be converted to
 python method calls on the proxied object.
   */
-#define PROXY_CLASS(name)
+#define PROXY_CCLASS(name)
 
   /* This signals the autogenerator to bind the named struct */
 #define BIND_STRUCT(name)
@@ -462,4 +462,4 @@ python method calls on the proxied object.
 } /* closing brace for extern "C" */
 #endif
 
-#endif /* ifndef __CLASS_H__ */
+#endif /* ifndef __PYTSK_CCLASS_H__ */

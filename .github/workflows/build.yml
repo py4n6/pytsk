@@ -21,6 +21,7 @@ jobs:
     - name: Build Python module
       run: |
         python setup.py update
+        export CXXFLAGS="-std=c++14"
         python setup.py build
         python setup.py install
     - name: Test Python module

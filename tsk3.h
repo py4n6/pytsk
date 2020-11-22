@@ -25,8 +25,8 @@
 #error Missing libtsk header
 #endif
 
-#include "class.h"
 #include "aff4_errors.h"
+#include "class.h"
 
 typedef struct {
   TSK_IMG_INFO base;
@@ -64,7 +64,7 @@ BIND_STRUCT(TSK_VS_INFO);
 
     f = fs.open_dir(inode = 2)
 */
-CLASS(Img_Info, Object)
+CCLASS(Img_Info, Object)
      PRIVATE Extended_TSK_IMG_INFO *img;
 
      /* Value to indicate if img is managed internally
@@ -90,11 +90,11 @@ CLASS(Img_Info, Object)
 
      /* Closes the image */
      void METHOD(Img_Info, close);
-END_CLASS
+END_CCLASS
 
 /** This object handles volumes.
  */
-CLASS(Volume_Info, Object)
+CCLASS(Volume_Info, Object)
   FOREIGN TSK_VS_INFO *info;
   int current;
 
@@ -107,7 +107,7 @@ CLASS(Volume_Info, Object)
                      TSK_VS_TYPE_ENUM type, TSK_OFF_T offset);
   void METHOD(Volume_Info, __iter__);
   TSK_VS_PART_INFO *METHOD(Volume_Info, iternext);
-END_CLASS
+END_CCLASS
 
 // Forward declerations
 struct FS_Info_t;
@@ -120,7 +120,7 @@ struct Directory_t;
     (e.g. to recover block allocation information).
 
 */
-CLASS(Attribute, Object)
+CCLASS(Attribute, Object)
    FOREIGN TSK_FS_ATTR *info;
    FOREIGN TSK_FS_ATTR_RUN *current;
 
@@ -128,13 +128,13 @@ CLASS(Attribute, Object)
 
    void METHOD(Attribute, __iter__);
    TSK_FS_ATTR_RUN *METHOD(Attribute, iternext);
-END_CLASS
+END_CCLASS
 
 
 /** This represents a file object. A file has both metadata and
     data streams.
 
-    Its usually not useful to instantiate this class by itself -
+    Its usually not useful to instantiate this C class by itself -
     you need to call FS_Info.open() or iterate over a Directory()
     object.
 
@@ -144,7 +144,7 @@ END_CLASS
     Iterating over this object will return all the attributes for
     this file.
 */
-CLASS(File, Object)
+CCLASS(File, Object)
      FOREIGN TSK_FS_FILE *info;
 
      /* Value to indicate if info is managed internally
@@ -177,7 +177,7 @@ CLASS(File, Object)
 
      void METHOD(File, __iter__);
      Attribute METHOD(File, iternext);
-END_CLASS
+END_CCLASS
 
 /** This represents a Directory within the filesystem. You can
     iterate over this object to obtain all the File objects
@@ -186,7 +186,7 @@ END_CLASS
     for f in d:
         print f.info.name.name
 */
-CLASS(Directory, Object)
+CCLASS(Directory, Object)
      TSK_FS_DIR *info;
      PRIVATE struct FS_Info_t *fs;
 
@@ -207,14 +207,14 @@ CLASS(Directory, Object)
      /** An iterator of all files in the present directory. */
      void METHOD(Directory, __iter__);
      File METHOD(Directory, iternext);
-END_CLASS
+END_CCLASS
 
 /** This is used to obtain a filesystem object from an Img_Info object.
 
     From this FS_Info we can open files or directories by inode, or
     path.
  */
-CLASS(FS_Info, Object)
+CCLASS(FS_Info, Object)
      FOREIGN TSK_FS_INFO *info;
 
      PRIVATE Extended_TSK_IMG_INFO *extended_img_info;
@@ -242,7 +242,7 @@ CLASS(FS_Info, Object)
 
      void METHOD(FS_Info, exit);
 
-END_CLASS
+END_CCLASS
 
      int *tsk_get_current_error(char **buff);
 

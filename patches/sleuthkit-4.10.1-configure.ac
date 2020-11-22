@@ -1,0 +1,37 @@
+diff --git a/configure.ac b/configure.ac
+index 94c0c3b7..354e666e 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -407,31 +407,8 @@ AC_CONFIG_FILES([
+     tsk/img/Makefile
+     tsk/vs/Makefile
+     tsk/fs/Makefile
+-    tsk/hashdb/Makefile
+-    tsk/auto/Makefile
+     tsk/pool/Makefile
+-    tsk/util/Makefile
+-    tools/Makefile
+-    tools/imgtools/Makefile
+-    tools/vstools/Makefile
+-    tools/fstools/Makefile
+-    tools/hashtools/Makefile
+-    tools/srchtools/Makefile
+-    tools/autotools/Makefile
+-    tools/pooltools/Makefile
+-    tools/sorter/Makefile
+-    tools/timeline/Makefile
+-    tools/fiwalk/Makefile
+-    tools/fiwalk/src/Makefile
+-    tools/fiwalk/plugins/Makefile
+-    tests/Makefile
+-    samples/Makefile
+-    man/Makefile
+-    bindings/java/Makefile
+-    bindings/java/jni/Makefile
+-    case-uco/java/Makefile
+-    unit_tests/Makefile
+-    unit_tests/base/Makefile])
++    tsk/util/Makefile])
+ 
+ AC_OUTPUT
+ 

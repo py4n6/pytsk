@@ -22,9 +22,9 @@
 // Noone should instantiate Object directly. this should be already
 // allocated therefore:
 
-DLL_PUBLIC void Object_init(Object this) {
-  this->__class__ = &__Object;
-  this->__super__ = NULL;
+DLL_PUBLIC void Object_init(Object cthis) {
+  cthis->__class__ = &__Object;
+  cthis->__super__ = NULL;
 };
 
 struct Object_t __Object = {
@@ -36,10 +36,10 @@ struct Object_t __Object = {
   NULL   //.__extension
 };
 
-int issubclass(Object obj, Object class) {
+int issubclass(Object obj, Object cclass) {
   obj = obj->__class__;
   while(1) {
-    if(obj == class->__class__)
+    if(obj == cclass->__class__)
       return 1;
 
     obj=obj->__super__;
