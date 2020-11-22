@@ -1,5 +1,4 @@
 name: build
-on:
 on: [push, pull_request]
 jobs:
   build_macos:
