@@ -235,7 +235,7 @@ import lexer
 DEBUG = 0
 
 # The pytsk3 version.
-VERSION = "20200117"
+VERSION = "20210126"
 
 # These functions are used to manage library memory.
 FREE = "aff4_free"
@@ -2022,7 +2022,7 @@ class Wrapper(Type):
 
 
 class PointerWrapper(Wrapper):
-    """ A pointer to a wrapped class """
+    """A pointer to a wrapped class """
 
     def __init__(self, name, type, *args, **kwargs):
         type = type.split()[0]
@@ -2062,7 +2062,7 @@ class PointerWrapper(Wrapper):
 
 
 class StructWrapper(Wrapper):
-    """ A wrapper for struct classes """
+    """A wrapper for struct classes """
     active = False
 
     def __init__(self, name, type, *args, **kwargs):
@@ -3316,7 +3316,7 @@ class ProxiedMethod(Method):
 
 
 class StructConstructor(ConstructorMethod):
-    """ A constructor for struct wrappers - basically just allocate
+    """A constructor for struct wrappers - basically just allocate
     memory for the struct.
     """
 
@@ -3414,7 +3414,7 @@ class ClassGenerator(object):
         return result
 
     def prepare(self):
-        """ This method is called just before we need to write the
+        """This method is called just before we need to write the
         output and allows us to do any last minute fixups.
         """
         pass
@@ -4147,6 +4147,7 @@ class HeaderParser(lexer.SelfFeederMixIn):
         # we cant handle them at all)
         ["(RECURSIVE_)?STRUCT", "(struct|union)\s+([_A-Za-z0-9]+)?\s*{", "PUSH_STATE", "RECURSIVE_STRUCT"],
         ["RECURSIVE_STRUCT", "}\s+[0-9A-Za-z]+", "POP_STATE", None],
+        ["RECURSIVE_STRUCT", "};", "POP_STATE", None],
 
         # Process enums (2 forms - named and typedefed)
         ["INITIAL", r"enum\s+([0-9A-Za-z_]+)\s+{", "PUSH_STATE,ENUM_START", "ENUM"],
@@ -4168,10 +4169,13 @@ class HeaderParser(lexer.SelfFeederMixIn):
 
     ]
 
-    def __init__(self, name, verbose=1, base=""):
+    def __init__(self, name, verbose=0, base=""):
+        if DEBUG > 0:
+          verbose = 1
+
         self.module = Module(name)
         self.base = base
-        super(HeaderParser, self).__init__(verbose=0)
+        super(HeaderParser, self).__init__(verbose=verbose)
 
         file_object = io.BytesIO(
             b"// Base object\n"
