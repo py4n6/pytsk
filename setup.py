@@ -36,12 +36,15 @@ import subprocess
 import sys
 import time
 
-import distutils.ccompiler
-
-from distutils.ccompiler import new_compiler
 from setuptools import setup, Command, Extension
 from setuptools.command.build_ext import build_ext
 from setuptools.command.sdist import sdist
+
+import distutils.ccompiler
+
+from distutils import log
+from distutils.ccompiler import new_compiler
+from distutils.dep_util import newer_group
 
 try:
   from distutils.command.bdist_msi import bdist_msi
@@ -206,51 +209,145 @@ else:
 class BuildExtCommand(build_ext):
   """Custom handler for the build_ext command."""
 
-  def configure_source_tree(self, compiler):
-    """Configures the source and returns a dict of defines."""
-    define_macros = []
-    define_macros.append(("HAVE_TSK_LIBTSK_H", ""))
+  def build_extension(self, extension):
+    """Builds the extension.
+
+    Args:
+      extentsion: distutils extentsion object.
+    """
+    if (extension.sources is None or
+        not isinstance(extension.sources, (list, tuple))):
+      raise errors.DistutilsSetupError((
+          'in \'ext_modules\' option (extension \'{0:s}\'), '
+          '\'sources\' must be present and must be '
+          'a list of source filenames').format(extension.name))
+
+    extension_path = self.get_ext_fullpath(extension.name)
+    depends = extension.sources + extension.depends
+    if not (self.force or newer_group(depends, extension_path, 'newer')):
+      log.debug('skipping \'%s\' extension (up-to-date)', extension.name)
+      return
+
+    log.info('building \'%s\' extension', extension.name)
+
+    # C and C++ source files need to be compiled seperately otherwise
+    # the extension will not build on Mac OS.
+    c_sources = []
+    cxx_sources = []
+    for source in extension.sources:
+      if source.endswith('.c'):
+        c_sources.append(source)
+      else:
+        cxx_sources.append(source)
+
+    objects = []
+    for lang, sources in (('c', c_sources), ('c++', cxx_sources)):
+      extra_args = extension.extra_compile_args or []
+      if lang == 'c++':
+        if self.compiler.compiler_type == 'msvc':
+          extra_args.append('/EHsc')
+        else:
+          extra_args.append('-std=c++14')
+
+      macros = extension.define_macros[:]
+      for undef in extension.undef_macros:
+        macros.append((undef,))
+
+      compiled_objects = self.compiler.compile(
+          sources,
+          output_dir=self.build_temp,
+          macros=macros,
+          include_dirs=extension.include_dirs,
+          debug=self.debug,
+          extra_postargs=extra_args,
+          depends=extension.depends)
+
+      objects.extend(compiled_objects)
+
+    self._built_objects = objects[:]
+    if extension.extra_objects:
+      objects.extend(extension.extra_objects)
+
+    extra_args = extension.extra_link_args or []
+    # When MinGW32 is used statically link libgcc and libstdc++.
+    if self.compiler.compiler_type == 'mingw32':
+      extra_args.extend(['-static-libgcc', '-static-libstdc++'])
+
+    # Now link the object files together into a "shared object" --
+    # of course, first we have to figure out all the other things
+    # that go into the mix.
+    if extension.extra_objects:
+      objects.extend(extension.extra_objects)
+    extra_args = extension.extra_link_args or []
+
+    # Detect target language, if not provided
+    language = extension.language or self.compiler.detect_language(sources)
+
+    self.compiler.link_shared_object(
+        objects, extension_path,
+        libraries=self.get_libraries(extension),
+        library_dirs=extension.library_dirs,
+        runtime_library_dirs=extension.runtime_library_dirs,
+        extra_postargs=extra_args,
+        export_symbols=self.get_export_symbols(extension),
+        debug=self.debug,
+        build_temp=self.build_temp,
+        target_lang=language)
+
+  def configure_source(self, compiler):
+    """Configures the source.
+
+    Args:
+      compiler: distutils compiler object.
+    """
+    define_macros = [("HAVE_TSK_LIBTSK_H", "")]
 
     if compiler.compiler_type == "msvc":
-      return define_macros + [
+      define_macros.extend([
           ("WIN32", "1"),
           ("UNICODE", "1"),
-          ("_CRT_SECURE_NO_WARNINGS", "1"),
-      ]
+          ("NOMINMAX", "1"),
+          ("_CRT_SECURE_NO_WARNINGS", "1")])
 
-    # We want to build as much as possible self contained Python
-    # binding.
-    command = [
-        "sh", "configure", "--disable-java", "--without-afflib",
-        "--without-libewf", "--without-libpq", "--without-libvhdi",
-        "--without-libvmdk", "--without-zlib"]
+      # TODO: ("GUID_WINDOWS", "1"),
 
-    output = subprocess.check_output(command, cwd="sleuthkit")
-    print_line = False
-    for line in output.split(b"\n"):
-      line = line.rstrip()
-      if line == b"configure:":
-        print_line = True
+    else:
+      # We want to build as much as possible self contained Python
+      # binding.
+      command = [
+          "sh", "configure", "--disable-java", "--disable-multithreading",
+          "--without-afflib", "--without-libewf", "--without-libvhdi",
+          "--without-libvmdk", "--without-zlib"]
 
-      if print_line:
-        if sys.version_info[0] >= 3:
-          line = line.decode("ascii")
-        print(line)
+      output = subprocess.check_output(command, cwd="sleuthkit")
+      print_line = False
+      for line in output.split(b"\n"):
+        line = line.rstrip()
+        if line == b"configure:":
+          print_line = True
 
-    return define_macros + [
-        ("HAVE_CONFIG_H", "1"),
-        ("LOCALEDIR", "\"/usr/share/locale\""),
-    ]
+        if print_line:
+          if sys.version_info[0] >= 3:
+            line = line.decode("ascii")
+          print(line)
+
+      define_macros.extend([
+          ("HAVE_CONFIG_H", "1"),
+          ("LOCALEDIR", "\"/usr/share/locale\"")])
+
+      self.libraries = ["stdc++"]
+
+    self.define = define_macros
 
   def run(self):
     compiler = new_compiler(compiler=self.compiler)
     # pylint: disable=attribute-defined-outside-init
-    self.define = self.configure_source_tree(compiler)
+    self.configure_source(compiler)
 
     libtsk_path = os.path.join("sleuthkit", "tsk")
 
-    if not os.access("pytsk3.c", os.R_OK):
-      # Generate the Python binding code (pytsk3.c).
+    if not os.access("pytsk3.cpp", os.R_OK):
+      # Generate the Python binding code (pytsk3.cpp).
       libtsk_header_files = [
           os.path.join(libtsk_path, "libtsk.h"),
           os.path.join(libtsk_path, "base", "tsk_base.h"),
@@ -261,7 +358,7 @@ class BuildExtCommand(build_ext):
 
       print("Generating bindings...")
       generate_bindings.generate_bindings(
-          "pytsk3.c", libtsk_header_files, initialization="tsk_init();")
+          "pytsk3.cpp", libtsk_header_files, initialization="tsk_init();")
 
     build_ext.run(self)
 
@@ -289,7 +386,7 @@ class UpdateCommand(Command):
 
   This is normally only run by packagers to make a new release.
   """
-  _SLEUTHKIT_GIT_TAG = "4.7.0"
+  _SLEUTHKIT_GIT_TAG = "4.10.1"
 
   version = time.strftime("%Y%m%d")
 
@@ -386,7 +483,7 @@ class UpdateCommand(Command):
 
     libtsk_path = os.path.join("sleuthkit", "tsk")
 
-    # Generate the Python binding code (pytsk3.c).
+    # Generate the Python binding code (pytsk3.cpp).
     libtsk_header_files = [
         os.path.join(libtsk_path, "libtsk.h"),
         os.path.join(libtsk_path, "base", "tsk_base.h"),
@@ -397,7 +494,7 @@ class UpdateCommand(Command):
 
     print("Generating bindings...")
     generate_bindings.generate_bindings(
-        "pytsk3.c", libtsk_header_files, initialization="tsk_init();")
+        "pytsk3.cpp", libtsk_header_files, initialization="tsk_init();")
 
 
 class ProjectBuilder(object):
@@ -413,18 +510,16 @@ class ProjectBuilder(object):
 
     # Paths under the sleuthkit/tsk directory which contain files we need
     # to compile.
-    self._sub_library_names = ["base", "docs", "fs", "img", "vs"]
+    self._sub_library_names = ["base", "docs", "fs", "img", "pool", "util", "vs"]
 
     # The args for the extension builder.
     self.extension_args = {
-        "define_macros": [],
         "include_dirs": ["talloc", self._libtsk_path, "sleuthkit", "."],
-        "library_dirs": [],
-        "libraries": []}
+        "library_dirs": []}
 
     # The sources to build.
     self._source_files = [
-        "class.c", "error.c", "tsk3.c", "pytsk3.c", "talloc/talloc.c"]
+        "class.cpp", "error.cpp", "tsk3.cpp", "pytsk3.cpp", "talloc/talloc.c"]
 
     # Path to the top of the unpacked sleuthkit sources.
     self._sleuthkit_path = "sleuthkit"
@@ -432,6 +527,10 @@ class ProjectBuilder(object):
   def build(self):
     """Build everything."""
     # Fetch all c and cpp files from the subdirs to compile.
+    extension_file = os.path.join(
+        self._libtsk_path, "auto", "guid.cpp")
+    self._source_files.append(extension_file)
+
     for library_name in self._sub_library_names:
       for extension in ("*.c", "*.cpp"):
         extension_glob = os.path.join(

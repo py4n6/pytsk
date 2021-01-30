@@ -47,7 +47,7 @@ class TSKVolumeInfoTestCase(unittest.TestCase):
     self.assertNotEquals(volume_info, None)
     self.assertNotEquals(getattr(volume_info, 'info', None), None)
 
-    self.assertEquals(str(volume_info.info.vstype), 'TSK_VS_TYPE_DOS')
+    self.assertEquals(volume_info.info.vstype, pytsk3.TSK_VS_TYPE_DOS)
 
     parts = []
 
@@ -178,7 +178,7 @@ class TSKVolumeInfoFileObjectWithLargeSize(TSKVolumeInfoTestCase):
     self.assertNotEquals(volume_info, None)
     self.assertNotEquals(getattr(volume_info, 'info', None), None)
 
-    self.assertEquals(str(volume_info.info.vstype), 'TSK_VS_TYPE_DOS')
+    self.assertEquals(volume_info.info.vstype, pytsk3.TSK_VS_TYPE_DOS)
 
     parts = []
 

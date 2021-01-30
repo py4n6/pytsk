@@ -17,8 +17,10 @@
 #include "tsk3.h"
 
 #if defined( TSK_MULTITHREAD_LIB )
+extern "C" {
 extern void tsk_init_lock(tsk_lock_t * lock);
 extern void tsk_deinit_lock(tsk_lock_t * lock);
+}
 #endif
 
 /* Prototypes for IMG_INFO hooks
@@ -624,7 +626,7 @@ static TSK_FS_ATTR_RUN *Attribute_iternext(Attribute self) {
     if(self->current == self->info->nrd.run) {
         self->current = NULL;
     }
-    return talloc_memdup(NULL, result, sizeof(*result));
+    return (TSK_FS_ATTR_RUN *) talloc_memdup(NULL, result, sizeof(*result));
 }
 
 VIRTUAL(Attribute, Object) {
