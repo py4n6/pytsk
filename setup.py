@@ -386,7 +386,7 @@ class UpdateCommand(Command):
 
   This is normally only run by packagers to make a new release.
   """
-  _SLEUTHKIT_GIT_TAG = "4.10.1"
+  _SLEUTHKIT_GIT_TAG = "4.10.2"
 
   version = time.strftime("%Y%m%d")
 
