@@ -36,7 +36,7 @@ class TSKVolumeInfoTestCase(unittest.TestCase):
     Args:
       volume_info: the Volume_Info object.
     """
-    self.assertNotEquals(volume_info, None)
+    self.assertNotEqual(volume_info, None)
 
   def _testIterate(self, volume_info):
     """Test the iterate functionality.
@@ -44,8 +44,8 @@ class TSKVolumeInfoTestCase(unittest.TestCase):
     Args:
       volume_info: the Volume_Info object.
     """
-    self.assertNotEquals(volume_info, None)
-    self.assertNotEquals(getattr(volume_info, 'info', None), None)
+    self.assertNotEqual(volume_info, None)
+    self.assertNotEqual(getattr(volume_info, 'info', None), None)
 
     self.assertEqual(volume_info.info.vstype, pytsk3.TSK_VS_TYPE_DOS)
 
@@ -175,8 +175,8 @@ class TSKVolumeInfoFileObjectWithLargeSize(TSKVolumeInfoTestCase):
     """Test the iterate functionality."""
     volume_info = pytsk3.Volume_Info(self._img_info)
 
-    self.assertNotEquals(volume_info, None)
-    self.assertNotEquals(getattr(volume_info, 'info', None), None)
+    self.assertNotEqual(volume_info, None)
+    self.assertNotEqual(getattr(volume_info, 'info', None), None)
 
     self.assertEqual(volume_info.info.vstype, pytsk3.TSK_VS_TYPE_DOS)
 

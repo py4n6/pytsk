@@ -19,7 +19,7 @@ class TSKImgInfoTestCase(unittest.TestCase):
     Args:
       img_info: the Img_Info object.
     """
-    self.assertNotEquals(img_info, None)
+    self.assertNotEqual(img_info, None)
 
   def _testGetSize(self, img_info):
     """Test the get size functionality.
@@ -27,7 +27,7 @@ class TSKImgInfoTestCase(unittest.TestCase):
     Args:
       img_info: the Img_Info object.
     """
-    self.assertNotEquals(img_info, None)
+    self.assertNotEqual(img_info, None)
 
     self.assertEqual(img_info.get_size(), self._file_size)
 
@@ -37,7 +37,7 @@ class TSKImgInfoTestCase(unittest.TestCase):
     Args:
       img_info: the Img_Info object.
     """
-    self.assertNotEquals(img_info, None)
+    self.assertNotEqual(img_info, None)
 
     self.assertEqual(img_info.read(0x5800, 16), b'place,user,passw')
     self.assertEqual(img_info.read(0x7c00, 16), b'This is another ')
@@ -74,7 +74,7 @@ class TSKImgInfoTest(TSKImgInfoTestCase):
     """Test the read functionality."""
     img_info = pytsk3.Img_Info(url=self._test_file)
 
-    self.assertNotEquals(img_info, None)
+    self.assertNotEqual(img_info, None)
 
     self.assertEqual(img_info.read(0x5800, 16), b'place,user,passw')
     self.assertEqual(img_info.read(0x7c00, 16), b'This is another ')

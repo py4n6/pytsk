@@ -37,7 +37,7 @@ class TSKFsInfoTestCase(unittest.TestCase):
     Args:
       fs_info: the FS_Info object.
     """
-    self.assertNotEquals(fs_info, None)
+    self.assertNotEqual(fs_info, None)
 
   def _testOpenMeta(self, fs_info):
     """Test the open meta functionality.
@@ -45,11 +45,11 @@ class TSKFsInfoTestCase(unittest.TestCase):
     Args:
       fs_info: the FS_Info object.
     """
-    self.assertNotEquals(fs_info, None)
+    self.assertNotEqual(fs_info, None)
 
     file_object = fs_info.open_meta(15)
 
-    self.assertNotEquals(file_object, None)
+    self.assertNotEqual(file_object, None)
 
     with self.assertRaises(IOError):
       file_object = fs_info.open_meta(19)
