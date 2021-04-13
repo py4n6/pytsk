@@ -29,7 +29,7 @@ class TSKImgInfoTestCase(unittest.TestCase):
     """
     self.assertNotEquals(img_info, None)
 
-    self.assertEquals(img_info.get_size(), self._file_size)
+    self.assertEqual(img_info.get_size(), self._file_size)
 
   def _testRead(self, img_info):
     """Test the read functionality.
@@ -39,12 +39,12 @@ class TSKImgInfoTestCase(unittest.TestCase):
     """
     self.assertNotEquals(img_info, None)
 
-    self.assertEquals(img_info.read(0x5800, 16), b'place,user,passw')
-    self.assertEquals(img_info.read(0x7c00, 16), b'This is another ')
+    self.assertEqual(img_info.read(0x5800, 16), b'place,user,passw')
+    self.assertEqual(img_info.read(0x7c00, 16), b'This is another ')
 
     # Conforming to the POSIX seek the offset can exceed the file size
     # but reading will result in no data being returned.
-    self.assertEquals(img_info.read(0x19000, 16), b'')
+    self.assertEqual(img_info.read(0x19000, 16), b'')
 
     with self.assertRaises(IOError):
       img_info.read(-1, 16)
@@ -76,8 +76,8 @@ class TSKImgInfoTest(TSKImgInfoTestCase):
 
     self.assertNotEquals(img_info, None)
 
-    self.assertEquals(img_info.read(0x5800, 16), b'place,user,passw')
-    self.assertEquals(img_info.read(0x7c00, 16), b'This is another ')
+    self.assertEqual(img_info.read(0x5800, 16), b'place,user,passw')
+    self.assertEqual(img_info.read(0x7c00, 16), b'This is another ')
 
     # Conforming to the POSIX seek the offset can exceed the file size
     # but reading will result in no data being returned. Note that the SleuthKit

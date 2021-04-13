@@ -47,7 +47,7 @@ class TSKVolumeInfoTestCase(unittest.TestCase):
     self.assertNotEquals(volume_info, None)
     self.assertNotEquals(getattr(volume_info, 'info', None), None)
 
-    self.assertEquals(volume_info.info.vstype, pytsk3.TSK_VS_TYPE_DOS)
+    self.assertEqual(volume_info.info.vstype, pytsk3.TSK_VS_TYPE_DOS)
 
     parts = []
 
@@ -58,7 +58,7 @@ class TSKVolumeInfoTestCase(unittest.TestCase):
               part.desc.decode('utf-8'))
       parts.append(part_string)
 
-    self.assertEquals(len(parts), 7)
+    self.assertEqual(len(parts), 7)
 
     expected_parts_string = (
         u'00:  0000000000   0000000000   0000000001   Primary Table (#0)\n'
@@ -69,7 +69,7 @@ class TSKVolumeInfoTestCase(unittest.TestCase):
         u'05:  0000000351   0000000351   0000000001   Unallocated\n'
         u'06:  0000000352   0000002879   0000002528   Linux (0x83)\n')
 
-    self.assertEquals(u''.join(parts), expected_parts_string)
+    self.assertEqual(u''.join(parts), expected_parts_string)
 
 
 class TSKVolumeInfoTest(TSKVolumeInfoTestCase):
@@ -178,7 +178,7 @@ class TSKVolumeInfoFileObjectWithLargeSize(TSKVolumeInfoTestCase):
     self.assertNotEquals(volume_info, None)
     self.assertNotEquals(getattr(volume_info, 'info', None), None)
 
-    self.assertEquals(volume_info.info.vstype, pytsk3.TSK_VS_TYPE_DOS)
+    self.assertEqual(volume_info.info.vstype, pytsk3.TSK_VS_TYPE_DOS)
 
     parts = []
 
@@ -192,7 +192,7 @@ class TSKVolumeInfoFileObjectWithLargeSize(TSKVolumeInfoTestCase):
     # Note that due to the size the SleuthKit will add a non-existing part:
     # 07:  0000002880   2147483647   2147480768   Unallocated
 
-    self.assertEquals(len(parts), 8)
+    self.assertEqual(len(parts), 8)
 
     expected_parts_string = (
         u'00:  0000000000   0000000000   0000000001   Primary Table (#0)\n'
@@ -204,7 +204,7 @@ class TSKVolumeInfoFileObjectWithLargeSize(TSKVolumeInfoTestCase):
         u'06:  0000000352   0000002879   0000002528   Linux (0x83)\n'
         u'07:  0000002880   2147483647   2147480768   Unallocated\n')
 
-    self.assertEquals(u''.join(parts), expected_parts_string)
+    self.assertEqual(u''.join(parts), expected_parts_string)
 
 
 if __name__ == '__main__':
