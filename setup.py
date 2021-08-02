@@ -386,7 +386,7 @@ class UpdateCommand(Command):
 
   This is normally only run by packagers to make a new release.
   """
-  _SLEUTHKIT_GIT_TAG = "4.10.2"
+  _SLEUTHKIT_GIT_TAG = "4.11.0"
 
   version = time.strftime("%Y%m%d")
 
@@ -467,7 +467,7 @@ class UpdateCommand(Command):
       print("Pulling from HEAD")
     else:
       print("Pulling from tag: {0:s}".format(self._SLEUTHKIT_GIT_TAG))
-      subprocess.check_call(["git", "fetch", "--tags"], cwd="sleuthkit")
+      subprocess.check_call(["git", "fetch", "--force", "--tags"], cwd="sleuthkit")
       git_tag_path = "tags/sleuthkit-{0:s}".format(self._SLEUTHKIT_GIT_TAG)
       subprocess.check_call(["git", "checkout", git_tag_path], cwd="sleuthkit")
 
