@@ -940,7 +940,8 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
         for class_name in self.classes.keys():
             self.initialise_class(class_name, out, done)
 
-        # Add the constants in here
+        # Add the constants here. Make sure they are sorted so builds
+        # of pytsk3.c are reproducible.
         for constant, type in sorted(self.constants):
             if type == "integer":
                 out.write(
