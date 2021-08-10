@@ -941,7 +941,7 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
             self.initialise_class(class_name, out, done)
 
         # Add the constants in here
-        for constant, type in self.constants:
+        for constant, type in sorted(self.constants):
             if type == "integer":
                 out.write(
                     "    tmp = PyLong_FromUnsignedLongLong((uint64_t) {0:s});\n".format(constant))
