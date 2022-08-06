@@ -562,10 +562,13 @@ if __name__ == "__main__":
       description="Python bindings for the sleuthkit",
       long_description=(
           "Python bindings for the sleuthkit (http://www.sleuthkit.org/)"),
+      long_description_content_type="text/plain",
       license="Apache 2.0",
       url="https://github.com/py4n6/pytsk/",
-      author="Michael Cohen and Joachim Metz",
-      author_email="scudette@gmail.com, joachim.metz@gmail.com",
+      author="Michael Cohen",
+      author_email="scudette@gmail.com",
+      maintainer="Joachim Metz",
+      maintainer_email="joachim.metz@gmail.com",
       zip_safe=False)
 
   ProjectBuilder(setup_args, sys.argv).build()
