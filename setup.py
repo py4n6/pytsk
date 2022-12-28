@@ -386,7 +386,7 @@ class UpdateCommand(Command):
 
   This is normally only run by packagers to make a new release.
   """
-  _SLEUTHKIT_GIT_TAG = "4.11.1"
+  _SLEUTHKIT_GIT_TAG = "4.12.0"
 
   version = time.strftime("%Y%m%d")
 
@@ -569,6 +569,8 @@ if __name__ == "__main__":
       author_email="scudette@gmail.com",
       maintainer="Joachim Metz",
       maintainer_email="joachim.metz@gmail.com",
-      zip_safe=False)
+      zip_safe=False,
+      install_requires=[],
+      tests_require=[])
 
   ProjectBuilder(setup_args, sys.argv).build()

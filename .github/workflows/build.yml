@@ -1,11 +1,12 @@
 name: build
 on: [push, pull_request]
+permissions: read-all
 jobs:
   build_macos:
     runs-on: macos-latest
     strategy:
       matrix:
-        python-version: [3.8]
+        python-version: ['3.11']
     steps:
     - uses: actions/checkout@v2
     - name: Set up Python ${{ matrix.python-version }}
@@ -23,6 +24,9 @@ jobs:
         python setup.py update
         export CXXFLAGS="-std=c++14"
         python setup.py build
+        # Need to build sdist here to prevent:
+        # No local packages or working download links found for pytsk3==VERSION
+        python setup.py sdist
         python setup.py install
     - name: Test Python module
       run: |
@@ -31,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.8]
+        python-version: ['3.11']
         architecture: ['x86', 'x64']
     steps:
     - uses: actions/checkout@v2
@@ -60,7 +64,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python-version: [3.8]
+        python-version: ['3.11']
         architecture: ['x86', 'x64']
     steps:
     - uses: actions/checkout@v2
