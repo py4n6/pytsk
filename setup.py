@@ -316,8 +316,9 @@ class BuildExtCommand(build_ext):
       # binding.
       command = [
           "sh", "configure", "--disable-java", "--disable-multithreading",
-          "--without-afflib", "--without-libewf", "--without-libvhdi",
-          "--without-libvmdk", "--without-zlib"]
+          "--without-afflib", "--without-libbfio", "--without-libewf",
+          "--without-libvhdi", "--without-libvmdk", "--without-libvslvm",
+          "--without-zlib"]
 
       output = subprocess.check_output(command, cwd="sleuthkit")
       print_line = False
