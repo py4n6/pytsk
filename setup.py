@@ -46,164 +46,18 @@ from distutils import log
 from distutils.ccompiler import new_compiler
 from distutils.dep_util import newer_group
 
-try:
-  from distutils.command.bdist_msi import bdist_msi
-except ImportError:
-  bdist_msi = None
-
-try:
-  from distutils.command.bdist_rpm import bdist_rpm
-except ImportError:
-  bdist_rpm = None
+# Change PYTHONPATH.
+sys.path.insert(0, '.')
 
 import generate_bindings
-import run_tests
 
 
 version_tuple = (sys.version_info[0], sys.version_info[1])
-if version_tuple < (3, 5):
+if version_tuple < (3, 7):
   print((
-      'Unsupported Python version: {0:s}, version 3.5 or higher '
+      'Unsupported Python version: {0:s}, version 3.7 or higher '
       'required.').format(sys.version))
   sys.exit(1)
-
-
-if not bdist_msi:
-  BdistMSICommand = None
-else:
-  class BdistMSICommand(bdist_msi):
-    """Custom handler for the bdist_msi command."""
-
-    def run(self):
-      """Builds an MSI."""
-      # Make a deepcopy of distribution so the following version changes
-      # only apply to bdist_msi.
-      self.distribution = copy.deepcopy(self.distribution)
-
-      # bdist_msi does not support the library version so we add ".1"
-      # as a work around.
-      self.distribution.metadata.version += ".1"
-
-      bdist_msi.run(self)
-
-
-if not bdist_rpm:
-  BdistRPMCommand = None
-else:
-  class BdistRPMCommand(bdist_rpm):
-    """Custom handler for the bdist_rpm command."""
-
-    def make_spec_file(self, spec_file):
-      """Make an RPM Spec file."""
-      # Note that bdist_rpm can be an old style class.
-      if issubclass(BdistRPMCommand, object):
-        spec_file = super(BdistRPMCommand, self)._make_spec_file()
-      else:
-        spec_file = bdist_rpm._make_spec_file(self)
-
-      if sys.version_info[0] < 3:
-        python_package = 'python2'
-      else:
-        python_package = 'python3'
-
-      description = []
-      requires = ''
-      summary = ''
-      in_description = False
-
-      python_spec_file = []
-      for line in iter(spec_file):
-        if line.startswith('Summary: '):
-          summary = line
-
-        elif line.startswith('BuildRequires: '):
-          line = 'BuildRequires: {0:s}-setuptools, {0:s}-devel'.format(
-              python_package)
-
-        elif line.startswith('Requires: '):
-          requires = line[10:]
-          if python_package == 'python3':
-            requires = requires.replace('python-', 'python3-')
-            requires = requires.replace('python2-', 'python3-')
-
-        elif line.startswith('%description'):
-          in_description = True
-
-        elif line.startswith('python setup.py build'):
-          if python_package == 'python3':
-            line = '%py3_build'
-          else:
-            line = '%py2_build'
-
-        elif line.startswith('python setup.py install'):
-          if python_package == 'python3':
-            line = '%py3_install'
-          else:
-            line = '%py2_install'
-
-        elif line.startswith('%files'):
-          lines = [
-              '%files -n {0:s}-%{{name}}'.format(python_package),
-              '%defattr(644,root,root,755)',
-              '%license LICENSE',
-              '%doc README']
-
-          if python_package == 'python3':
-            lines.extend([
-                '%{_libdir}/python3*/site-packages/*.so',
-                '%{_libdir}/python3*/site-packages/pytsk3*.egg-info/*',
-                '',
-                '%exclude %{_prefix}/share/doc/*'])
-
-          else:
-            lines.extend([
-                '%{_libdir}/python2*/site-packages/*.so',
-                '%{_libdir}/python2*/site-packages/pytsk3*.egg-info/*',
-                '',
-                '%exclude %{_prefix}/share/doc/*'])
-
-          python_spec_file.extend(lines)
-          break
-
-        elif line.startswith('%prep'):
-          in_description = False
-
-          python_spec_file.append(
-              '%package -n {0:s}-%{{name}}'.format(python_package))
-          if python_package == 'python2':
-            python_spec_file.extend([
-                'Obsoletes: python-pytsk3 < %{version}',
-                'Provides: python-pytsk3 = %{version}'])
-
-          if requires:
-            python_spec_file.append('Requires: {0:s}'.format(requires))
-
-          python_spec_file.extend([
-              '{0:s}'.format(summary),
-              '',
-              '%description -n {0:s}-%{{name}}'.format(python_package)])
-
-          python_spec_file.extend(description)
-
-        elif in_description:
-          # Ignore leading white lines in the description.
-          if not description and not line:
-            continue
-
-          description.append(line)
-
-        python_spec_file.append(line)
-
-      return python_spec_file
-
-    def _make_spec_file(self):
-      """Generates the text of an RPM spec file.
-
-      Returns:
-        list[str]: lines of text.
-      """
-      return self.make_spec_file(
-          bdist_rpm._make_spec_file(self))
 
 
 class BuildExtCommand(build_ext):
@@ -213,7 +67,7 @@ class BuildExtCommand(build_ext):
     """Builds the extension.
 
     Args:
-      extentsion: distutils extentsion object.
+      extension: distutils extension object.
     """
     if (extension.sources is None or
         not isinstance(extension.sources, (list, tuple))):
@@ -501,9 +355,8 @@ class UpdateCommand(Command):
 class ProjectBuilder(object):
   """Class to help build the project."""
 
-  def __init__(self, project_config, argv):
+  def __init__(self, argv):
     """Initializes a project builder object."""
-    self._project_config = project_config
     self._argv = argv
 
     # The path to the sleuthkit/tsk directory.
@@ -543,35 +396,15 @@ class ProjectBuilder(object):
     source_files = sorted(self._source_files)
     ext_modules = [Extension("pytsk3", source_files, **self.extension_args)]
 
-    setup(
+    setup_args = dict(
         cmdclass={
             "build_ext": BuildExtCommand,
-            "bdist_msi": BdistMSICommand,
-            "bdist_rpm": BdistRPMCommand,
             "sdist": SDistCommand,
             "update": UpdateCommand},
-        ext_modules=ext_modules,
-        **self._project_config)
+        ext_modules=ext_modules)
+
+    setup(**setup_args)
 
 
 if __name__ == "__main__":
-  __version__ = open("version.txt").read().strip()
-
-  setup_args = dict(
-      name="pytsk3",
-      version=__version__,
-      description="Python bindings for the sleuthkit",
-      long_description=(
-          "Python bindings for the sleuthkit (http://www.sleuthkit.org/)"),
-      long_description_content_type="text/plain",
-      license="Apache 2.0",
-      url="https://github.com/py4n6/pytsk/",
-      author="Michael Cohen",
-      author_email="scudette@gmail.com",
-      maintainer="Joachim Metz",
-      maintainer_email="joachim.metz@gmail.com",
-      zip_safe=False,
-      install_requires=[],
-      tests_require=[])
-
-  ProjectBuilder(setup_args, sys.argv).build()
+  ProjectBuilder(sys.argv).build()
