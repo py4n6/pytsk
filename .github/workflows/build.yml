@@ -62,6 +62,8 @@ jobs:
         python3 -m pip install tox
     - name: Build and test Python module
       run: |
+        python setup.py update
+        python setup.py build
         tox -e${{ matrix.toxenv }}
   build_windows:
     runs-on: windows-latest
