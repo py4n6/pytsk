@@ -2,6 +2,7 @@
 
 # Back-up files
 *~
+*.so
 *.swp
 
 # Generic auto-generated build files
