@@ -22,10 +22,9 @@ jobs:
         brew link --force gettext
         ln -s /usr/local/bin/glibtoolize /usr/local/bin/libtoolize
     - name: Build and test Python module
-      env: |
-        CXXFLAGS: '-std=c++14'
       run: |
         python setup.py update
+        export CXXFLAGS="-std=c++14"
         python setup.py build
         tox -e${{ matrix.toxenv }}
     - name: Test Python module
