@@ -27,9 +27,6 @@ jobs:
         export CXXFLAGS="-std=c++14"
         python setup.py build
         tox -e${{ matrix.toxenv }}
-    - name: Test Python module
-      run: |
-        python run_tests.py
   build_ubuntu:
     runs-on: ubuntu-22.04
     strategy:
