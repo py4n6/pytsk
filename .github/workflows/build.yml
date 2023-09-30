@@ -6,7 +6,9 @@ jobs:
     runs-on: macos-latest
     strategy:
       matrix:
-        python-version: ['3.11']
+        include:
+        - python-version: '3.11'
+          toxenv: 'py311'
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
@@ -15,22 +17,16 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install build dependencies
       run: |
-        brew update
-        brew install autoconf automake gettext pkgconfig
+        brew update -q
+        brew install -q autoconf automake gettext gnu-sed pkgconfig python@${{ matrix.python-version }} tox
         brew link --force gettext
         ln -s /usr/local/bin/glibtoolize /usr/local/bin/libtoolize
-    - name: Build Python module
+    - name: Build and test Python module
       run: |
         python setup.py update
         export CXXFLAGS="-std=c++14"
         python setup.py build
-        # Need to build sdist here to prevent:
-        # No local packages or working download links found for pytsk3==VERSION
-        python setup.py sdist
-        python setup.py install
-    - name: Test Python module
-      run: |
-        python run_tests.py
+        tox -e${{ matrix.toxenv }}
   build_ubuntu:
     runs-on: ubuntu-22.04
     strategy:
