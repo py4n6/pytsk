@@ -333,8 +333,14 @@ class UpdateCommand(Command):
       subprocess.check_call(["./bootstrap"], cwd="sleuthkit")
 
     # Now derive the version based on the date.
-    with open("version.txt", "w") as fd:
-      fd.write(self.version)
+    with open("setup.cfg", "r", encoding="utf-8") as file_object:
+      setup_cfg_lines = file_object.readlines()
+
+    with open("setup.cfg", "w", encoding="utf-8") as file_object:
+      for line in setup_cfg_lines:
+        if line.startswith("version = "):
+          line = "version = {0:s}\n".format(self.version)
+        file_object.write(line)
 
     libtsk_path = os.path.join("sleuthkit", "tsk")
 
