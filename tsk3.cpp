@@ -699,6 +699,9 @@ void tsk_init() {
   // libtsk uses mktime and localtime that rely on the TZ environment variable
   // however that leads to inconsistent behavior with different TZ values.
   // Hence that we force TZ to be UTC, when possible.
+  // Callers may opt-out of this correction by explicitly setting PYTSK_SKIP_TZSET
+
+  if (getenv("PYTSK_SKIP_TZSET") != NULL) {
 #if defined( _MSC_VER )
   _putenv_s("TZ", "UTC");
   _tzset();
@@ -708,6 +711,7 @@ void tsk_init() {
   setenv("TZ", "UTC", 1);
   tzset();
 #endif
+  }
 
   //tsk_verbose++;
   Img_Info_init((Object)&__Img_Info);
