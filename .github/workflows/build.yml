@@ -7,8 +7,8 @@ jobs:
     strategy:
       matrix:
         include:
-        - python-version: '3.11'
-          toxenv: 'py311'
+        - python-version: '3.12'
+          toxenv: 'py312'
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
@@ -32,8 +32,6 @@ jobs:
     strategy:
       matrix:
         include:
-        - python-version: '3.7'
-          toxenv: 'py37'
         - python-version: '3.8'
           toxenv: 'py38'
         - python-version: '3.9'
@@ -65,7 +63,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python-version: ['3.11']
+        python-version: ['3.12']
         architecture: ['x86', 'x64']
     steps:
     - uses: actions/checkout@v3
