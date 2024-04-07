@@ -235,7 +235,7 @@ import lexer
 DEBUG = 0
 
 # The pytsk3 version.
-VERSION = "20231007"
+VERSION = "20240407"
 
 # These functions are used to manage library memory.
 FREE = "aff4_free"
@@ -2315,8 +2315,8 @@ class ResultException(object):
 
 
 class Method(object):
-    default_re = re.compile("DEFAULT\(([A-Z_a-z0-9]+)\) =(.+);")
-    exception_re = re.compile("RAISES\(([^,]+),\s*([^\)]+)\) =(.+);")
+    default_re = re.compile(r"DEFAULT\(([A-Z_a-z0-9]+)\) =(.+);")
+    exception_re = re.compile(r"RAISES\(([^,]+),\s*([^\)]+)\) =(.+);")
     typedefed_re = re.compile(r"struct (.+)_t \*")
 
     def __init__(
@@ -4117,11 +4117,11 @@ class HeaderParser(lexer.SelfFeederMixIn):
         ["CCLASS", "END_CCLASS", "END_CCLASS,POP_STATE", None],
 
         # Recognize struct definitions (With name)
-        ["INITIAL", "([A-Z_a-z0-9 ]+)?struct\s+([A-Z_a-z0-9]+)\s+{",
+        ["INITIAL", r"([A-Z_a-z0-9 ]+)?struct\s+([A-Z_a-z0-9]+)\s+{",
          "PUSH_STATE,STRUCT_START", "STRUCT"],
 
         # Without name (using typedef)
-        ["INITIAL", "typedef\s+struct\s+{",
+        ["INITIAL", r"typedef\s+struct\s+{",
          "PUSH_STATE,TYPEDEF_STRUCT_START", "STRUCT"],
 
         ["STRUCT", r"^\s*([0-9A-Z_a-z ]+\s+\*?)\s*([A-Z_a-z0-9]+)(?:\[([A-Z_a-z0-9]+)\])?\s*;",
@@ -4131,13 +4131,13 @@ class HeaderParser(lexer.SelfFeederMixIn):
          "STRUCT_ATTRIBUTE_PTR", None],
 
         # Struct ended with typedef
-        ["STRUCT", "}\s+([0-9A-Za-z_]+);", "POP_STATE,TYPEDEF_STRUCT_END", None],
+        ["STRUCT", r"}\s+([0-9A-Za-z_]+);", "POP_STATE,TYPEDEF_STRUCT_END", None],
         ["STRUCT", "}", "POP_STATE,STRUCT_END", None],
 
         # Handle recursive struct or union definition (At the moment
         # we cant handle them at all)
-        ["(RECURSIVE_)?STRUCT", "(struct|union)\s+([_A-Za-z0-9]+)?\s*{", "PUSH_STATE", "RECURSIVE_STRUCT"],
-        ["RECURSIVE_STRUCT", "}\s+[0-9A-Za-z]+", "POP_STATE", None],
+        ["(RECURSIVE_)?STRUCT", r"(struct|union)\s+([_A-Za-z0-9]+)?\s*{", "PUSH_STATE", "RECURSIVE_STRUCT"],
+        ["RECURSIVE_STRUCT", r"}\s+[0-9A-Za-z]+", "POP_STATE", None],
         ["RECURSIVE_STRUCT", "};", "POP_STATE", None],
 
         # Process enums (2 forms - named and typedefed)
