@@ -7,8 +7,8 @@ jobs:
     strategy:
       matrix:
         include:
-        - python-version: '3.11'
-          toxenv: 'py311'
+        - python-version: '3.12'
+          toxenv: 'py312'
     steps:
     - uses: actions/checkout@v3
     - name: Set up Python ${{ matrix.python-version }}
@@ -21,6 +21,7 @@ jobs:
         brew install -q autoconf automake gettext gnu-sed pkgconfig python@${{ matrix.python-version }} tox
         brew link --force gettext
         ln -s /usr/local/bin/glibtoolize /usr/local/bin/libtoolize
+        python3 -m pip install setuptools
     - name: Build and test Python module
       run: |
         python setup.py update
@@ -32,8 +33,6 @@ jobs:
     strategy:
       matrix:
         include:
-        - python-version: '3.7'
-          toxenv: 'py37'
         - python-version: '3.8'
           toxenv: 'py38'
         - python-version: '3.9'
@@ -65,7 +64,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python-version: ['3.11']
+        python-version: ['3.12']
         architecture: ['x86', 'x64']
     steps:
     - uses: actions/checkout@v3
@@ -73,6 +72,9 @@ jobs:
       uses: actions/setup-python@v1
       with:
         python-version: ${{ matrix.python-version }}
+    - name: Install build dependencies
+      run: |
+        python3 -m pip install setuptools
     - name: Build Python module
       run: |
         python setup.py update
