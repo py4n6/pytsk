@@ -296,7 +296,8 @@ class UpdateCommand(Command):
         fd.write(data)
 
     patch_files = [
-        "sleuthkit-{0:s}-configure.ac".format(self._SLEUTHKIT_GIT_TAG)]
+        "sleuthkit-{0:s}-configure.ac".format(self._SLEUTHKIT_GIT_TAG),
+        "sleuthkit-{0:s}-fatfs_utils.c".format(self._SLEUTHKIT_GIT_TAG)]
 
     for patch_file in patch_files:
       patch_file = os.path.join("patches", patch_file)

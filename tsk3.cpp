@@ -695,20 +695,6 @@ VIRTUAL(Volume_Info, Object) {
 
 
 void tsk_init() {
-
-  // libtsk uses mktime and localtime that rely on the TZ environment variable
-  // however that leads to inconsistent behavior with different TZ values.
-  // Hence that we force TZ to be UTC, when possible.
-#if defined( _MSC_VER )
-  _putenv_s("TZ", "UTC");
-  _tzset();
-
-  // Some installations of MinGW do not support setenv
-#elif !defined( __MINGW32__ )
-  setenv("TZ", "UTC", 1);
-  tzset();
-#endif
-
   //tsk_verbose++;
   Img_Info_init((Object)&__Img_Info);
   FS_Info_init((Object)&__FS_Info);
