@@ -18,7 +18,7 @@ jobs:
     - name: Install build dependencies
       run: |
         brew update -q
-        brew install -q autoconf automake gettext gnu-sed pkgconfig python@${{ matrix.python-version }} tox
+        brew install -q autoconf automake gettext gnu-sed libtool pkgconfig python@${{ matrix.python-version }} tox
         brew link --force gettext
         ln -s /usr/local/bin/glibtoolize /usr/local/bin/libtoolize
         python3 -m pip install setuptools
