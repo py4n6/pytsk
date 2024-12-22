@@ -317,7 +317,7 @@ class UpdateCommand(Command):
     print("Updating sleuthkit")
     subprocess.check_call(["git", "reset", "--hard"], cwd="sleuthkit")
     subprocess.check_call(["git", "clean", "-x", "-f", "-d"], cwd="sleuthkit")
-    subprocess.check_call(["git", "checkout", "master"], cwd="sleuthkit")
+    subprocess.check_call(["git", "checkout", "main"], cwd="sleuthkit")
     subprocess.check_call(["git", "pull"], cwd="sleuthkit")
     if self.use_head:
       print("Pulling from HEAD")
