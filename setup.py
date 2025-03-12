@@ -101,7 +101,7 @@ class BuildExtCommand(build_ext):
         if self.compiler.compiler_type == 'msvc':
           extra_args.append('/EHsc')
         else:
-          extra_args.append('-std=c++17')
+          extra_args.append('-std=c++14')
 
       macros = extension.define_macros[:]
       for undef in extension.undef_macros:
@@ -295,7 +295,8 @@ class UpdateCommand(Command):
       with open(filename, "w") as fd:
         fd.write(data)
 
-    patch_files = []
+    patch_files = [
+        "sleuthkit-{0:s}-configure.ac".format(self._SLEUTHKIT_GIT_TAG)]
 
     for patch_file in patch_files:
       patch_file = os.path.join("patches", patch_file)
