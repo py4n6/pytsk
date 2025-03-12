@@ -170,9 +170,9 @@ class BuildExtCommand(build_ext):
       # binding.
       command = [
           "sh", "configure", "--disable-java", "--disable-multithreading",
-          "--without-afflib", "--without-libbfio", "--without-libewf",
-          "--without-libvhdi", "--without-libvmdk", "--without-libvslvm",
-          "--without-zlib"]
+          "--without-afflib", "--without-libbfio", "--without-libcrypto",
+          "--without-libewf", "--without-libvhdi", "--without-libvmdk",
+          "--without-libvslvm", "--without-zlib"]
 
       output = subprocess.check_output(command, cwd="sleuthkit")
       print_line = False
@@ -241,7 +241,7 @@ class UpdateCommand(Command):
 
   This is normally only run by packagers to make a new release.
   """
-  _SLEUTHKIT_GIT_TAG = "4.12.1"
+  _SLEUTHKIT_GIT_TAG = "4.13.0"
 
   version = time.strftime("%Y%m%d")
 
@@ -296,8 +296,7 @@ class UpdateCommand(Command):
         fd.write(data)
 
     patch_files = [
-        "sleuthkit-{0:s}-configure.ac".format(self._SLEUTHKIT_GIT_TAG),
-        "sleuthkit-{0:s}-fatfs_utils.c".format(self._SLEUTHKIT_GIT_TAG)]
+        "sleuthkit-{0:s}-configure.ac".format(self._SLEUTHKIT_GIT_TAG)]
 
     for patch_file in patch_files:
       patch_file = os.path.join("patches", patch_file)
