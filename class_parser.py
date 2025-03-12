@@ -809,9 +809,6 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
             "extern \"C\" {\n"
             "#endif\n"
             "\n"
-            "#undef max\n"
-            "#undef min\n"
-            "\n"
             "#include <Python.h>\n")
 
         out.write(self.private_functions())
