@@ -11,7 +11,7 @@
 
 #define _PUBLIC_ extern
 
-typedef int bool;
+typedef int talloc_bool;
 
 #define true 1
 #define false 0
