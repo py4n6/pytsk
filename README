@@ -4,7 +4,9 @@ This is a Python binding against the libtsk (SleuthKit library). The aim is
 to make the binding reflect the TSK API as much as possible in capabilities,
 while at the same time having a nice Pythonic OO interface:
 
-4.11.1: http://www.sleuthkit.org/sleuthkit/docs/api-docs/4.11.1/
+4.12.1: https://www.sleuthkit.org/sleuthkit/docs/api-docs/4.12.1/
+
+NOTE: Currently the 4.14.0 API docs are not available, 4.12.1 is the closest.
 
 WARNING: use pytsk at your own risk. libtsk is known to have many defects. For
 processing data from untrusted sources it is highly recommended to add
