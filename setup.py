@@ -305,6 +305,7 @@ class UpdateCommand(Command):
         continue
 
       patch_file = os.path.join("..", patch_file)
+      print("Applying patch file: {0:s}".format(patch_file))
       subprocess.check_call(["git", "apply", patch_file], cwd="sleuthkit")
 
   def run(self):
@@ -327,6 +328,17 @@ class UpdateCommand(Command):
       subprocess.check_call(["git", "checkout", git_tag_path], cwd="sleuthkit")
 
       self.patch_sleuthkit()
+
+    files = [
+        os.path.join('sleuthkit', 'win32', 'PostgreSQL_CRT', 'win32',
+                     'msvcr120.dll'),
+        os.path.join('sleuthkit', 'win32', 'PostgreSQL_CRT', 'win64',
+                     'msvcr120.dll'),
+    ]
+
+    for file in files:
+      print("Removing: {0:s}".format(file))
+      os.remove(file)
 
     compiler_type = distutils.ccompiler.get_default_compiler()
     if compiler_type != "msvc":
