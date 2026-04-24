@@ -235,7 +235,7 @@ import lexer
 DEBUG = 0
 
 # The pytsk3 version.
-VERSION = "20260418"
+VERSION = "20250801"
 
 # These functions are used to manage library memory.
 FREE = "aff4_free"
@@ -923,6 +923,25 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
             "        return;\n"
             "#endif\n"
             "    }}\n"
+            "\n"
+            "#ifdef Py_GIL_DISABLED\n"
+            "    /* Declare this module safe for free-threaded Python\n"
+            "     * Without this call, CPython force-enables\n"
+            "     * the GIL for our module at import time on\n"
+            "     * free-threaded builds, which would serialize every\n"
+            "     * pytsk3 call and defeat the point of free-threading.\n"
+            "     * The symbol is only declared when Py_GIL_DISABLED is\n"
+            "     * set -- on a normal (GIL-enabled) 3.13+ build, the\n"
+            "     * declaration is absent, so this block must be guarded\n"
+            "     * with Py_GIL_DISABLED, not PY_VERSION_HEX.\n"
+            "     *\n"
+            "     * Per-object state (iterator cursors, etc.) still\n"
+            "     * requires user-level serialization, same as any\n"
+            "     * Python object.\n"
+            "     */\n"
+            "    PyUnstable_Module_SetGIL(module, Py_MOD_GIL_NOT_USED);\n"
+            "#endif\n"
+            "\n"
             "    d = PyModule_GetDict(module);\n"
             "\n"
             "    /* Make sure threads are enabled */\n"
