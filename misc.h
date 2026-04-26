@@ -47,6 +47,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <libgen.h>
+#include <limits.h>
 #include <sys/stat.h>
 #include <stdint.h>
 #include <string.h>
@@ -89,19 +90,6 @@ extern "C" {
 #define PYTSK3_UNREFERENCED_PARAMETER( parameter ) \
 	/* parameter */
 #endif
-
-#if !defined( _MSC_VER )
-#ifdef min
-#undef min
-#endif
-#define min(X, Y)  ((X) < (Y) ? (X) : (Y))
-
-#ifdef max
-#undef max
-#endif
-#define max(X, Y)  ((X) > (Y) ? (X) : (Y))
-
-#endif /* if !defined( _MSC_VER ) */
 
 #ifndef MIN
 #define MIN(a,b) ((a)<(b)?(a):(b))
