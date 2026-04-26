@@ -17,7 +17,7 @@
 
 #include "tsk3.h"
 
-#include <climits>
+#include <limits.h>
 #include <mutex>
 #include <time.h>
 
