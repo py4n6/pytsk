@@ -17,6 +17,8 @@
 
 #include "tsk3.h"
 
+#include <limits.h>
+#include <mutex>
 #include <time.h>
 
 #if defined( TSK_MULTITHREAD_LIB )
@@ -79,6 +81,15 @@ static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type) {
         // Initialise the img struct with the correct callbacks:
         self->img = talloc_zero(self, Extended_TSK_IMG_INFO);
         self->img_is_internal = 1;
+
+        /* talloc_zero may fail under memory pressure; the subsequent
+         * field assignments would dereference NULL. Bail out here
+         * before touching self->img so the caller sees a clean error.
+         */
+        if(self->img == NULL) {
+            RaiseError(ENoMemory, "Unable to allocate image.");
+            return NULL;
+        }
 
         self->img->container = self;
 
@@ -167,12 +178,21 @@ VIRTUAL(Img_Info, Object) {
 void IMG_INFO_close(TSK_IMG_INFO *img) {
     Extended_TSK_IMG_INFO *self = (Extended_TSK_IMG_INFO *) img;
 
+    /* libtsk should never hand us a NULL img here, but guarding avoids
+     * a segfault if an internal bug drives this path.
+     */
+    if(self == NULL || self->container == NULL) {
+        return;
+    }
     CALL(self->container, close);
 };
 
 ssize_t IMG_INFO_read(TSK_IMG_INFO *img, TSK_OFF_T off, char *buf, size_t len) {
     Extended_TSK_IMG_INFO *self = (Extended_TSK_IMG_INFO *) img;
 
+    if(self == NULL || self->container == NULL || buf == NULL) {
+        return -1;
+    }
     if(len == 0) {
       return 0;
     }
@@ -203,6 +223,14 @@ static FS_Info FS_Info_Con(FS_Info self, Img_Info img, TSK_OFF_T offset,
     }
     if(img == NULL) {
         RaiseError(EInvalidParameter, "Invalid parameter: img.");
+        return NULL;
+    }
+    if(img->img == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: img is not opened.");
+        return NULL;
+    }
+    if(offset < 0) {
+        RaiseError(EInvalidParameter, "Invalid offset value out of bounds.");
         return NULL;
     }
     self->extended_img_info = img->img;
@@ -254,6 +282,10 @@ static File FS_Info_open(FS_Info self, ZString path) {
         RaiseError(EInvalidParameter, "Invalid parameter: self.");
         return NULL;
     }
+    if(self->info == NULL) {
+        RaiseError(EIOError, "Invalid FS_Info not opened.");
+        return NULL;
+    }
     info = tsk_fs_file_open(self->info, NULL, path);
 
     if(info == NULL) {
@@ -290,6 +322,10 @@ static File FS_Info_open_meta(FS_Info self, TSK_INUM_T inode) {
 
     if(self == NULL) {
         RaiseError(EInvalidParameter, "Invalid parameter: self.");
+        return NULL;
+    }
+    if(self->info == NULL) {
+        RaiseError(EIOError, "Invalid FS_Info not opened.");
         return NULL;
     }
     info = tsk_fs_file_open_meta(self->info, NULL, inode);
@@ -359,6 +395,10 @@ static Directory Directory_Con(Directory self, FS_Info fs, ZString path, TSK_INU
         RaiseError(EInvalidParameter, "Invalid parameter: fs.");
         return NULL;
     }
+    if(fs->info == NULL) {
+        RaiseError(EIOError, "Invalid FS_Info not opened.");
+        return NULL;
+    }
     if(path == NULL) {
         self->info = tsk_fs_dir_open_meta(fs->info, inode);
     } else {
@@ -395,6 +435,13 @@ static File Directory_next(Directory self) {
         return NULL;
     }
     if((uint64_t) self->current == (uint64_t) self->size) {
+        return NULL;
+    }
+    /* Cap at INT_MAX so the post-increment below can never overflow
+     * a signed int. While self->size is bounded by the filesystem, 
+     * directories on exotic inputs could in theory drive this past INT_MAX.
+     */
+    if(self->current == INT_MAX) {
         return NULL;
     }
     info = tsk_fs_dir_get(self->info, self->current);
@@ -487,14 +534,38 @@ static uint64_t File_read_random(File self, TSK_OFF_T offset,
                                 TSK_FS_FILE_READ_FLAG_ENUM flags) {
   ssize_t result;
 
+  if(self == NULL) {
+    RaiseError(EInvalidParameter, "Invalid parameter: self.");
+    return 0;
+  }
+  if(self->info == NULL) {
+    RaiseError(EIOError, "Invalid File not opened.");
+    return 0;
+  }
+  if(buff == NULL) {
+    RaiseError(EInvalidParameter, "Invalid parameter: buff.");
+    return 0;
+  }
+  /* len is signed but SleuthKit's tsk_fs_file_read takes size_t. A
+   * negative len would be sign-extended to ~SIZE_MAX and could drive
+   * an out-of-bounds write into buff. Reject it here.
+   */
+  if(len < 0) {
+    RaiseError(EInvalidParameter, "Invalid parameter: len.");
+    return 0;
+  }
+  if(offset < 0) {
+    RaiseError(EIOError, "Invalid offset value out of bounds.");
+    return 0;
+  }
   if((id < -1) || (id > 0xffff)) {
     RaiseError(EInvalidParameter, "id parameter is invalid.");
     return 0;
   };
   if(id == -1) {
-    result = tsk_fs_file_read(self->info, offset, buff, len, flags);
+    result = tsk_fs_file_read(self->info, offset, buff, (size_t) len, flags);
   } else {
-    result = tsk_fs_file_read_type(self->info, type, (uint16_t) id, offset, buff, len, flags);
+    result = tsk_fs_file_read_type(self->info, type, (uint16_t) id, offset, buff, (size_t) len, flags);
   };
 
   if(result < 0) {
@@ -667,6 +738,14 @@ static Volume_Info Volume_Info_Con(Volume_Info self, Img_Info img,
         RaiseError(EInvalidParameter, "Invalid parameter: img.");
         return NULL;
     }
+    if(img->img == NULL) {
+        RaiseError(EInvalidParameter, "Invalid parameter: img is not opened.");
+        return NULL;
+    }
+    if(offset < 0) {
+        RaiseError(EInvalidParameter, "Invalid offset value out of bounds.");
+        return NULL;
+    }
     self->info = tsk_vs_open((TSK_IMG_INFO *) img->img, offset, type);
 
     if(self->info == NULL) {
@@ -680,10 +759,21 @@ static Volume_Info Volume_Info_Con(Volume_Info self, Img_Info img,
 }
 
 static void Volume_Info_iter(Volume_Info self) {
+  if(self == NULL) {
+    return;
+  }
   self->current = 0;
 };
 
 static TSK_VS_PART_INFO *Volume_Info_iternext(Volume_Info self) {
+  if(self == NULL || self->info == NULL) {
+    return NULL;
+  }
+  /* Stop iteration at INT_MAX to avoid signed overflow or wrapping to a negative integer
+   */
+  if(self->current < 0 || self->current == INT_MAX) {
+    return NULL;
+  }
   return (TSK_VS_PART_INFO *)tsk_vs_part_get(self->info, self->current++);
 };
 
@@ -695,11 +785,18 @@ VIRTUAL(Volume_Info, Object) {
 
 
 void tsk_init() {
-  //tsk_verbose++;
-  Img_Info_init((Object)&__Img_Info);
-  FS_Info_init((Object)&__FS_Info);
-  Directory_init((Object)&__Directory);
-  File_init((Object)&__File);
-  Attribute_init((Object)&__Attribute);
-  Volume_Info_init((Object)&__Volume_Info);
+  /* With subinterpreters or free-threading, tsk_init can be called concurrently
+   * from more than one thread. std::call_once guarantees the class templates are 
+   * initialized exactly once even under concurrent callers.
+   */
+  static std::once_flag tsk_init_once;
+  std::call_once(tsk_init_once, [] {
+    //tsk_verbose++;
+    Img_Info_init((Object)&__Img_Info);
+    FS_Info_init((Object)&__FS_Info);
+    Directory_init((Object)&__Directory);
+    File_init((Object)&__File);
+    Attribute_init((Object)&__Attribute);
+    Volume_Info_init((Object)&__Volume_Info);
+  });
 };
