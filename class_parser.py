@@ -436,8 +436,15 @@ static struct python_wrapper_map_t {{
 }} python_wrappers[{classes_length:d}];
 
 /* Create the relevant wrapper from the item based on the lookup table.
+ *
+ * If parent is non-NULL, the wrapped child takes a strong reference to it
+ * via python_object1. This keeps the parent Python wrapper (and therefore
+ * its underlying libtsk handle) alive for as long as the child exists,
+ * which matters under free-threaded Python where a different thread may
+ * drop the parent's last visible reference while this thread is still
+ * using a child object derived from it.
  */
-Gen_wrapper new_class_wrapper(Object item, int item_is_python_object) {{
+Gen_wrapper new_class_wrapper(Object item, int item_is_python_object, PyObject *parent) {{
     Gen_wrapper result = NULL;
     Object cls = NULL;
     struct python_wrapper_map_t *python_wrapper = NULL;
@@ -462,6 +469,11 @@ Gen_wrapper new_class_wrapper(Object item, int item_is_python_object) {{
                 result->base_is_internal = 1;
                 result->python_object1 = NULL;
                 result->python_object2 = NULL;
+
+                if(parent != NULL) {{
+                    Py_IncRef(parent);
+                    result->python_object1 = parent;
+                }}
 
                 python_wrapper->initialize_proxies(result, (void *) item);
 
@@ -2030,8 +2042,13 @@ class Wrapper(Type):
                 "            goto on_error;\n"
                 "        }\n")
 
+        # Pass the calling pyXxx wrapper as parent so the child holds
+        # a strong reference back to it. Required for free-threaded
+        # safety: without this, another thread could drop the parent's
+        # last visible reference and free the underlying libtsk handle
+        # while this child is still in use.
         result += (
-            "        wrapped_{name:s} = new_class_wrapper(returned_object, self->base_is_python_object);\n"
+            "        wrapped_{name:s} = new_class_wrapper(returned_object, self->base_is_python_object, (PyObject *) self);\n"
             "\n"
             "        if(wrapped_{name:s} == NULL) {{\n"
             "            if(returned_object != NULL) {{\n"
@@ -2064,8 +2081,12 @@ class Wrapper(Type):
             "result": result}
 
         if sense == "proxied":
+            # Proxied path: wrapping a libtsk struct produced inside a
+            # user-overridden Python method. The caller's Python frame
+            # already holds the parent reference, so no additional
+            # parent keepalive is needed here.
             return (
-                "{result:s} = (PyObject *) new_class_wrapper((Object){name:s}, 0);\n").format(
+                "{result:s} = (PyObject *) new_class_wrapper((Object){name:s}, 0, NULL);\n").format(
                     **values_dict)
 
         return "{result:s} = (PyObject *) wrapped_{name:s};\n".format(
@@ -2135,20 +2156,36 @@ class StructWrapper(Wrapper):
             "\n").format(**values_dict)
 
         if borrowed:
+            # The struct base points into memory owned by the parent
+            # Python wrapper. Keep the parent alive via python_object1
+            # so a different thread cannot free the underlying libtsk
+            # handle while this borrowed wrapper is still in use.
             result += (
                 "        // Base is borrowed from another object.\n"
                 "        wrapped_{name:s}->base = {call:s};\n"
                 "        wrapped_{name:s}->base_is_python_object = 0;\n"
                 "        wrapped_{name:s}->base_is_internal = 0;\n"
-                "        wrapped_{name:s}->python_object1 = NULL;\n"
+                "        Py_IncRef((PyObject *) self);\n"
+                "        wrapped_{name:s}->python_object1 = (PyObject *) self;\n"
                 "        wrapped_{name:s}->python_object2 = NULL;\n"
                 "\n").format(**values_dict)
         else:
+            # Method-return path (borrowed=False is passed by the
+            # method-call codegen). In practice every libtsk method
+            # we wrap that returns a struct hands back a pointer into
+            # parent-owned memory (e.g. tsk_vs_part_get returns a
+            # TSK_VS_PART_INFO * inside the parent TSK_VS_INFO), and
+            # the generated *_dealloc never frees self->base. So the
+            # wrapper is logically *not* the owner; mark it as such
+            # via base_is_internal = 0 to avoid misleading future code
+            # that might gate a free/close on that flag. Keep the
+            # parent alive via python_object1.
             result += (
                 "        wrapped_{name:s}->base = {call:s};\n"
                 "        wrapped_{name:s}->base_is_python_object = 0;\n"
-                "        wrapped_{name:s}->base_is_internal = 1;\n"
-                "        wrapped_{name:s}->python_object1 = NULL;\n"
+                "        wrapped_{name:s}->base_is_internal = 0;\n"
+                "        Py_IncRef((PyObject *) self);\n"
+                "        wrapped_{name:s}->python_object1 = (PyObject *) self;\n"
                 "        wrapped_{name:s}->python_object2 = NULL;\n"
                 "\n").format(**values_dict)
 
@@ -3400,6 +3437,18 @@ class StructConstructor(ConstructorMethod):
             "    if(self != NULL) {{\n"
             "        if(self->base != NULL) {{\n"
             "            self->base = NULL;\n"
+            "        }}\n"
+            "        /* Drop the parent keepalive that was attached when\n"
+            "         * this struct wrapper was produced from a borrowed\n"
+            "         * libtsk pointer. NULL when no parent was attached.\n"
+            "         */\n"
+            "        if(self->python_object2 != NULL) {{\n"
+            "            Py_DecRef(self->python_object2);\n"
+            "            self->python_object2 = NULL;\n"
+            "        }}\n"
+            "        if(self->python_object1 != NULL) {{\n"
+            "            Py_DecRef(self->python_object1);\n"
+            "            self->python_object1 = NULL;\n"
             "        }}\n"
             "        ob_type = Py_TYPE(self);\n"
             "        if(ob_type != NULL && ob_type->tp_free != NULL) {{\n"
