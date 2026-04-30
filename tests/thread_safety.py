@@ -656,6 +656,21 @@ _SUBINTERP_SCRIPT = (
     "assert f.read_random(0, 16) == b'place,user,passw'\n")
 
 
+def _is_subinterpreter_load_unsupported(exc):
+  """Detect 'module does not support loading in subinterpreters'.
+
+  Python 3.12+ refuses to load single-phase-init C extension modules
+  into a subinterpreter unless they declare the
+  Py_mod_multiple_interpreters slot. pytsk3 still uses single-phase
+  init, so this ImportError is expected on 3.12 / 3.13. The message
+  bubbles up wrapped (e.g. as _xxsubinterpreters.RunFailedError) so
+  we have to match on the inner ImportError text.
+  """
+  text = str(exc)
+  return ('does not support loading in subinterpreters' in text
+          or 'is not allowed in subinterpreters' in text)
+
+
 class SubinterpreterImportTest(unittest.TestCase):
   """pytsk3 must initialize cleanly inside a subinterpreter.
 
@@ -669,7 +684,11 @@ class SubinterpreterImportTest(unittest.TestCase):
       `.run_string(id, script)` signature.
     * 3.12-3.13: `test.support.interpreters` available but the
       Interpreter object exposes `.run(script)`, not `.exec(...)`.
-    * 3.14+: `interp.exec(script)` is the documented method.
+      These versions also enforce PEP 489: single-phase-init C
+      modules (which pytsk3 still is) cannot load into a
+      subinterpreter, so this test is a no-op skip there.
+    * 3.14+: `interp.exec(script)` is the documented method, and the
+      default policy here permits the load.
   This test probes each API in turn and skips when none works.
   """
 
@@ -689,7 +708,14 @@ class SubinterpreterImportTest(unittest.TestCase):
         if runner is None:
           self.skipTest(
               'test.support.interpreters has no exec/run on this build')
-        runner(_SUBINTERP_SCRIPT)
+        try:
+          runner(_SUBINTERP_SCRIPT)
+        except Exception as exc:  # pylint: disable=broad-except
+          if _is_subinterpreter_load_unsupported(exc):
+            self.skipTest(
+                'pytsk3 uses single-phase init; this Python version '
+                'forbids loading such modules in a subinterpreter')
+          raise
         return
       finally:
         close = getattr(interp, 'close', None)
@@ -713,7 +739,14 @@ class SubinterpreterImportTest(unittest.TestCase):
       run_string = getattr(private, 'run_string', None)
       if run_string is None:
         self.skipTest('private subinterpreter API has no run_string')
-      run_string(interp_id, _SUBINTERP_SCRIPT)
+      try:
+        run_string(interp_id, _SUBINTERP_SCRIPT)
+      except Exception as exc:  # pylint: disable=broad-except
+        if _is_subinterpreter_load_unsupported(exc):
+          self.skipTest(
+              'pytsk3 uses single-phase init; this Python version '
+              'forbids loading such modules in a subinterpreter')
+        raise
     finally:
       private.destroy(interp_id)
 
