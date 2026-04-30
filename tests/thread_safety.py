@@ -647,6 +647,15 @@ def _have_subinterpreters():
     return False
 
 
+_SUBINTERP_SCRIPT = (
+    'import pytsk3\n'
+    'img = pytsk3.Img_Info(url=' + repr(_TEST_IMAGE) + ')\n'
+    'assert img.get_size() == 102400\n'
+    'fs = pytsk3.FS_Info(img, offset=0)\n'
+    'f = fs.open_meta(15)\n'
+    "assert f.read_random(0, 16) == b'place,user,passw'\n")
+
+
 class SubinterpreterImportTest(unittest.TestCase):
   """pytsk3 must initialize cleanly inside a subinterpreter.
 
@@ -654,43 +663,59 @@ class SubinterpreterImportTest(unittest.TestCase):
   are only initialized once across all interpreters. Importing
   pytsk3 in a fresh subinterpreter exercises that path and surfaces
   any cross-subinterpreter state leak.
+
+  The subinterpreter API has shifted across Python versions:
+    * 3.11: only the private `_xxsubinterpreters` module, with a
+      `.run_string(id, script)` signature.
+    * 3.12-3.13: `test.support.interpreters` available but the
+      Interpreter object exposes `.run(script)`, not `.exec(...)`.
+    * 3.14+: `interp.exec(script)` is the documented method.
+  This test probes each API in turn and skips when none works.
   """
 
   @unittest.skipUnless(_have_subinterpreters(),
                        'subinterpreter API not available')
   def testImportInSubinterpreter(self):
-    # Prefer the public API; fall back to the internal _interpreters
-    # module on older 3.14 builds where test.support.interpreters is
-    # missing.
+    # Try the public API first.
     try:
       from test.support import interpreters  # type: ignore
-      interp = interpreters.create()
-      script = (
-          'import pytsk3\n'
-          'img = pytsk3.Img_Info(url=' + repr(_TEST_IMAGE) + ')\n'
-          'assert img.get_size() == 102400\n'
-          'fs = pytsk3.FS_Info(img, offset=0)\n'
-          'f = fs.open_meta(15)\n'
-          "assert f.read_random(0, 16) == b'place,user,passw'\n")
-      try:
-        interp.exec(script)
-      finally:
-        interp.close()
     except ImportError:
-      import _interpreters  # type: ignore
-      interp_id = _interpreters.create()
+      interpreters = None  # pylint: disable=invalid-name
+
+    if interpreters is not None:
+      interp = interpreters.create()
       try:
-        script = (
-            'import pytsk3\n'
-            'img = pytsk3.Img_Info(url=' + repr(_TEST_IMAGE) + ')\n'
-            'assert img.get_size() == 102400\n'
-            'fs = pytsk3.FS_Info(img, offset=0)\n'
-            'f = fs.open_meta(15)\n'
-            "assert f.read_random(0, 16) == b'place,user,passw'\n")
-        # The private API signature varies; try the most common form.
-        _interpreters.run_string(interp_id, script)
+        runner = getattr(interp, 'exec', None) or getattr(interp, 'run', None)
+        if runner is None:
+          self.skipTest(
+              'test.support.interpreters has no exec/run on this build')
+        runner(_SUBINTERP_SCRIPT)
+        return
       finally:
-        _interpreters.destroy(interp_id)
+        close = getattr(interp, 'close', None)
+        if close is not None:
+          close()
+
+    # Fall back to the private API. The module name and run_string
+    # signature both vary across versions; tolerate either.
+    try:
+      import _interpreters  # type: ignore  # noqa: F401
+      private = _interpreters
+    except ImportError:
+      try:
+        import _xxsubinterpreters  # type: ignore  # noqa: F401
+        private = _xxsubinterpreters
+      except ImportError:
+        self.skipTest('no usable subinterpreter API')
+
+    interp_id = private.create()
+    try:
+      run_string = getattr(private, 'run_string', None)
+      if run_string is None:
+        self.skipTest('private subinterpreter API has no run_string')
+      run_string(interp_id, _SUBINTERP_SCRIPT)
+    finally:
+      private.destroy(interp_id)
 
 
 if __name__ == '__main__':
