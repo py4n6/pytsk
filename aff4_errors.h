@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 #ifndef AFF4_ERRORS_H_
 #define AFF4_ERRORS_H_
 
