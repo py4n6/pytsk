@@ -40,14 +40,31 @@ from setuptools import setup, Command, Extension
 from setuptools.command.build_ext import build_ext
 from setuptools.command.sdist import sdist
 
-import distutils.ccompiler
+import logging
 
-from distutils import log
-from distutils.ccompiler import new_compiler
-try:
-  from setuptools._distutils.dep_util import newer_group
-except ImportError:
-  from distutils.dep_util import newer_group
+log = logging.getLogger(__name__)
+
+
+def _newer_group(sources, target, missing='error'):
+  """Return True if target is out-of-date with respect to any source file.
+
+  missing: 'error' = raise if a source is missing (default),
+           'ignore' = skip missing sources,
+           'newer'  = treat missing source as newer than target.
+  """
+  if not os.path.exists(target):
+    return True
+  target_mtime = os.path.getmtime(target)
+  for source in sources:
+    if not os.path.exists(source):
+      if missing == 'ignore':
+        continue
+      if missing == 'newer':
+        return True
+      # 'error': let getmtime raise FileNotFoundError
+    if os.path.getmtime(source) > target_mtime:
+      return True
+  return False
 
 # Change PYTHONPATH.
 sys.path.insert(0, '.')
@@ -70,7 +87,7 @@ class BuildExtCommand(build_ext):
     """Builds the extension.
 
     Args:
-      extension: distutils extension object.
+      extension: setuptools Extension object.
     """
     if (extension.sources is None or
         not isinstance(extension.sources, (list, tuple))):
@@ -81,7 +98,7 @@ class BuildExtCommand(build_ext):
 
     extension_path = self.get_ext_fullpath(extension.name)
     depends = extension.sources + extension.depends
-    if not (self.force or newer_group(depends, extension_path, 'newer')):
+    if not (self.force or _newer_group(depends, extension_path, 'newer')):
       log.debug('skipping \'%s\' extension (up-to-date)', extension.name)
       return
 
@@ -151,15 +168,15 @@ class BuildExtCommand(build_ext):
         build_temp=self.build_temp,
         target_lang=language)
 
-  def configure_source(self, compiler):
+  def configure_source(self, compiler_type):
     """Configures the source.
 
     Args:
-      compiler: distutils compiler object.
+      compiler_type: compiler type string (e.g. 'msvc', 'unix').
     """
     define_macros = [("HAVE_TSK_LIBTSK_H", "")]
 
-    if compiler.compiler_type == "msvc":
+    if compiler_type == "msvc":
       define_macros.extend([
           ("WIN32", "1"),
           ("UNICODE", "1"),
@@ -198,9 +215,9 @@ class BuildExtCommand(build_ext):
     self.define = define_macros
 
   def run(self):
-    compiler = new_compiler(compiler=self.compiler)
     # pylint: disable=attribute-defined-outside-init
-    self.configure_source(compiler)
+    compiler_type = self.compiler or ('msvc' if sys.platform == 'win32' else 'unix')
+    self.configure_source(compiler_type)
 
     libtsk_path = os.path.join("sleuthkit", "tsk")
 
@@ -343,8 +360,7 @@ class UpdateCommand(Command):
       print("Removing: {0:s}".format(file))
       os.remove(file)
 
-    compiler_type = distutils.ccompiler.get_default_compiler()
-    if compiler_type != "msvc":
+    if sys.platform != 'win32':
       subprocess.check_call(["./bootstrap"], cwd="sleuthkit")
 
     # Now derive the version based on the date.
