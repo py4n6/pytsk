@@ -44,7 +44,10 @@ import distutils.ccompiler
 
 from distutils import log
 from distutils.ccompiler import new_compiler
-from distutils.dep_util import newer_group
+try:
+  from setuptools._distutils.dep_util import newer_group
+except ImportError:
+  from distutils.dep_util import newer_group
 
 # Change PYTHONPATH.
 sys.path.insert(0, '.')
