@@ -39,6 +39,16 @@ extern void tsk_release_lock(tsk_lock_t * lock);
 ssize_t IMG_INFO_read(TSK_IMG_INFO *self, TSK_OFF_T off, char *buf, size_t len);
 void IMG_INFO_close(TSK_IMG_INFO *self);
 
+/* tsk_error_get() returns NULL when libtsk did not record a t_errno
+ * for the failure (some EOF / bounds paths return -1 without setting
+ * one). safe_tsk_error_get() guarantees a usable string. All call sites 
+ * in pytsk pass through this wrapper.
+ */
+static const char *safe_tsk_error_get(void) {
+    const char *e = tsk_error_get();
+    return (e != NULL) ? e : "unknown libtsk error";
+}
+
 /* This macro is used to receive the object reference from a member of the type.
  */
 #define GET_Object_from_member(type, object, member) \
@@ -50,15 +60,17 @@ static int Img_Info_dest(Img_Info self) {
     if(self == NULL) {
         return -1;
     }
-    tsk_img_close((TSK_IMG_INFO *) self->img);
+    if(self->img != NULL) {
+        tsk_img_close((TSK_IMG_INFO *) self->img);
 
-    if(self->img_is_internal != 0) {
+        if(self->img_is_internal != 0) {
 #if defined( TSK_MULTITHREAD_LIB )
-        tsk_deinit_lock(&(self->img->base.cache_lock));
+            tsk_deinit_lock(&(self->img->base.cache_lock));
 #endif
-        // If img is internal talloc will free it.
+            // If img is internal talloc will free it.
+        }
+        self->img = NULL;
     }
-    self->img = NULL;
 
     if(self->state_lock_initialized != 0) {
         tsk_deinit_lock(&self->state_lock);
@@ -82,6 +94,7 @@ static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type) {
      */
     tsk_init_lock(&self->state_lock);
     self->state_lock_initialized = 1;
+    talloc_set_destructor((void *) self, (int(*)(void *)) &Img_Info_dest);
 
     if(urn != NULL && urn[0] != 0) {
 #ifdef TSK_VERSION_NUM
@@ -125,13 +138,11 @@ static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type) {
 #endif
     }
     if(self->img == NULL) {
-        RaiseError(EIOError, "Unable to open image: %s", tsk_error_get());
+        RaiseError(EIOError, "Unable to open image: %s", safe_tsk_error_get());
         tsk_error_reset();
         return NULL;
     }
     self->img_is_open = 1;
-
-    talloc_set_destructor((void *) self, (int(*)(void *)) &Img_Info_dest);
 
     return self;
 }
@@ -182,7 +193,7 @@ uint64_t Img_Info_read(Img_Info self, TSK_OFF_T off, OUT char *buf, size_t len) 
     }
 
     if(read_count < 0) {
-        RaiseError(EIOError, "Unable to read image: %s", tsk_error_get());
+        RaiseError(EIOError, "Unable to read image: %s", safe_tsk_error_get());
         tsk_error_reset();
         return 0;
     }
@@ -247,7 +258,14 @@ ssize_t IMG_INFO_read(TSK_IMG_INFO *img, TSK_OFF_T off, char *buf, size_t len) {
     if(len == 0) {
       return 0;
     }
-    return (ssize_t) CALL(self->container, read, (uint64_t) off, buf, len);
+    {
+        uint64_t n = CALL(self->container, read, (uint64_t) off, buf, len);
+        char *unused_buf;
+        if(*aff4_get_current_error(&unused_buf) != EZero) {
+            return -1;
+        }
+        return (ssize_t) n;
+    }
 }
 
 /* FS_Info destructor
@@ -290,7 +308,7 @@ static FS_Info FS_Info_Con(FS_Info self, Img_Info img, TSK_OFF_T offset,
 
     if(!self->info) {
         RaiseError(EIOError, "Unable to open the image as a filesystem at offset: 0x%08" PRIxOFF " with error: %s",
-                   offset, tsk_error_get());
+                   offset, safe_tsk_error_get());
         tsk_error_reset();
         return NULL;
     }
@@ -340,21 +358,23 @@ static File FS_Info_open(FS_Info self, ZString path) {
     info = tsk_fs_file_open(self->info, NULL, path);
 
     if(info == NULL) {
-        RaiseError(EIOError, "Unable to open file: %s", tsk_error_get());
+        RaiseError(EIOError, "Unable to open file: %s", safe_tsk_error_get());
         tsk_error_reset();
         goto on_error;
     }
     // CONSTRUCT_CREATE calls _talloc_memdup to allocate memory for the object.
     object = CONSTRUCT_CREATE(File, File, NULL);
 
-    if(object != NULL) {
-        // CONSTRUCT_INITIALIZE calls the constructor function on the object.
-        if(CONSTRUCT_INITIALIZE(File, File, Con, object, self, info) == NULL) {
-            goto on_error;
-        }
-        // Tell the File object to manage info.
-        object->info_is_internal = 1;
+    if(object == NULL) {
+        RaiseError(ENoMemory, "Unable to allocate File.");
+        goto on_error;
     }
+    // CONSTRUCT_INITIALIZE calls the constructor function on the object.
+    if(CONSTRUCT_INITIALIZE(File, File, Con, object, self, info) == NULL) {
+        goto on_error;
+    }
+    // Tell the File object to manage info.
+    object->info_is_internal = 1;
     return object;
 
 on_error:
@@ -382,21 +402,23 @@ static File FS_Info_open_meta(FS_Info self, TSK_INUM_T inode) {
     info = tsk_fs_file_open_meta(self->info, NULL, inode);
 
     if(info == NULL) {
-        RaiseError(EIOError, "Unable to open file: %s", tsk_error_get());
+        RaiseError(EIOError, "Unable to open file: %s", safe_tsk_error_get());
         tsk_error_reset();
         goto on_error;
     }
     // CONSTRUCT_CREATE calls _talloc_memdup to allocate memory for the object.
     object = CONSTRUCT_CREATE(File, File, NULL);
 
-    if(object != NULL) {
-        // CONSTRUCT_INITIALIZE calls the constructor function on the object.
-        if(CONSTRUCT_INITIALIZE(File, File, Con, object, self, info) == NULL) {
-            goto on_error;
-        }
-        // Tell the File object to manage info.
-        object->info_is_internal = 1;
+    if(object == NULL) {
+        RaiseError(ENoMemory, "Unable to allocate File.");
+        goto on_error;
     }
+    // CONSTRUCT_INITIALIZE calls the constructor function on the object.
+    if(CONSTRUCT_INITIALIZE(File, File, Con, object, self, info) == NULL) {
+        goto on_error;
+    }
+    // Tell the File object to manage info.
+    object->info_is_internal = 1;
     return object;
 
 on_error:
@@ -411,7 +433,16 @@ on_error:
 
 static void FS_Info_exit(FS_Info self PYTSK3_ATTRIBUTE_UNUSED) {
   PYTSK3_UNREFERENCED_PARAMETER(self)
-  exit(0);
+  /* Previously called exit(0), which lets any Python caller of
+   * FS_Info.exit() kill the host interpreter -- a trivial denial of
+   * service for any process that loads pytsk3 alongside untrusted
+   * user code (notebooks, plugins, batch runners). Raise instead so
+   * the caller sees a clean RuntimeError.
+   */
+  RaiseError(ERuntimeError,
+             "FS_Info.exit is intentionally disabled; previously this "
+             "method called exit() from C and would terminate the host "
+             "interpreter.");
 };
 
 VIRTUAL(FS_Info, Object) {
@@ -461,7 +492,7 @@ static Directory Directory_Con(Directory self, FS_Info fs, ZString path, TSK_INU
         self->info = tsk_fs_dir_open(fs->info, path);
     }
     if(self->info == NULL) {
-        RaiseError(EIOError, "Unable to open directory: %s", tsk_error_get());
+        RaiseError(EIOError, "Unable to open directory: %s", safe_tsk_error_get());
         tsk_error_reset();
         return NULL;
     }
@@ -534,21 +565,23 @@ static File Directory_next(Directory self) {
     info = tsk_fs_dir_get(self->info, snapshot_current);
 
     if(info == NULL) {
-        RaiseError(EIOError, "Error opening File: %s", tsk_error_get());
+        RaiseError(EIOError, "Error opening File: %s", safe_tsk_error_get());
         tsk_error_reset();
         goto on_error;
     }
     // CONSTRUCT_CREATE calls _talloc_memdup to allocate memory for the object.
     object = CONSTRUCT_CREATE(File, File, NULL);
 
-    if(object != NULL) {
-        // CONSTRUCT_INITIALIZE calls the constructor function on the object.
-        if(CONSTRUCT_INITIALIZE(File, File, Con, object, self->fs, info) == NULL) {
-            goto on_error;
-        }
-        // Tell the File object to manage info.
-        object->info_is_internal = 1;
+    if(object == NULL) {
+        RaiseError(ENoMemory, "Unable to allocate File.");
+        goto on_error;
     }
+    // CONSTRUCT_INITIALIZE calls the constructor function on the object.
+    if(CONSTRUCT_INITIALIZE(File, File, Con, object, self->fs, info) == NULL) {
+        goto on_error;
+    }
+    // Tell the File object to manage info.
+    object->info_is_internal = 1;
 
     return object;
 
@@ -673,7 +706,7 @@ static uint64_t File_read_random(File self, TSK_OFF_T offset,
   };
 
   if(result < 0) {
-    RaiseError(EIOError, "Read error: %s", tsk_error_get());
+    RaiseError(EIOError, "Read error: %s", safe_tsk_error_get());
     tsk_error_reset();
     return 0;
   };
@@ -757,7 +790,7 @@ static Attribute File_iternext(File self) {
     attribute = (TSK_FS_ATTR *) tsk_fs_file_attr_get_idx(self->info, snapshot_attr);
 
     if(!attribute)  {
-        RaiseError(EIOError, "Error opening File: %s", tsk_error_get());
+        RaiseError(EIOError, "Error opening File: %s", safe_tsk_error_get());
         tsk_error_reset();
         return NULL;
     }
@@ -877,7 +910,19 @@ static TSK_FS_ATTR_RUN *Attribute_iternext(Attribute self) {
     if(self->iter_lock_initialized != 0) {
         tsk_release_lock(&self->iter_lock);
     }
-    return (TSK_FS_ATTR_RUN *) talloc_memdup(NULL, result, sizeof(*result));
+    {
+        TSK_FS_ATTR_RUN *dup = (TSK_FS_ATTR_RUN *) talloc_memdup(
+            self, result, sizeof(*result));
+        if(dup == NULL) {
+            /* Returning NULL from iternext without RaiseError would
+             * silently terminate iteration as if the run list ended.
+             * Set a clear error so the caller raises MemoryError.
+             */
+            RaiseError(ENoMemory,
+                       "Unable to duplicate attribute run.");
+        }
+        return dup;
+    }
 }
 
 VIRTUAL(Attribute, Object) {
@@ -929,7 +974,7 @@ static Volume_Info Volume_Info_Con(Volume_Info self, Img_Info img,
     self->info = tsk_vs_open((TSK_IMG_INFO *) img->img, offset, type);
 
     if(self->info == NULL) {
-        RaiseError(EIOError, "Error opening Volume_Info: %s", tsk_error_get());
+        RaiseError(EIOError, "Error opening Volume_Info: %s", safe_tsk_error_get());
         tsk_error_reset();
         return NULL;
     }
