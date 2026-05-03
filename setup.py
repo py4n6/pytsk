@@ -26,8 +26,6 @@ SLEUTHKIT_PATH: A path to the locally build sleuthkit source tree. If not
 
 """
 
-from __future__ import print_function
-
 import copy
 import glob
 import re
@@ -53,9 +51,9 @@ import generate_bindings
 
 
 version_tuple = (sys.version_info[0], sys.version_info[1])
-if version_tuple < (3, 7):
+if version_tuple < (3, 10):
   print((
-      'Unsupported Python version: {0:s}, version 3.7 or higher '
+      'Unsupported Python version: {0:s}, version 3.10 or higher '
       'required.').format(sys.version))
   sys.exit(1)
 
@@ -157,19 +155,26 @@ class BuildExtCommand(build_ext):
     define_macros = [("HAVE_TSK_LIBTSK_H", "")]
 
     if compiler.compiler_type == "msvc":
+      # TSK_MULTITHREAD_LIB makes libtsk's tsk_error_* state per-thread
+      # and turns the cache_lock primitives into real CRITICAL_SECTIONs.
+      # Required for the module's Py_MOD_GIL_NOT_USED declaration.
       define_macros.extend([
           ("WIN32", "1"),
           ("UNICODE", "1"),
           ("NOMINMAX", "1"),
+          ("TSK_MULTITHREAD_LIB", "1"),
           ("_CRT_SECURE_NO_WARNINGS", "1")])
 
       # TODO: ("GUID_WINDOWS", "1"),
 
     else:
       # We want to build as much as possible self contained Python
-      # binding.
+      # binding. Multithreading is left enabled (configure default) so
+      # libtsk's error reporting is per-thread and cache_lock is a real
+      # mutex; otherwise concurrent calls from different threads would
+      # scramble tsk_error_get() and race on libtsk's internal caches.
       command = [
-          "sh", "configure", "--disable-java", "--disable-multithreading",
+          "sh", "configure", "--disable-java",
           "--without-afflib", "--without-libbfio", "--without-libewf",
           "--without-libvhdi", "--without-libvmdk", "--without-libvslvm",
           "--without-zlib"]

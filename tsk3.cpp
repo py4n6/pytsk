@@ -26,6 +26,8 @@
 extern "C" {
 extern void tsk_init_lock(tsk_lock_t * lock);
 extern void tsk_deinit_lock(tsk_lock_t * lock);
+extern void tsk_take_lock(tsk_lock_t * lock);
+extern void tsk_release_lock(tsk_lock_t * lock);
 }
 
 #endif /* defined( TSK_MULTITHREAD_LIB ) */
@@ -36,6 +38,16 @@ extern void tsk_deinit_lock(tsk_lock_t * lock);
  */
 ssize_t IMG_INFO_read(TSK_IMG_INFO *self, TSK_OFF_T off, char *buf, size_t len);
 void IMG_INFO_close(TSK_IMG_INFO *self);
+
+/* tsk_error_get() returns NULL when libtsk did not record a t_errno
+ * for the failure (some EOF / bounds paths return -1 without setting
+ * one). safe_tsk_error_get() guarantees a usable string. All call sites 
+ * in pytsk pass through this wrapper.
+ */
+static const char *safe_tsk_error_get(void) {
+    const char *e = tsk_error_get();
+    return (e != NULL) ? e : "unknown libtsk error";
+}
 
 /* This macro is used to receive the object reference from a member of the type.
  */
@@ -48,15 +60,22 @@ static int Img_Info_dest(Img_Info self) {
     if(self == NULL) {
         return -1;
     }
-    tsk_img_close((TSK_IMG_INFO *) self->img);
+    if(self->img != NULL) {
+        tsk_img_close((TSK_IMG_INFO *) self->img);
 
-    if(self->img_is_internal != 0) {
+        if(self->img_is_internal != 0) {
 #if defined( TSK_MULTITHREAD_LIB )
-        tsk_deinit_lock(&(self->img->base.cache_lock));
+            tsk_deinit_lock(&(self->img->base.cache_lock));
 #endif
-        // If img is internal talloc will free it.
+            // If img is internal talloc will free it.
+        }
+        self->img = NULL;
     }
-    self->img = NULL;
+
+    if(self->state_lock_initialized != 0) {
+        tsk_deinit_lock(&self->state_lock);
+        self->state_lock_initialized = 0;
+    }
 
     return 0;
 }
@@ -69,6 +88,14 @@ static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type) {
         RaiseError(EInvalidParameter, "Invalid parameter: self.");
         return NULL;
     }
+    /* Initialize the state_lock before any path that touches img_is_open.
+     * Destruction (Img_Info_dest) checks state_lock_initialized so this is
+     * safe even if a later step in this constructor fails.
+     */
+    tsk_init_lock(&self->state_lock);
+    self->state_lock_initialized = 1;
+    talloc_set_destructor((void *) self, (int(*)(void *)) &Img_Info_dest);
+
     if(urn != NULL && urn[0] != 0) {
 #ifdef TSK_VERSION_NUM
         self->img = (Extended_TSK_IMG_INFO *) tsk_img_open_utf8(1, (const char **) &urn, type, 0);
@@ -111,13 +138,11 @@ static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type) {
 #endif
     }
     if(self->img == NULL) {
-        RaiseError(EIOError, "Unable to open image: %s", tsk_error_get());
+        RaiseError(EIOError, "Unable to open image: %s", safe_tsk_error_get());
         tsk_error_reset();
         return NULL;
     }
     self->img_is_open = 1;
-
-    talloc_set_destructor((void *) self, (int(*)(void *)) &Img_Info_dest);
 
     return self;
 }
@@ -129,10 +154,6 @@ uint64_t Img_Info_read(Img_Info self, TSK_OFF_T off, OUT char *buf, size_t len) 
         RaiseError(EInvalidParameter, "Invalid parameter: self.");
         return 0;
     }
-    if(self->img_is_open == 0) {
-        RaiseError(EIOError, "Invalid Img_Info not opened.");
-        return 0;
-    }
     if(off < 0) {
         RaiseError(EIOError, "Invalid offset value out of bounds.");
         return 0;
@@ -141,10 +162,38 @@ uint64_t Img_Info_read(Img_Info self, TSK_OFF_T off, OUT char *buf, size_t len) 
         RaiseError(EInvalidParameter, "Invalid parameter: buf.");
         return 0;
     }
-    read_count = CALL((TSK_IMG_INFO *) self->img, read, off, buf, len);
+    /* Take state_lock around the open-check and the read so a parallel
+     * Img_Info_close cannot flip img_is_open mid-read and tear down
+     * libtsk image state under us. tsk_img_read internally takes the
+     * libtsk cache_lock, so we acquire state_lock first and then
+     * cache_lock inside libtsk -- a fixed order that avoids deadlock
+     * since close() never touches cache_lock.
+     */
+    if(self->state_lock_initialized != 0) {
+        tsk_take_lock(&self->state_lock);
+    }
+    if(self->img_is_open == 0) {
+        if(self->state_lock_initialized != 0) {
+            tsk_release_lock(&self->state_lock);
+        }
+        RaiseError(EIOError, "Invalid Img_Info not opened.");
+        return 0;
+    }
+    /* Go through tsk_img_read rather than the raw vtbl read directly:
+     * libtsk's raw_read uses lseek+read against a shared fd, whose
+     * file-position state races across threads. tsk_img_read holds
+     * cache_lock for the duration of the read, which serializes the
+     * positional access and is required by raw_read's documented
+     * "assumes we are under a lock" contract.
+     */
+    read_count = tsk_img_read((TSK_IMG_INFO *) self->img, off, buf, len);
+
+    if(self->state_lock_initialized != 0) {
+        tsk_release_lock(&self->state_lock);
+    }
 
     if(read_count < 0) {
-        RaiseError(EIOError, "Unable to read image: %s", tsk_error_get());
+        RaiseError(EIOError, "Unable to read image: %s", safe_tsk_error_get());
         tsk_error_reset();
         return 0;
     }
@@ -152,8 +201,21 @@ uint64_t Img_Info_read(Img_Info self, TSK_OFF_T off, OUT char *buf, size_t len) 
 }
 
 void Img_Info_close(Img_Info self) {
-    if(self != NULL) {
-        self->img_is_open = 0;
+    if(self == NULL) {
+        return;
+    }
+    /* Synchronize with concurrent Img_Info_read: that path holds
+     * state_lock around the img_is_open check and the read itself,
+     * so once we acquire the lock here all in-flight reads have
+     * completed and any subsequent reader observes img_is_open == 0
+     * and returns a clean error.
+     */
+    if(self->state_lock_initialized != 0) {
+        tsk_take_lock(&self->state_lock);
+    }
+    self->img_is_open = 0;
+    if(self->state_lock_initialized != 0) {
+        tsk_release_lock(&self->state_lock);
     }
 }
 
@@ -196,7 +258,14 @@ ssize_t IMG_INFO_read(TSK_IMG_INFO *img, TSK_OFF_T off, char *buf, size_t len) {
     if(len == 0) {
       return 0;
     }
-    return (ssize_t) CALL(self->container, read, (uint64_t) off, buf, len);
+    {
+        uint64_t n = CALL(self->container, read, (uint64_t) off, buf, len);
+        char *unused_buf;
+        if(*aff4_get_current_error(&unused_buf) != EZero) {
+            return -1;
+        }
+        return (ssize_t) n;
+    }
 }
 
 /* FS_Info destructor
@@ -239,7 +308,7 @@ static FS_Info FS_Info_Con(FS_Info self, Img_Info img, TSK_OFF_T offset,
 
     if(!self->info) {
         RaiseError(EIOError, "Unable to open the image as a filesystem at offset: 0x%08" PRIxOFF " with error: %s",
-                   offset, tsk_error_get());
+                   offset, safe_tsk_error_get());
         tsk_error_reset();
         return NULL;
     }
@@ -289,21 +358,23 @@ static File FS_Info_open(FS_Info self, ZString path) {
     info = tsk_fs_file_open(self->info, NULL, path);
 
     if(info == NULL) {
-        RaiseError(EIOError, "Unable to open file: %s", tsk_error_get());
+        RaiseError(EIOError, "Unable to open file: %s", safe_tsk_error_get());
         tsk_error_reset();
         goto on_error;
     }
     // CONSTRUCT_CREATE calls _talloc_memdup to allocate memory for the object.
     object = CONSTRUCT_CREATE(File, File, NULL);
 
-    if(object != NULL) {
-        // CONSTRUCT_INITIALIZE calls the constructor function on the object.
-        if(CONSTRUCT_INITIALIZE(File, File, Con, object, self, info) == NULL) {
-            goto on_error;
-        }
-        // Tell the File object to manage info.
-        object->info_is_internal = 1;
+    if(object == NULL) {
+        RaiseError(ENoMemory, "Unable to allocate File.");
+        goto on_error;
     }
+    // CONSTRUCT_INITIALIZE calls the constructor function on the object.
+    if(CONSTRUCT_INITIALIZE(File, File, Con, object, self, info) == NULL) {
+        goto on_error;
+    }
+    // Tell the File object to manage info.
+    object->info_is_internal = 1;
     return object;
 
 on_error:
@@ -331,21 +402,23 @@ static File FS_Info_open_meta(FS_Info self, TSK_INUM_T inode) {
     info = tsk_fs_file_open_meta(self->info, NULL, inode);
 
     if(info == NULL) {
-        RaiseError(EIOError, "Unable to open file: %s", tsk_error_get());
+        RaiseError(EIOError, "Unable to open file: %s", safe_tsk_error_get());
         tsk_error_reset();
         goto on_error;
     }
     // CONSTRUCT_CREATE calls _talloc_memdup to allocate memory for the object.
     object = CONSTRUCT_CREATE(File, File, NULL);
 
-    if(object != NULL) {
-        // CONSTRUCT_INITIALIZE calls the constructor function on the object.
-        if(CONSTRUCT_INITIALIZE(File, File, Con, object, self, info) == NULL) {
-            goto on_error;
-        }
-        // Tell the File object to manage info.
-        object->info_is_internal = 1;
+    if(object == NULL) {
+        RaiseError(ENoMemory, "Unable to allocate File.");
+        goto on_error;
     }
+    // CONSTRUCT_INITIALIZE calls the constructor function on the object.
+    if(CONSTRUCT_INITIALIZE(File, File, Con, object, self, info) == NULL) {
+        goto on_error;
+    }
+    // Tell the File object to manage info.
+    object->info_is_internal = 1;
     return object;
 
 on_error:
@@ -360,7 +433,16 @@ on_error:
 
 static void FS_Info_exit(FS_Info self PYTSK3_ATTRIBUTE_UNUSED) {
   PYTSK3_UNREFERENCED_PARAMETER(self)
-  exit(0);
+  /* Previously called exit(0), which lets any Python caller of
+   * FS_Info.exit() kill the host interpreter -- a trivial denial of
+   * service for any process that loads pytsk3 alongside untrusted
+   * user code (notebooks, plugins, batch runners). Raise instead so
+   * the caller sees a clean RuntimeError.
+   */
+  RaiseError(ERuntimeError,
+             "FS_Info.exit is intentionally disabled; previously this "
+             "method called exit() from C and would terminate the host "
+             "interpreter.");
 };
 
 VIRTUAL(FS_Info, Object) {
@@ -379,6 +461,11 @@ static int Directory_dest(Directory self) {
     }
     tsk_fs_dir_close(self->info);
     self->info = NULL;
+
+    if(self->iter_lock_initialized != 0) {
+        tsk_deinit_lock(&self->iter_lock);
+        self->iter_lock_initialized = 0;
+    }
 
     return 0;
 }
@@ -405,13 +492,20 @@ static Directory Directory_Con(Directory self, FS_Info fs, ZString path, TSK_INU
         self->info = tsk_fs_dir_open(fs->info, path);
     }
     if(self->info == NULL) {
-        RaiseError(EIOError, "Unable to open directory: %s", tsk_error_get());
+        RaiseError(EIOError, "Unable to open directory: %s", safe_tsk_error_get());
         tsk_error_reset();
         return NULL;
     }
     self->current = 0;
     self->size = tsk_fs_dir_getsize(self->info);
     self->fs = fs;
+
+    /* Initialize iter_lock so concurrent iteration of this Directory
+     * from multiple threads is safe. The cursor is mutated under the
+     * lock in Directory_next and Directory_iter.
+     */
+    tsk_init_lock(&self->iter_lock);
+    self->iter_lock_initialized = 1;
 
     // TODO: is this still applicable?
     // Add a reference to them to ensure they dont get freed until we do.
@@ -425,44 +519,69 @@ static Directory Directory_Con(Directory self, FS_Info fs, ZString path, TSK_INU
 static File Directory_next(Directory self) {
     TSK_FS_FILE *info = NULL;
     File object = NULL;
+    int snapshot_current = 0;
 
     if(self == NULL) {
         RaiseError(EInvalidParameter, "Invalid parameter: self.");
         return NULL;
     }
+    /* Take the cursor snapshot and advance under iter_lock so concurrent
+     * threads each consume a distinct entry. tsk_fs_dir_get itself is
+     * thread-safe under libtsk's cache_lock (since TSK_MULTITHREAD_LIB
+     * is enabled), so we can release iter_lock before calling it.
+     */
+    if(self->iter_lock_initialized != 0) {
+        tsk_take_lock(&self->iter_lock);
+    }
     if((self->current < 0) || ((uint64_t) self->current > (uint64_t) self->size)) {
+        if(self->iter_lock_initialized != 0) {
+            tsk_release_lock(&self->iter_lock);
+        }
         RaiseError(EInvalidParameter, "Invalid parameter: current.");
         return NULL;
     }
     if((uint64_t) self->current == (uint64_t) self->size) {
+        if(self->iter_lock_initialized != 0) {
+            tsk_release_lock(&self->iter_lock);
+        }
         return NULL;
     }
     /* Cap at INT_MAX so the post-increment below can never overflow
-     * a signed int. While self->size is bounded by the filesystem, 
+     * a signed int. While self->size is bounded by the filesystem,
      * directories on exotic inputs could in theory drive this past INT_MAX.
      */
     if(self->current == INT_MAX) {
+        if(self->iter_lock_initialized != 0) {
+            tsk_release_lock(&self->iter_lock);
+        }
         return NULL;
     }
-    info = tsk_fs_dir_get(self->info, self->current);
+    snapshot_current = self->current;
+    self->current++;
+    if(self->iter_lock_initialized != 0) {
+        tsk_release_lock(&self->iter_lock);
+    }
+
+    info = tsk_fs_dir_get(self->info, snapshot_current);
 
     if(info == NULL) {
-        RaiseError(EIOError, "Error opening File: %s", tsk_error_get());
+        RaiseError(EIOError, "Error opening File: %s", safe_tsk_error_get());
         tsk_error_reset();
         goto on_error;
     }
     // CONSTRUCT_CREATE calls _talloc_memdup to allocate memory for the object.
     object = CONSTRUCT_CREATE(File, File, NULL);
 
-    if(object != NULL) {
-        // CONSTRUCT_INITIALIZE calls the constructor function on the object.
-        if(CONSTRUCT_INITIALIZE(File, File, Con, object, self->fs, info) == NULL) {
-            goto on_error;
-        }
-        // Tell the File object to manage info.
-        object->info_is_internal = 1;
+    if(object == NULL) {
+        RaiseError(ENoMemory, "Unable to allocate File.");
+        goto on_error;
     }
-    self->current++;
+    // CONSTRUCT_INITIALIZE calls the constructor function on the object.
+    if(CONSTRUCT_INITIALIZE(File, File, Con, object, self->fs, info) == NULL) {
+        goto on_error;
+    }
+    // Tell the File object to manage info.
+    object->info_is_internal = 1;
 
     return object;
 
@@ -477,7 +596,16 @@ on_error:
 };
 
 static void Directory_iter(Directory self) {
+  if(self == NULL) {
+    return;
+  }
+  if(self->iter_lock_initialized != 0) {
+    tsk_take_lock(&self->iter_lock);
+  }
   self->current = 0;
+  if(self->iter_lock_initialized != 0) {
+    tsk_release_lock(&self->iter_lock);
+  }
 };
 
 VIRTUAL(Directory, Object) {
@@ -498,6 +626,11 @@ static int File_dest(File self) {
         tsk_fs_file_close(self->info);
     }
     self->info = NULL;
+
+    if(self->iter_lock_initialized != 0) {
+        tsk_deinit_lock(&self->iter_lock);
+        self->iter_lock_initialized = 0;
+    }
 
     return 0;
 }
@@ -522,6 +655,10 @@ static File File_Con(File self, FS_Info fs, TSK_FS_FILE *info) {
 
     // Get the total number of attributes.
     self->max_attr = tsk_fs_file_attr_getsize(info);
+
+    /* Initialize iter_lock so concurrent attribute iteration is safe. */
+    tsk_init_lock(&self->iter_lock);
+    self->iter_lock_initialized = 1;
 
     talloc_set_destructor((void *) self, (int(*)(void *)) &File_dest);
 
@@ -569,7 +706,7 @@ static uint64_t File_read_random(File self, TSK_OFF_T offset,
   };
 
   if(result < 0) {
-    RaiseError(EIOError, "Read error: %s", tsk_error_get());
+    RaiseError(EIOError, "Read error: %s", safe_tsk_error_get());
     tsk_error_reset();
     return 0;
   };
@@ -617,23 +754,43 @@ on_error:
 static Attribute File_iternext(File self) {
     TSK_FS_ATTR *attribute = NULL;
     Attribute object = NULL;
+    int snapshot_attr = 0;
 
     if(self == NULL) {
         RaiseError(EInvalidParameter, "Invalid parameter: self.");
         return NULL;
     }
+    /* Snapshot current_attr and advance under iter_lock so concurrent
+     * iteration from multiple threads doesn't double-consume an
+     * attribute index or skip ahead.
+     */
+    if(self->iter_lock_initialized != 0) {
+        tsk_take_lock(&self->iter_lock);
+    }
     if(self->current_attr < 0 || self->current_attr > self->max_attr) {
+        if(self->iter_lock_initialized != 0) {
+            tsk_release_lock(&self->iter_lock);
+        }
         RaiseError(EInvalidParameter, "Invalid parameter: self->current_attr.");
         return NULL;
     }
     if(self->current_attr == self->max_attr) {
+        if(self->iter_lock_initialized != 0) {
+            tsk_release_lock(&self->iter_lock);
+        }
         return NULL;
     }
+    snapshot_attr = self->current_attr;
+    self->current_attr++;
+    if(self->iter_lock_initialized != 0) {
+        tsk_release_lock(&self->iter_lock);
+    }
+
     // It looks like attribute is managed by the SleuthKit.
-    attribute = (TSK_FS_ATTR *) tsk_fs_file_attr_get_idx(self->info, self->current_attr);
+    attribute = (TSK_FS_ATTR *) tsk_fs_file_attr_get_idx(self->info, snapshot_attr);
 
     if(!attribute)  {
-        RaiseError(EIOError, "Error opening File: %s", tsk_error_get());
+        RaiseError(EIOError, "Error opening File: %s", safe_tsk_error_get());
         tsk_error_reset();
         return NULL;
     }
@@ -646,7 +803,6 @@ static Attribute File_iternext(File self) {
             goto on_error;
         }
     }
-    self->current_attr++;
 
     return object;
 
@@ -658,7 +814,16 @@ on_error:
 };
 
 static void File_iter__(File self) {
+  if(self == NULL) {
+    return;
+  }
+  if(self->iter_lock_initialized != 0) {
+    tsk_take_lock(&self->iter_lock);
+  }
   self->current_attr = 0;
+  if(self->iter_lock_initialized != 0) {
+    tsk_release_lock(&self->iter_lock);
+  }
 };
 
 VIRTUAL(File, Object) {
@@ -668,6 +833,19 @@ VIRTUAL(File, Object) {
   VMETHOD(iternext) = File_iternext;
   VMETHOD(__iter__) = File_iter__;
 } END_VIRTUAL
+
+/* Attribute destructor
+ */
+static int Attribute_dest(Attribute self) {
+    if(self == NULL) {
+        return -1;
+    }
+    if(self->iter_lock_initialized != 0) {
+        tsk_deinit_lock(&self->iter_lock);
+        self->iter_lock_initialized = 0;
+    }
+    return 0;
+}
 
 /* Attribute constructor
  */
@@ -682,17 +860,44 @@ static Attribute Attribute_Con(Attribute self, TSK_FS_ATTR *info) {
     }
     self->info = info;
 
+    /* Initialize iter_lock so concurrent run iteration is safe. */
+    tsk_init_lock(&self->iter_lock);
+    self->iter_lock_initialized = 1;
+
+    talloc_set_destructor((void *) self, (int(*)(void *)) &Attribute_dest);
+
     return self;
 }
 
 static void Attribute_iter(Attribute self) {
+  if(self == NULL) {
+    return;
+  }
+  if(self->iter_lock_initialized != 0) {
+    tsk_take_lock(&self->iter_lock);
+  }
   self->current = self->info->nrd.run;
+  if(self->iter_lock_initialized != 0) {
+    tsk_release_lock(&self->iter_lock);
+  }
 };
 
 static TSK_FS_ATTR_RUN *Attribute_iternext(Attribute self) {
     TSK_FS_ATTR_RUN *result = NULL;
 
+    if(self == NULL) {
+        return NULL;
+    }
+    /* Take iter_lock so the read-modify-write of self->current can't
+     * race with another thread iterating the same Attribute object.
+     */
+    if(self->iter_lock_initialized != 0) {
+        tsk_take_lock(&self->iter_lock);
+    }
     if(self->current == NULL) {
+        if(self->iter_lock_initialized != 0) {
+            tsk_release_lock(&self->iter_lock);
+        }
         return NULL;
     }
     result = self->current;
@@ -702,7 +907,22 @@ static TSK_FS_ATTR_RUN *Attribute_iternext(Attribute self) {
     if(self->current == self->info->nrd.run) {
         self->current = NULL;
     }
-    return (TSK_FS_ATTR_RUN *) talloc_memdup(NULL, result, sizeof(*result));
+    if(self->iter_lock_initialized != 0) {
+        tsk_release_lock(&self->iter_lock);
+    }
+    {
+        TSK_FS_ATTR_RUN *dup = (TSK_FS_ATTR_RUN *) talloc_memdup(
+            self, result, sizeof(*result));
+        if(dup == NULL) {
+            /* Returning NULL from iternext without RaiseError would
+             * silently terminate iteration as if the run list ended.
+             * Set a clear error so the caller raises MemoryError.
+             */
+            RaiseError(ENoMemory,
+                       "Unable to duplicate attribute run.");
+        }
+        return dup;
+    }
 }
 
 VIRTUAL(Attribute, Object) {
@@ -721,6 +941,11 @@ static int Volume_Info_dest(Volume_Info self) {
     }
     tsk_vs_close(self->info);
     self->info = NULL;
+
+    if(self->iter_lock_initialized != 0) {
+        tsk_deinit_lock(&self->iter_lock);
+        self->iter_lock_initialized = 0;
+    }
 
     return 0;
 }
@@ -749,10 +974,15 @@ static Volume_Info Volume_Info_Con(Volume_Info self, Img_Info img,
     self->info = tsk_vs_open((TSK_IMG_INFO *) img->img, offset, type);
 
     if(self->info == NULL) {
-        RaiseError(EIOError, "Error opening Volume_Info: %s", tsk_error_get());
+        RaiseError(EIOError, "Error opening Volume_Info: %s", safe_tsk_error_get());
         tsk_error_reset();
         return NULL;
     }
+
+    /* Initialize iter_lock so concurrent partition iteration is safe. */
+    tsk_init_lock(&self->iter_lock);
+    self->iter_lock_initialized = 1;
+
     talloc_set_destructor((void *) self, (int(*)(void *)) &Volume_Info_dest);
 
     return self;
@@ -762,19 +992,40 @@ static void Volume_Info_iter(Volume_Info self) {
   if(self == NULL) {
     return;
   }
+  if(self->iter_lock_initialized != 0) {
+    tsk_take_lock(&self->iter_lock);
+  }
   self->current = 0;
+  if(self->iter_lock_initialized != 0) {
+    tsk_release_lock(&self->iter_lock);
+  }
 };
 
 static TSK_VS_PART_INFO *Volume_Info_iternext(Volume_Info self) {
+  int snapshot_current = 0;
   if(self == NULL || self->info == NULL) {
     return NULL;
+  }
+  /* Snapshot and advance the cursor under iter_lock so concurrent
+   * iteration from multiple threads consumes distinct partitions.
+   */
+  if(self->iter_lock_initialized != 0) {
+    tsk_take_lock(&self->iter_lock);
   }
   /* Stop iteration at INT_MAX to avoid signed overflow or wrapping to a negative integer
    */
   if(self->current < 0 || self->current == INT_MAX) {
+    if(self->iter_lock_initialized != 0) {
+      tsk_release_lock(&self->iter_lock);
+    }
     return NULL;
   }
-  return (TSK_VS_PART_INFO *)tsk_vs_part_get(self->info, self->current++);
+  snapshot_current = self->current;
+  self->current++;
+  if(self->iter_lock_initialized != 0) {
+    tsk_release_lock(&self->iter_lock);
+  }
+  return (TSK_VS_PART_INFO *)tsk_vs_part_get(self->info, snapshot_current);
 };
 
 VIRTUAL(Volume_Info, Object) {

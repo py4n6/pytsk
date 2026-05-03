@@ -9,6 +9,8 @@ jobs:
         include:
         - python-version: '3.14'
           toxenv: 'py314'
+        - python-version: '3.14t'
+          toxenv: 'py314t'
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
@@ -18,7 +20,13 @@ jobs:
     - name: Install build dependencies
       run: |
         brew update -q
-        brew install -q autoconf automake gettext gnu-sed libtool pkgconfig python@${{ matrix.python-version }} tox
+        brew install -q autoconf automake gettext gnu-sed libtool pkgconfig tox
+        # Keep the GIL python@3.14 brew install only on the GIL matrix
+        # entry; setup-python already supplies the interpreter that the
+        # build will use, but the brew python preserves prior behavior.
+        if [[ "${{ matrix.python-version }}" != *t ]]; then
+          brew install -q python@${{ matrix.python-version }}
+        fi
         brew link --force gettext
         ln -s /usr/local/bin/glibtoolize /usr/local/bin/libtoolize
         python3 -m pip install setuptools
@@ -43,14 +51,32 @@ jobs:
           toxenv: 'py313'
         - python-version: '3.14'
           toxenv: 'py314'
+        - python-version: '3.14t'
+          apt-python-pkg: '3.14-nogil'
+          toxenv: 'py314t'
     steps:
     - uses: actions/checkout@v4
     - name: Install build dependencies
       run: |
-        sudo add-apt-repository universe &&
-        sudo add-apt-repository -y ppa:deadsnakes/ppa &&
-        sudo apt-get update &&
-        sudo apt-get install -y autoconf automake autopoint autotools-dev build-essential git libtool pkg-config python${{ matrix.python-version }} python${{ matrix.python-version }}-dev python${{ matrix.python-version }}-venv python3-pip python3-setuptools
+        sudo add-apt-repository universe
+        sudo add-apt-repository -y ppa:deadsnakes/ppa
+        sudo apt-get update
+        
+        # The free-threaded interpreter is shipped as `python3.14-nogil`
+        # (binary `python3.14t`); other matrix entries use the standard
+        # `python3.X` package name.
+        APT_PY='${{ matrix.apt-python-pkg || matrix.python-version }}'
+        
+        sudo apt-get install -y \
+          autoconf automake autopoint autotools-dev build-essential git \
+          libtool pkg-config python3-pip python3-setuptools \
+          python${APT_PY}
+          
+        # Deadsnakes packages experimental free-threaded binaries as monolithic packages,
+        # so there are no separate -dev or -venv packages to install for nogil.
+        if [[ "${APT_PY}" != *-nogil ]]; then
+          sudo apt-get install -y python${APT_PY}-dev python${APT_PY}-venv
+        fi
     - name: Install tox
       run: |
         python3 -m pip install tox
@@ -63,7 +89,7 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        python-version: ['3.14']
+        python-version: ['3.14', '3.14t']
         architecture: ['x86', 'x64']
     steps:
     - uses: actions/checkout@v4

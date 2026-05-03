@@ -371,43 +371,12 @@ class Module(object):
  */
 static int TOTAL_CCLASSES=0;
 
-/* This is a global reference to this module so classes can call each
- * other.
- */
-static PyObject *g_module = NULL;
-
 #define CONSTRUCT_INITIALIZE(cclass, virt_cclass, constructor, object, ...) \\
     (cclass)(((virt_cclass) (&__ ## cclass))->constructor(object, ## __VA_ARGS__))
 
 #undef BUFF_SIZE
 #define BUFF_SIZE 10240
 
-/* Python compatibility macros
- */
-#if !defined( PyMODINIT_FUNC )
-#if PY_MAJOR_VERSION >= 3
-#define PyMODINIT_FUNC PyObject *
-#else
-#define PyMODINIT_FUNC void
-#endif
-#endif /* !defined( PyMODINIT_FUNC ) */
-
-#if !defined( PyVarObject_HEAD_INIT )
-#define PyVarObject_HEAD_INIT( type, size ) \\
-    PyObject_HEAD_INIT( type ) \\
-    size,
-
-#endif /* !defined( PyVarObject_HEAD_INIT ) */
-
-#if PY_MAJOR_VERSION >= 3
-#define Py_TPFLAGS_HAVE_ITER		0
-#endif
-
-#if !defined( Py_TYPE )
-#define Py_TYPE( object ) \\
-    ( ( (PyObject *) object )->ob_type )
-
-#endif /* !defined( Py_TYPE ) */
 
 /* Generic wrapper type
  */
@@ -436,8 +405,15 @@ static struct python_wrapper_map_t {{
 }} python_wrappers[{classes_length:d}];
 
 /* Create the relevant wrapper from the item based on the lookup table.
+ *
+ * If parent is non-NULL, the wrapped child takes a strong reference to it
+ * via python_object1. This keeps the parent Python wrapper (and therefore
+ * its underlying libtsk handle) alive for as long as the child exists,
+ * which matters under free-threaded Python where a different thread may
+ * drop the parent's last visible reference while this thread is still
+ * using a child object derived from it.
  */
-Gen_wrapper new_class_wrapper(Object item, int item_is_python_object) {{
+Gen_wrapper new_class_wrapper(Object item, int item_is_python_object, PyObject *parent) {{
     Gen_wrapper result = NULL;
     Object cls = NULL;
     struct python_wrapper_map_t *python_wrapper = NULL;
@@ -457,11 +433,19 @@ Gen_wrapper new_class_wrapper(Object item, int item_is_python_object) {{
                 PyErr_Clear();
 
                 result = (Gen_wrapper) _PyObject_New(python_wrapper->python_type);
+                if(result == NULL) {{
+                    return NULL;
+                }}
                 result->base = item;
                 result->base_is_python_object = item_is_python_object;
                 result->base_is_internal = 1;
                 result->python_object1 = NULL;
                 result->python_object2 = NULL;
+
+                if(parent != NULL) {{
+                    Py_IncRef(parent);
+                    result->python_object1 = parent;
+                }}
 
                 python_wrapper->initialize_proxies(result, (void *) item);
 
@@ -556,15 +540,18 @@ static int check_method_override(PyObject *self, PyTypeObject *type, const char 
     }}
     mro = ob_type->tp_mro;
 
-#if PY_MAJOR_VERSION >= 3
     py_method = PyUnicode_FromString(method);
-#else
-    py_method = PyString_FromString(method);
-#endif
+    if(py_method == NULL) {{
+        return 0;
+    }}
     number_of_items = PySequence_Size(mro);
 
     for(item_index = 0; item_index < number_of_items; item_index++) {{
+        int contains_result = 0;
         item_object = PySequence_GetItem(mro, item_index);
+        if(item_object == NULL) {{
+            break;
+        }}
 
         // Ok - we got to the base class - finish up
         if(item_object == (PyObject *) type) {{
@@ -576,8 +563,11 @@ static int check_method_override(PyObject *self, PyTypeObject *type, const char 
          * PyDict_Contains).
          */
         dict = PyObject_GetAttrString(item_object, "__dict__");
-        if(dict != NULL && PySequence_Contains(dict, py_method)) {{
-            found = 1;
+        if(dict != NULL) {{
+            contains_result = PySequence_Contains(dict, py_method);
+            if(contains_result > 0) {{
+                found = 1;
+            }}
         }}
         Py_DecRef(dict);
         Py_DecRef(item_object);
@@ -603,38 +593,67 @@ void pytsk_fetch_error(void) {{
     char *error_str = NULL;
     int *error_type = (int *) {get_current_error:s}(&error_str);
 
-#if PY_MAJOR_VERSION >= 3
     PyObject *utf8_string_object  = NULL;
-#endif
 
     // Fetch the exception state and convert it to a string:
     PyErr_Fetch(&exception_type, &exception_value, &exception_traceback);
 
+    /* exception_value can be NULL when the original exception was
+     * raised via PyErr_SetNone(type) (e.g. KeyboardInterrupt).
+     */
+    if(exception_value == NULL) {{
+        if(error_str != NULL) {{
+            const char *placeholder = "Python exception raised without value";
+            size_t placeholder_len = strlen(placeholder);
+            if(placeholder_len > (size_t)(BUFF_SIZE - 1)) {{
+                placeholder_len = (size_t)(BUFF_SIZE - 1);
+            }}
+            memcpy(error_str, placeholder, placeholder_len);
+            error_str[placeholder_len] = 0;
+        }}
+        *error_type = ERuntimeError;
+        PyErr_Restore(exception_type, exception_value, exception_traceback);
+        return;
+    }}
+
     string_object = PyObject_Repr(exception_value);
 
-#if PY_MAJOR_VERSION >= 3
-    utf8_string_object = PyUnicode_AsUTF8String(string_object);
+    if(string_object != NULL) {{
+        utf8_string_object = PyUnicode_AsUTF8String(string_object);
+    }}
 
     if(utf8_string_object != NULL) {{
         str_c = PyBytes_AsString(utf8_string_object);
     }}
-#else
-    str_c = PyString_AsString(string_object);
-#endif
 
     if(str_c != NULL) {{
         strncpy(error_str, str_c, BUFF_SIZE-1);
         error_str[BUFF_SIZE - 1] = 0;
         *error_type = ERuntimeError;
+    }} else {{
+        /* Repr/encode failed; record a generic message so callers
+         * still observe ERuntimeError instead of EZero (which would
+         * make check_error() report success).
+         */
+        if(error_str != NULL) {{
+            const char *placeholder = "Python exception (repr failed)";
+            size_t placeholder_len = strlen(placeholder);
+            if(placeholder_len > (size_t)(BUFF_SIZE - 1)) {{
+                placeholder_len = (size_t)(BUFF_SIZE - 1);
+            }}
+            memcpy(error_str, placeholder, placeholder_len);
+            error_str[placeholder_len] = 0;
+        }}
+        *error_type = ERuntimeError;
     }}
     PyErr_Restore(exception_type, exception_value, exception_traceback);
 
-#if PY_MAJOR_VERSION >= 3
     if( utf8_string_object != NULL ) {{
         Py_DecRef(utf8_string_object);
     }}
-#endif
-    Py_DecRef(string_object);
+    if(string_object != NULL) {{
+        Py_DecRef(string_object);
+    }}
 
     return;
 }}
@@ -671,29 +690,19 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
 #else
     long_value = PyLong_AsUnsignedLong(integer_object);
 #endif
-    }}
-#if PY_MAJOR_VERSION < 3
-    if(result == 0) {{
-        PyErr_Clear();
-
-        result = PyObject_IsInstance(integer_object, (PyObject *) &PyInt_Type);
-
-        if(result == -1) {{
+        /* PyLong_AsUnsignedLong / PyLong_AsUnsignedLongLong returns
+         * (unsigned)-1 and sets OverflowError when the value does
+         * not fit. Surfacing the original exception is more useful
+         * than continuing into the generic "out of bounds" path
+         * below, which would clobber the OverflowError with a fresh
+         * ValueError.
+         */
+        if(PyErr_Occurred()) {{
             pytsk_fetch_error();
 
             return (uint64_t) -1;
-
-        }} else if(result != 0) {{
-            PyErr_Clear();
-
-#if defined( HAVE_LONG_LONG )
-            long_value = PyInt_AsUnsignedLongLongMask(integer_object);
-#else
-            long_value = PyInt_AsUnsignedLongMask(integer_object);
-#endif
         }}
     }}
-#endif /* PY_MAJOR_VERSION < 3 */
     if(result == 0) {{
         if(PyErr_Occurred()) {{
             pytsk_fetch_error();
@@ -767,8 +776,9 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
                 "    if (PyType_Ready(&{name:s}_Type) < 0) {{\n"
                 "        goto on_error;\n"
                 "    }}\n"
-                "    Py_IncRef((PyObject *)&{name:s}_Type);\n"
-                "    PyModule_AddObject(module, \"{name:s}\", (PyObject *)&{name:s}_Type);\n").format(
+                "    if (PyModule_AddType(module, &{name:s}_Type) < 0) {{\n"
+                "        goto on_error;\n"
+                "    }}\n").format(
                     **values_dict))
 
     def write(self, out):
@@ -863,8 +873,7 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
             "    {{NULL, NULL, 0, NULL}}  /* Sentinel */\n"
             "}};\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "\n"
+                        "\n"
             "/* The {module:s} module definition\n"
             " */\n"
             "PyModuleDef {module:s}_module_definition = {{\n"
@@ -888,15 +897,10 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
             "	NULL,\n"
             "}};\n"
             "\n"
-            "#endif /* PY_MAJOR_VERSION >= 3 */\n"
             "\n"
             "/* Initializes the {module:s} module\n"
             " */\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "PyMODINIT_FUNC PyInit_{module:s}(void) {{\n"
-            "#else\n"
-            "PyMODINIT_FUNC init{module:s}(void) {{\n"
-            "#endif\n"
+            "PyObject * PyInit_{module:s}(void) {{\n"
             "    PyGILState_STATE gil_state;\n"
             "\n"
             "    PyObject *module = NULL;\n"
@@ -907,21 +911,12 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
             "     * This function must be called before grabbing the GIL\n"
             "     * otherwise the module will segfault on a version mismatch\n"
             "     */\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    module = PyModule_Create(\n"
+                        "    module = PyModule_Create(\n"
             "        &{module:s}_module_definition );\n"
-            "#else\n"
-            "    module = Py_InitModule3(\n"
-            "        \"{module:s}\",\n"
-            "        {module:s}_module_methods,\n"
-            "        \"Python {module:s} module.\" );\n"
-            "#endif\n"
+            
             "    if (module == NULL) {{\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "        return(NULL);\n"
-            "#else\n"
-            "        return;\n"
-            "#endif\n"
+                        "        return(NULL);\n"
+            
             "    }}\n"
             "\n"
             "#ifdef Py_GIL_DISABLED\n"
@@ -937,13 +932,12 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
             "\n"
             "    d = PyModule_GetDict(module);\n"
             "\n"
-            "    /* Make sure threads are enabled */\n"
-            "#if PY_VERSION_HEX < 0x03070000\n"
-            "    PyEval_InitThreads();\n"
-            "#endif\n"
             "    gil_state = PyGILState_Ensure();\n"
             "\n"
-            "    g_module = module;\n").format(**values_dict))
+            "    /* Reset class registry so reimport or subinterpreter import\n"
+            "     * repopulates from scratch and never overruns python_wrappers[].\n"
+            "     */\n"
+            "    TOTAL_CCLASSES = 0;\n").format(**values_dict))
 
         # The trick is to initialise the classes in order of their
         # inheritance. The following code will order initializations
@@ -961,19 +955,13 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
             elif type == "string":
                 if constant == "TSK_VERSION_STR":
                     out.write((
-                        "#if PY_MAJOR_VERSION >= 3\n"
-                        "    tmp = PyUnicode_FromString((char *){0:s});\n"
-                        "#else\n"
-                        "    tmp = PyString_FromString((char *){0:s});\n"
-                        "#endif\n").format(constant))
+                                                "    tmp = PyUnicode_FromString((char *){0:s});\n"
+                        ).format(constant))
 
                 else:
                     out.write((
-                        "#if PY_MAJOR_VERSION >= 3\n"
-                        "    tmp = PyBytes_FromString((char *){0:s});\n"
-                        "#else\n"
-                        "    tmp = PyString_FromString((char *){0:s});\n"
-                        "#endif\n").format(constant))
+                                                "    tmp = PyBytes_FromString((char *){0:s});\n"
+                        ).format(constant))
             else:
                 out.write(
                     "    /* I dont know how to convert {0:s} type {1:s} */\n".format(
@@ -988,20 +976,14 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
         out.write(
             "    PyGILState_Release(gil_state);\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "	return module;\n"
-            "#else\n"
-            "	return;\n"
-            "#endif\n"
+                        "	return module;\n"
+            
             "\n"
             "on_error:\n"
             "	PyGILState_Release(gil_state);\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "	return NULL;\n"
-            "#else\n"
-            "	return;\n"
-            "#endif\n"
+                        "	return NULL;\n"
+            
             "}\n"
             "\n"
             "#ifdef __cplusplus\n"
@@ -1125,11 +1107,8 @@ class String(Type):
             "        Py_IncRef(Py_None);\n"
             "        {result:s} = Py_None;\n"
             "    }} else {{\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "        {result:s} = PyBytes_FromStringAndSize((char *){name:s}, {length:s});\n"
-            "#else\n"
-            "        {result:s} = PyString_FromStringAndSize((char *){name:s}, {length:s});\n"
-            "#endif\n"
+                        "        {result:s} = PyBytes_FromStringAndSize((char *){name:s}, {length:s});\n"
+            
             "        if(!{result:s}) {{\n"
             "            goto on_error;\n"
             "        }}\n"
@@ -1155,14 +1134,15 @@ class String(Type):
             "\n"
             "    PyErr_Clear();\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    if(PyBytes_AsStringAndSize({source:s}, &buff, &length) == -1) {{\n"
-            "#else\n"
-            "    if(PyString_AsStringAndSize({source:s}, &buff, &length) == -1) {{\n"
-            "#endif\n"
+                        "    if(PyBytes_AsStringAndSize({source:s}, &buff, &length) == -1) {{\n"
+            
             "        goto on_error;\n"
             "    }}\n"
-            "    {destination:s} = talloc_size({context:s}, length + 1);\n"
+            "    {destination:s} = (char *) talloc_size({context:s}, length + 1);\n"
+            "    if({destination:s} == NULL) {{\n"
+            "        PyErr_NoMemory();\n"
+            "        goto on_error;\n"
+            "    }}\n"
             "    memcpy({destination:s}, buff, length);\n"
             "    {destination:s}[length] = 0;\n"
             "}};\n").format(**values_dict)
@@ -1187,11 +1167,8 @@ class BorrowedString(String):
 
         return (
             "    PyErr_Clear();\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    {result:s} = PyBytes_FromStringAndSize((char *){name:s}, {length:s});\n"
-            "#else\n"
-            "    {result:s} = PyString_FromStringAndSize((char *){name:s}, {length:s});\n"
-            "#endif\n").format(**values_dict)
+                        "    {result:s} = PyBytes_FromStringAndSize((char *){name:s}, {length:s});\n"
+            ).format(**values_dict)
 
 
 class Char_and_Length(Type):
@@ -1232,11 +1209,8 @@ class Char_and_Length(Type):
 
         return (
             "    PyErr_Clear();\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    {result:s} = PyBytes_FromStringAndSize((char *){name:s}, {length:s});\n"
-            "#else\n"
-            "    {result:s} = PyString_FromStringAndSize((char *){name:s}, {length:s});\n"
-            "#endif\n"
+                        "    {result:s} = PyBytes_FromStringAndSize((char *){name:s}, {length:s});\n"
+            
             "\n"
             "    if(!{result:s}) {{\n"
             "        goto on_error;\n"
@@ -1258,13 +1232,15 @@ class Integer(Type):
             "name": name or self.name,
             "result": result}
 
-        return (
+        code = (
             "    PyErr_Clear();\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    {result:s} = PyLong_FromLong({name:s});\n"
-            "#else\n"
-            "    {result:s} = PyInt_FromLong({name:s});\n"
-            "#endif\n").format(**values_dict)
+            "    {result:s} = PyLong_FromLong({name:s});\n").format(**values_dict)
+        if kwargs.get('sense') == 'proxied':
+            code += (
+                "    if({result:s} == NULL) {{\n"
+                "        goto on_error;\n"
+                "    }}\n").format(**values_dict)
+        return code
 
     def from_python_object(self, source, destination, method, **kwargs):
         values_dict = {
@@ -1273,11 +1249,7 @@ class Integer(Type):
 
         return (
             "    PyErr_Clear();\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    {destination:s} = PyLong_AsLongMask({source:s});\n"
-            "#else\n"
-            "    {destination:s} = PyInt_AsLongMask({source:s});\n"
-            "#endif\n").format(**values_dict)
+            "    {destination:s} = PyLong_AsLongMask({source:s});\n").format(**values_dict)
 
     def comment(self):
         return "{0:s} {1:s} ".format(self.original_type, self.name)
@@ -1298,24 +1270,23 @@ class IntegerUnsigned(Integer):
                 "    PyErr_Clear();\n"
                 "    {result:s} = PyList_New(0);\n"
                 "    for(array_index = 0; array_index < {array_size:s}; array_index++) {{\n"
-                "#if PY_MAJOR_VERSION >= 3\n"
-                "       PyList_Append({result:s}, PyLong_FromLong((long) {name:s}[array_index]));\n"
-                "#else\n"
-                "       PyList_Append({result:s}, PyInt_FromLong((long) {name:s}[array_index]));\n"
-                "#endif\n"
+                                "       PyList_Append({result:s}, PyLong_FromLong((long) {name:s}[array_index]));\n"
+                
                 "    }}\n"
             ).format(**values_dict)
         else:
             values_dict = {
                 "name": name or self.name,
                 "result": result}
-            return (
+            code = (
                 "    PyErr_Clear();\n"
-                "#if PY_MAJOR_VERSION >= 3\n"
-                "    {result:s} = PyLong_FromLong((long) {name:s});\n"
-                "#else\n"
-                "    {result:s} = PyInt_FromLong((long) {name:s});\n"
-                "#endif\n").format(**values_dict)
+                "    {result:s} = PyLong_FromLong((long) {name:s});\n").format(**values_dict)
+            if kwargs.get('sense') == 'proxied':
+                code += (
+                    "    if({result:s} == NULL) {{\n"
+                    "        goto on_error;\n"
+                    "    }}\n").format(**values_dict)
+            return code
 
     def from_python_object(self, source, destination, method, **kwargs):
         values_dict = {
@@ -1324,11 +1295,8 @@ class IntegerUnsigned(Integer):
 
         return (
             "    PyErr_Clear();\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    {destination:s} = PyLong_AsUnsignedLongMask({source:s});\n"
-            "#else\n"
-            "    {destination:s} = PyInt_AsUnsignedLongMask({source:s});\n"
-            "#endif\n").format(**values_dict)
+                        "    {destination:s} = PyLong_AsUnsignedLongMask({source:s});\n"
+            ).format(**values_dict)
 
 
 class Integer8(Integer):
@@ -1364,13 +1332,19 @@ class Integer64(Integer):
             "name": name or self.name,
             "result": result}
 
-        return (
+        code = (
             "    PyErr_Clear();\n"
             "#if defined( HAVE_LONG_LONG )\n"
             "    {result:s} = PyLong_FromLongLong({name:s});\n"
             "#else\n"
             "    {result:s} = PyLong_FromLong({name:s});\n"
             "#endif\n").format(**values_dict)
+        if kwargs.get('sense') == 'proxied':
+            code += (
+                "    if({result:s} == NULL) {{\n"
+                "        goto on_error;\n"
+                "    }}\n").format(**values_dict)
+        return code
 
     def from_python_object(self, source, destination, method, **kwargs):
         values_dict = {
@@ -1379,19 +1353,11 @@ class Integer64(Integer):
 
         return (
             "    PyErr_Clear();\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
             "#if defined( HAVE_LONG_LONG )\n"
             "    {destination:s} = PyLong_AsLongLongMask({source:s});\n"
             "#else\n"
             "    {destination:s} = PyLong_AsLongMask({source:s});\n"
-            "#endif\n"
-            "#else\n"
-            "#if defined( HAVE_LONG_LONG )\n"
-            "    {destination:s} = PyInt_AsLongLongMask({source:s});\n"
-            "#else\n"
-            "    {destination:s} = PyInt_AsLongMask({source:s});\n"
-            "#endif\n"
-            "#endif /* PY_MAJOR_VERSION >= 3 */\n").format(**values_dict)
+            "#endif\n").format(**values_dict)
 
 
 class Integer64Unsigned(Integer):
@@ -1403,13 +1369,19 @@ class Integer64Unsigned(Integer):
             "name": name or self.name,
             "result": result}
 
-        return (
+        code = (
             "    PyErr_Clear();\n"
             "#if defined( HAVE_LONG_LONG )\n"
             "    {result:s} = PyLong_FromUnsignedLongLong({name:s});\n"
             "#else\n"
             "    {result:s} = PyLong_FromUnsignedLong({name:s});\n"
             "#endif\n").format(**values_dict)
+        if kwargs.get('sense') == 'proxied':
+            code += (
+                "    if({result:s} == NULL) {{\n"
+                "        goto on_error;\n"
+                "    }}\n").format(**values_dict)
+        return code
 
     def from_python_object(self, source, destination, method, **kwargs):
         values_dict = {
@@ -1420,19 +1392,11 @@ class Integer64Unsigned(Integer):
         # long and int objects.
         return (
             "    PyErr_Clear();\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
             "#if defined( HAVE_LONG_LONG )\n"
             "    {destination:s} = PyLong_AsUnsignedLongLongMask({source:s});\n"
             "#else\n"
             "    {destination:s} = PyLong_AsUnsignedLongMask({source:s});\n"
-            "#endif\n"
-            "#else\n"
-            "#if defined( HAVE_LONG_LONG )\n"
-            "    {destination:s} = PyInt_AsUnsignedLongLongMask({source:s});\n"
-            "#else\n"
-            "    {destination:s} = PyInt_AsUnsignedLongMask({source:s});\n"
-            "#endif\n"
-            "#endif /* PY_MAJOR_VERSION >= 3 */\n").format(**values_dict)
+            "#endif\n").format(**values_dict)
 
 
 class Long(Integer):
@@ -1444,10 +1408,15 @@ class Long(Integer):
             "name": name or self.name,
             "result": result}
 
-        return (
+        code = (
             "PyErr_Clear();\n"
-            "{result:s} = PyLong_FromLongLong({name:s});\n").format(
-                **values_dict)
+            "{result:s} = PyLong_FromLongLong({name:s});\n").format(**values_dict)
+        if kwargs.get('sense') == 'proxied':
+            code += (
+                "if({result:s} == NULL) {{\n"
+                "    goto on_error;\n"
+                "}}\n").format(**values_dict)
+        return code
 
     def from_python_object(self, source, destination, method, **kwargs):
         values_dict = {
@@ -1469,10 +1438,15 @@ class LongUnsigned(Integer):
             "name": name or self.name,
             "result": result}
 
-        return (
+        code = (
             "PyErr_Clear();\n"
-            "{result:s} = PyLong_FromUnsignedLong({name:s});\n").format(
-                **values_dict)
+            "{result:s} = PyLong_FromUnsignedLong({name:s});\n").format(**values_dict)
+        if kwargs.get('sense') == 'proxied':
+            code += (
+                "if({result:s} == NULL) {{\n"
+                "    goto on_error;\n"
+                "}}\n").format(**values_dict)
+        return code
 
     def from_python_object(self, source, destination, method, **kwargs):
         values_dict = {
@@ -1500,11 +1474,8 @@ class Char(Integer):
             "    char *str_{name:s} = &{name:s};\n"
             "\n"
             "    PyErr_Clear();\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    {result:s} = PyBytes_FromStringAndSize(str_{name:s}, 1);\n"
-            "#else\n"
-            "    {result:s} = PyString_FromStringAndSize(str_{name:s}, 1);\n"
-            "#endif\n"
+                        "    {result:s} = PyBytes_FromStringAndSize(str_{name:s}, 1);\n"
+            
             "\n"
             "    if(!{result:s}) {{\n"
             "        goto on_error;\n"
@@ -1630,28 +1601,25 @@ class Char_and_Length_OUT(Char_and_Length):
         return (
             "    PyErr_Clear();\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    tmp_{name:s} = PyBytes_FromStringAndSize(NULL, {length:s});\n"
-            "#else\n"
-            "    tmp_{name:s} = PyString_FromStringAndSize(NULL, {length:s});\n"
-            "#endif\n"
+                        "    tmp_{name:s} = PyBytes_FromStringAndSize(NULL, {length:s});\n"
+            
             "    if(!tmp_{name:s}) {{\n"
             "        goto on_error;\n"
             "    }}\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    PyBytes_AsStringAndSize(tmp_{name:s}, &{name:s}, (Py_ssize_t *)&{length:s});\n"
-            "#else\n"
-            "    PyString_AsStringAndSize(tmp_{name:s}, &{name:s}, (Py_ssize_t *)&{length:s});\n"
-            "#endif\n").format(**values_dict)
+                        "    PyBytes_AsStringAndSize(tmp_{name:s}, &{name:s}, (Py_ssize_t *)&{length:s});\n"
+            ).format(**values_dict)
 
     def to_python_object(self, name=None, result="Py_result", sense="in", **kwargs):
         if "results" in kwargs:
             kwargs["results"].pop(0)
 
         if sense == "proxied":
-            return "py_{0:s} = PyLong_FromLong({1:s});\n".format(
-                self.name, self.length)
+            return (
+                "py_{0:s} = PyLong_FromSize_t((size_t) {1:s});\n"
+                "if(py_{0:s} == NULL) {{\n"
+                "    goto on_error;\n"
+                "}}\n").format(self.name, self.length)
 
         values_dict = {
             "length": self.length,
@@ -1668,17 +1636,15 @@ class Char_and_Length_OUT(Char_and_Length):
             "\n"
             "    // Do we need to truncate the buffer for a short read?\n"
             "    }} else if(func_return < (uint64_t) {length:s}) {{\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "        _PyBytes_Resize(&tmp_{name:s}, (Py_ssize_t) func_return);\n"
-            "#else\n"
-            "        _PyString_Resize(&tmp_{name:s}, (Py_ssize_t) func_return);\n"
-            "#endif\n"
+                        "        _PyBytes_Resize(&tmp_{name:s}, (Py_ssize_t) func_return);\n"
+            
             "    }}\n"
             "\n"
             "    {result:s} = tmp_{name:s};\n").format(**values_dict)
 
     def python_proxy_post_call(self, result="Py_result"):
         values_dict = {
+            "length": self.length,
             "name": self.name,
             "result": result}
 
@@ -1687,16 +1653,24 @@ class Char_and_Length_OUT(Char_and_Length):
             "    char *tmp_buff = NULL;\n"
             "    Py_ssize_t tmp_len = 0;\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    if(PyBytes_AsStringAndSize({result:s}, &tmp_buff, &tmp_len) == -1) {{\n"
-            "#else\n"
-            "    if(PyString_AsStringAndSize({result:s}, &tmp_buff, &tmp_len) == -1) {{\n"
-            "#endif\n"
+                        "    if(PyBytes_AsStringAndSize({result:s}, &tmp_buff, &tmp_len) == -1) {{\n"
+            
             "        goto on_error;\n"
+            "    }}\n"
+            "    /* Bound the user-controlled return length to the buffer\n"
+            "     * size that libtsk requested; a Python override that\n"
+            "     * returns more bytes than asked for would otherwise\n"
+            "     * overflow the caller's buffer.\n"
+            "     */\n"
+            "    if((size_t) tmp_len > (size_t) {length:s}) {{\n"
+            "        tmp_len = (Py_ssize_t) {length:s};\n"
             "    }}\n"
             "    memcpy({name:s}, tmp_buff, tmp_len);\n"
             "    Py_DecRef({result:s});\n"
             "    {result:s} = PyLong_FromLong(tmp_len);\n"
+            "    if({result:s} == NULL) {{\n"
+            "        goto on_error;\n"
+            "    }}\n"
             "}}\n").format(**values_dict)
 
 
@@ -1725,11 +1699,8 @@ class TDB_DATA_P(Char_and_Length_OUT):
 
         return (
             "    PyErr_Clear();\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    {result:s} = PyBytes_FromStringAndSize((char *){name:s}->dptr, {name:s}->dsize);\n"
-            "#else\n"
-            "    {result:s} = PyString_FromStringAndSize((char *){name:s}->dptr, {name:s}->dsize);\n"
-            "#endif\n"
+                        "    {result:s} = PyBytes_FromStringAndSize((char *){name:s}->dptr, {name:s}->dsize);\n"
+            
             "    talloc_free({name:s});\n").format(**values_dict)
 
     def from_python_object(self, source, destination, method, **kwargs):
@@ -1747,11 +1718,8 @@ class TDB_DATA_P(Char_and_Length_OUT):
             "\n"
             "    PyErr_Clear();\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    if(PyBytes_AsStringAndSize({source:s}, &buf, &tmp) == -1) {{\n"
-            "#else\n"
-            "    if(PyString_AsStringAndSize({source:s}, &buf, &tmp) == -1) {{\n"
-            "#endif\n"
+                        "    if(PyBytes_AsStringAndSize({source:s}, &buf, &tmp) == -1) {{\n"
+            
             "        goto on_error;\n"
             "    }}\n"
             "\n"
@@ -1781,11 +1749,8 @@ class TDB_DATA(TDB_DATA_P):
             "\n"
             "    PyErr_Clear();\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    if(PyBytes_AsStringAndSize({source:s}, &buf, &tmp) == -1) {{\n"
-            "#else\n"
-            "    if(PyString_AsStringAndSize({source:s}, &buf, &tmp) == -1) {{\n"
-            "#endif\n"
+                        "    if(PyBytes_AsStringAndSize({source:s}, &buf, &tmp) == -1) {{\n"
+            
             "        goto on_error;\n"
             "    }}\n"
             "    // Take a copy of the Python string - This leaks - how to fix it?\n"
@@ -1802,11 +1767,8 @@ class TDB_DATA(TDB_DATA_P):
 
         return (
             "    PyErr_Clear();\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    {result:s} = PyBytes_FromStringAndSize((char *){name:s}.dptr, {name:s}.dsize);\n"
-            "#else\n"
-            "    {result:s} = PyString_FromStringAndSize((char *){name:s}.dptr, {name:s}.dsize);\n"
-            "#endif\n").format(**values_dict)
+                        "    {result:s} = PyBytes_FromStringAndSize((char *){name:s}.dptr, {name:s}.dsize);\n"
+            ).format(**values_dict)
 
 
 class Void(Type):
@@ -1887,11 +1849,8 @@ class StringArray(String):
             "        if(!tmp) {{\n"
             "            goto on_error;\n"
             "        }}\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "        {destination:s}[i] = PyBytes_AsString(tmp);\n"
-            "#else\n"
-            "        {destination:s}[i] = PyString_AsString(tmp);\n"
-            "#endif\n"
+                        "        {destination:s}[i] = PyBytes_AsString(tmp);\n"
+            
             "\n"
             "        if(!{destination:s}[i]) {{\n"
             "            Py_DecRef(tmp);\n"
@@ -2030,8 +1989,13 @@ class Wrapper(Type):
                 "            goto on_error;\n"
                 "        }\n")
 
+        # Pass the calling pyXxx wrapper as parent so the child holds
+        # a strong reference back to it. Required for free-threaded
+        # safety: without this, another thread could drop the parent's
+        # last visible reference and free the underlying libtsk handle
+        # while this child is still in use.
         result += (
-            "        wrapped_{name:s} = new_class_wrapper(returned_object, self->base_is_python_object);\n"
+            "        wrapped_{name:s} = new_class_wrapper(returned_object, self->base_is_python_object, (PyObject *) self);\n"
             "\n"
             "        if(wrapped_{name:s} == NULL) {{\n"
             "            if(returned_object != NULL) {{\n"
@@ -2064,8 +2028,12 @@ class Wrapper(Type):
             "result": result}
 
         if sense == "proxied":
+            # Proxied path: wrapping a libtsk struct produced inside a
+            # user-overridden Python method. The caller's Python frame
+            # already holds the parent reference, so no additional
+            # parent keepalive is needed here.
             return (
-                "{result:s} = (PyObject *) new_class_wrapper((Object){name:s}, 0);\n").format(
+                "{result:s} = (PyObject *) new_class_wrapper((Object){name:s}, 0, NULL);\n").format(
                     **values_dict)
 
         return "{result:s} = (PyObject *) wrapped_{name:s};\n".format(
@@ -2132,23 +2100,42 @@ class StructWrapper(Wrapper):
             "        PyErr_Clear();\n"
             "\n"
             "        wrapped_{name:s} = (Gen_wrapper) PyObject_New(py{type:s}, &{type:s}_Type);\n"
+            "        if(wrapped_{name:s} == NULL) {{\n"
+            "            return NULL;\n"
+            "        }}\n"
             "\n").format(**values_dict)
 
         if borrowed:
+            # The struct base points into memory owned by the parent
+            # Python wrapper. Keep the parent alive via python_object1
+            # so a different thread cannot free the underlying libtsk
+            # handle while this borrowed wrapper is still in use.
             result += (
                 "        // Base is borrowed from another object.\n"
                 "        wrapped_{name:s}->base = {call:s};\n"
                 "        wrapped_{name:s}->base_is_python_object = 0;\n"
                 "        wrapped_{name:s}->base_is_internal = 0;\n"
-                "        wrapped_{name:s}->python_object1 = NULL;\n"
+                "        Py_IncRef((PyObject *) self);\n"
+                "        wrapped_{name:s}->python_object1 = (PyObject *) self;\n"
                 "        wrapped_{name:s}->python_object2 = NULL;\n"
                 "\n").format(**values_dict)
         else:
+            # Method-return path (borrowed=False is passed by the
+            # method-call codegen). In practice every libtsk method
+            # we wrap that returns a struct hands back a pointer into
+            # parent-owned memory (e.g. tsk_vs_part_get returns a
+            # TSK_VS_PART_INFO * inside the parent TSK_VS_INFO), and
+            # the generated *_dealloc never frees self->base. So the
+            # wrapper is logically *not* the owner; mark it as such
+            # via base_is_internal = 0 to avoid misleading future code
+            # that might gate a free/close on that flag. Keep the
+            # parent alive via python_object1.
             result += (
                 "        wrapped_{name:s}->base = {call:s};\n"
                 "        wrapped_{name:s}->base_is_python_object = 0;\n"
-                "        wrapped_{name:s}->base_is_internal = 1;\n"
-                "        wrapped_{name:s}->python_object1 = NULL;\n"
+                "        wrapped_{name:s}->base_is_internal = 0;\n"
+                "        Py_IncRef((PyObject *) self);\n"
+                "        wrapped_{name:s}->python_object1 = (PyObject *) self;\n"
                 "        wrapped_{name:s}->python_object2 = NULL;\n"
                 "\n").format(**values_dict)
 
@@ -2156,6 +2143,9 @@ class StructWrapper(Wrapper):
             result += (
                 "        if(wrapped_{name:s}->base == NULL) {{\n"
                 "             Py_DecRef((PyObject *) wrapped_{name:s});\n"
+                "             if(check_error()) {{\n"
+                "                 goto on_error;\n"
+                "             }}\n"
                 "             return NULL;\n"
                 "        }}\n").format(**values_dict)
 
@@ -2195,8 +2185,18 @@ class StructWrapper(Wrapper):
 
 class PointerStructWrapper(StructWrapper):
     def from_python_object(self, source, destination, method, **kwargs):
-        return "{0:s} = ({1:s} *) ((Gen_wrapper) {2:s})->base;\n".format(
-            destination, self.original_type, source)
+        values_dict = {
+            "destination": destination,
+            "source": source,
+            "type": self.original_type}
+        return (
+            "    if({source:s} == NULL || !type_check({source:s}, &{type:s}_Type)) {{\n"
+            "        PyErr_Format(PyExc_RuntimeError,\n"
+            "            \"proxied {type:s} method returned NULL or wrong type\");\n"
+            "        goto on_error;\n"
+            "    }}\n"
+            "    {destination:s} = ({type:s} *) ((Gen_wrapper) {source:s})->base;\n"
+        ).format(**values_dict)
 
     def byref(self):
         return "&wrapped_{0:s}".format(self.name)
@@ -2471,6 +2471,16 @@ class Method(object):
         if "DESTRUCTOR" in self.return_type.attributes:
             result += "self->base = NULL;\n"
 
+        # If a Python wrapper was already allocated but check_error() fired
+        # in the postcall, it must be released to avoid a refcount leak.
+        if isinstance(self.return_type,
+                      (StructWrapper, PointerStructWrapper, Wrapper, PointerWrapper)):
+            name = self.return_type.name
+            result += (
+                "    if(wrapped_{0:s} != NULL) {{\n"
+                "        Py_DecRef((PyObject *) wrapped_{0:s});\n"
+                "    }}\n").format(name)
+
         if hasattr(self, "args"):
             for type in self.args:
                 if hasattr(type, "error_cleanup"):
@@ -2736,6 +2746,10 @@ class SelfIteratorMethod(IteratorMethod):
 
         out.write((
             "{{\n"
+            "    if(self->base == NULL) {{\n"
+            "        return PyErr_Format(PyExc_RuntimeError,\n"
+            "            \"{class_name:s}.{method:s}: object is not bound to any libtsk handle\");\n"
+            "    }}\n"
             "    (({class_name:s}) self->base)->{method:s}(({class_name:s}) self->base);\n"
             "    return PyObject_SelfIter((PyObject *) self);\n"
             "}}\n").format(**values_dict))
@@ -2860,8 +2874,19 @@ class ConstructorMethod(Method):
 
         # Assign the initialise_proxies handler
         out.write((
-            "    self->python_object1 = NULL;\n"
-            "    self->python_object2 = NULL;\n"
+            "    /* Release any state from a prior __init__ call so that\n"
+            "     * re-initialization does not leak keepalives or libtsk handles.\n"
+            "     */\n"
+            "    Py_CLEAR(self->python_object1);\n"
+            "    Py_CLEAR(self->python_object2);\n"
+            "    if(self->base != NULL) {{\n"
+            "        if(self->base_is_python_object != 0) {{\n"
+            "            Py_DecRef((PyObject *) self->base);\n"
+            "        }} else if(self->base_is_internal != 0) {{\n"
+            "            talloc_free(self->base);\n"
+            "        }}\n"
+            "        self->base = NULL;\n"
+            "    }}\n"
             "\n"
             "    /* Initialise is used to keep a reference on the object?\n"
             "     * If not called no longer valid warnings have been seen\n"
@@ -2883,6 +2908,10 @@ class ConstructorMethod(Method):
             "\n"
             "    /* Allocate a new instance */\n"
             "    self->base = ({class_name:s}) alloc_{class_name:s}();\n"
+            "    if(self->base == NULL) {{\n"
+            "        PyErr_NoMemory();\n"
+            "        goto on_error;\n"
+            "    }}\n"
             "    self->base_is_python_object = 0;\n"
             "    self->base_is_internal = 1;\n"
             "    self->object_is_proxied = 0;\n"
@@ -3054,12 +3083,17 @@ class GetattrMethod(Method):
                 "name": attr.name}
 
             out.write((
-                "#if PY_MAJOR_VERSION >= 3\n"
-                "        string_object = PyUnicode_FromString(\"{name:s}\");\n"
-                "#else\n"
-                "        string_object = PyString_FromString(\"{name:s}\");\n"
-                "#endif\n"
-                "        PyList_Append(list_object, string_object);\n"
+                                "        string_object = PyUnicode_FromString(\"{name:s}\");\n"
+                
+                "        if(string_object == NULL) {{\n"
+                "            Py_DecRef(list_object);\n"
+                "            goto on_error;\n"
+                "        }}\n"
+                "        if(PyList_Append(list_object, string_object) < 0) {{\n"
+                "            Py_DecRef(string_object);\n"
+                "            Py_DecRef(list_object);\n"
+                "            goto on_error;\n"
+                "        }}\n"
                 "        Py_DecRef(string_object);\n"
                 "\n").format(**values_dict))
 
@@ -3067,19 +3101,22 @@ class GetattrMethod(Method):
         out.write((
             "\n"
             "        for(i = {0:s}_methods; i->ml_name; i++) {{\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "            string_object = PyUnicode_FromString(i->ml_name);\n"
-            "#else\n"
-            "            string_object = PyString_FromString(i->ml_name);\n"
-            "#endif\n"
-            "            PyList_Append(list_object, string_object);\n"
+                        "            string_object = PyUnicode_FromString(i->ml_name);\n"
+            
+            "            if(string_object == NULL) {{\n"
+            "                Py_DecRef(list_object);\n"
+            "                goto on_error;\n"
+            "            }}\n"
+            "            if(PyList_Append(list_object, string_object) < 0) {{\n"
+            "                Py_DecRef(string_object);\n"
+            "                Py_DecRef(list_object);\n"
+            "                goto on_error;\n"
+            "            }}\n"
             "            Py_DecRef(string_object);\n"
             "        }}\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
             "        if( utf8_string_object != NULL ) {{\n"
             "            Py_DecRef(utf8_string_object);\n"
             "        }}\n"
-            "#endif\n"
             "        return list_object;\n"
             "    }}\n").format(self.class_name))
 
@@ -3096,9 +3133,7 @@ class GetattrMethod(Method):
             "    PyObject *result = NULL;\n"
             "    char *name = NULL;\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
             "    PyObject *utf8_string_object  = NULL;\n"
-            "#endif\n"
             "\n"
             "    // Try to hand it off to the Python native handler first\n"
             "    result = PyObject_GenericGetAttr((PyObject*) self, pyname);\n"
@@ -3109,22 +3144,16 @@ class GetattrMethod(Method):
             "\n"
             "    PyErr_Clear();\n"
             "    // No - nothing interesting was found by python\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
             "    utf8_string_object = PyUnicode_AsUTF8String(pyname);\n"
             "\n"
             "    if(utf8_string_object != NULL) {{\n"
             "        name = PyBytes_AsString(utf8_string_object);\n"
             "    }}\n"
-            "#else\n"
-            "    name = PyString_AsString(pyname);\n"
-            "#endif\n"
             "\n"
             "    if(!self->base) {{\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
             "        if( utf8_string_object != NULL ) {{\n"
             "            Py_DecRef(utf8_string_object);\n"
             "        }}\n"
-            "#endif\n"
             "        return PyErr_Format(PyExc_RuntimeError, \"Wrapped object ({class_name:s}.{name:s}) no longer valid\");\n"
             "    }}\n"
             "    if(!name) {{\n"
@@ -3135,22 +3164,18 @@ class GetattrMethod(Method):
 
         out.write(
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
             "    if( utf8_string_object != NULL ) {{\n"
             "        Py_DecRef(utf8_string_object);\n"
             "    }}\n"
-            "#endif\n"
             "    return PyObject_GenericGetAttr((PyObject *) self, pyname);\n")
 
         # Write the error part of the function.
         if self.error_set:
             out.write(
                 "on_error:\n"
-                "#if PY_MAJOR_VERSION >= 3\n"
                 "    if( utf8_string_object != NULL ) {{\n"
                 "        Py_DecRef(utf8_string_object);\n"
-                "    }}\n"
-                "#endif\n" + self.error_condition())
+                "    }}\n" + self.error_condition())
 
         out.write("}\n\n")
 
@@ -3175,6 +3200,13 @@ class GetattrMethod(Method):
                 "PyObject *py{class_name:s}_{name:s}_getter(py{class_name:s} *self, PyObject *arguments) {{\n"
                 "    PyObject *Py_result = NULL;\n"
                 "{python_def:s}\n"
+                "\n"
+                "    if(self->base == NULL) {{\n"
+                "        return PyErr_Format(PyExc_RuntimeError,\n"
+                "            \"{class_name:s}.{name:s}: object is not bound \"\n"
+                "            \"to any libtsk handle (was it instantiated \"\n"
+                "            \"directly?)\");\n"
+                "    }}\n"
                 "\n"
                 "{python_assign:s}\n"
                 "{python_obj:s}\n"
@@ -3272,11 +3304,16 @@ class ProxiedMethod(Method):
             "    // Grab the GIL so we can do Python stuff\n"
             "    gil_state = PyGILState_Ensure();\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
             "    method_name = PyUnicode_FromString(\"{0:s}\");\n"
-            "#else\n"
-            "    method_name = PyString_FromString(\"{0:s}\");\n"
-            "#endif\n").format(self.name))
+            "    /* PyUnicode_FromString sets MemoryError on failure;\n"
+            "     * propagate via the proxied error machinery rather than\n"
+            "     * passing NULL to PyObject_CallMethodObjArgs (which would\n"
+            "     * raise SystemError and lose the original cause).\n"
+            "     */\n"
+            "    if(method_name == NULL) {{\n"
+            "        pytsk_fetch_error();\n"
+            "        goto on_error;\n"
+            "    }}\n").format(self.name))
 
         out.write("\n// Obtain Python objects for all the args:\n")
         for arg in self.args:
@@ -3293,7 +3330,6 @@ class ProxiedMethod(Method):
         out.write(
             "\n"
             "    // Now call the method\n"
-            "    PyErr_Clear();\n"
             "    Py_result = PyObject_CallMethodObjArgs((PyObject *) ((Object) self)->extension, method_name, ")
 
         for arg in self.args:
@@ -3322,12 +3358,27 @@ class ProxiedMethod(Method):
             "Py_result", self.return_type.name, self, context="self")
         out.write("    {0:s}".format(return_type))
 
-        out.write(
-            "    if(Py_result != NULL) {\n"
-            "        Py_DecRef(Py_result);\n"
-            "    }\n"
-            "    Py_DecRef(method_name);\n"
-            "\n")
+        # For Wrapper return types the Python wrapper keeps the C object alive.
+        # Transfer ownership to the parent's python_object2 so the C pointer
+        # remains valid after this callback returns to libtsk.
+        if isinstance(self.return_type, Wrapper) and not isinstance(
+                self.return_type, (StructWrapper, PointerStructWrapper)):
+            out.write(
+                "    if(Py_result != NULL) {\n"
+                "        PyObject *old = ((Gen_wrapper) ((Object) self)->extension)->python_object2;\n"
+                "        if(old != NULL) Py_DecRef(old);\n"
+                "        ((Gen_wrapper) ((Object) self)->extension)->python_object2 = Py_result;\n"
+                "        Py_result = NULL;\n"
+                "    }\n"
+                "    Py_DecRef(method_name);\n"
+                "\n")
+        else:
+            out.write(
+                "    if(Py_result != NULL) {\n"
+                "        Py_DecRef(Py_result);\n"
+                "    }\n"
+                "    Py_DecRef(method_name);\n"
+                "\n")
 
         # Decref all our Python objects:
         for arg in self.args:
@@ -3400,6 +3451,18 @@ class StructConstructor(ConstructorMethod):
             "    if(self != NULL) {{\n"
             "        if(self->base != NULL) {{\n"
             "            self->base = NULL;\n"
+            "        }}\n"
+            "        /* Drop the parent keepalive that was attached when\n"
+            "         * this struct wrapper was produced from a borrowed\n"
+            "         * libtsk pointer. NULL when no parent was attached.\n"
+            "         */\n"
+            "        if(self->python_object2 != NULL) {{\n"
+            "            Py_DecRef(self->python_object2);\n"
+            "            self->python_object2 = NULL;\n"
+            "        }}\n"
+            "        if(self->python_object1 != NULL) {{\n"
+            "            Py_DecRef(self->python_object1);\n"
+            "            self->python_object1 = NULL;\n"
             "        }}\n"
             "        ob_type = Py_TYPE(self);\n"
             "        if(ob_type != NULL && ob_type->tp_free != NULL) {{\n"
@@ -3658,8 +3721,7 @@ class ClassGenerator(object):
                 args[type] = "0"
 
         out.write((
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "static PyNumberMethods {class:s}_as_number = {{\n"
+                        "static PyNumberMethods {class:s}_as_number = {{\n"
             "    (binaryfunc)    0,             /* nb_add */\n"
             "    (binaryfunc)    0,             /* nb_subtract */\n"
             "    (binaryfunc)    0,             /* nb_multiply */\n"
@@ -3698,52 +3760,7 @@ class ClassGenerator(object):
             "\n"
             "    (unaryfunc)     0,             /* nb_index */\n"
             "}};\n"
-            "#else\n"
-            "static PyNumberMethods {class:s}_as_number = {{\n"
-            "    (binaryfunc)    0,             /* nb_add */\n"
-            "    (binaryfunc)    0,             /* nb_subtract */\n"
-            "    (binaryfunc)    0,             /* nb_multiply */\n"
-            "    (binaryfunc)    0,             /* nb_divide */\n"
-            "    (binaryfunc)    0,             /* nb_remainder */\n"
-            "    (binaryfunc)    0,             /* nb_divmod */\n"
-            "    (ternaryfunc)   0,             /* nb_power */\n"
-            "    (unaryfunc)     0,             /* nb_negative */\n"
-            "    (unaryfunc)     0,             /* nb_positive */\n"
-            "    (unaryfunc)     0,             /* nb_absolute */\n"
-            "    (inquiry)       {nonzero:s},   /* nb_nonzero */\n"
-            "    (unaryfunc)     0,             /* nb_invert */\n"
-            "    (binaryfunc)    0,             /* nb_lshift */\n"
-            "    (binaryfunc)    0,             /* nb_rshift */\n"
-            "    (binaryfunc)    0,             /* nb_and */\n"
-            "    (binaryfunc)    0,             /* nb_xor */\n"
-            "    (binaryfunc)    0,             /* nb_or */\n"
-            "    (coercion)      0,             /* nb_coerce */\n"
-            "    (unaryfunc)     {int:s},       /* nb_int */\n"
-            "    (unaryfunc)     0,             /* nb_long */\n"
-            "    (unaryfunc)     0,             /* nb_float */\n"
-            "    (unaryfunc)     0,             /* nb_oct */\n"
-            "    (unaryfunc)     0,             /* nb_hex */\n"
-            "\n"
-            "    (binaryfunc)    0,             /* nb_inplace_add */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_subtract */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_multiply */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_divide */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_remainder */\n"
-            "    (ternaryfunc)   0,             /* nb_inplace_power */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_lshift */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_rshift */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_and */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_xor */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_or */\n"
-            "\n"
-            "    (binaryfunc)    0,             /* nb_floor_divide */\n"
-            "    (binaryfunc)    0,             /* nb_true_divide */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_floor_divide */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_true_divide */\n"
-            "\n"
-            "    (unaryfunc)     0,             /* nb_index */\n"
-            "}};\n"
-            "#endif /* PY_MAJOR_VERSION >= 3 */\n"
+            
             "\n").format(**args))
 
         return "&{class:s}_as_number".format(**args)
@@ -3999,7 +4016,10 @@ class Enum(StructGenerator):
             "int {class_name:s}_init_type(\n"
             "    PyTypeObject *type_object )\n"
             "{{\n"
-            "    type_object->tp_dict = PyDict_New();\n").format(
+            "    type_object->tp_dict = PyDict_New();\n"
+            "    if(type_object->tp_dict == NULL) {{\n"
+            "        return 0;\n"
+            "    }}\n").format(
                 **values_dict))
 
         if self.values:
@@ -4010,11 +4030,23 @@ class Enum(StructGenerator):
                     "class_name": self.class_name,
                     "value": attr}
 
+                # Each enum value must succeed; otherwise the type's
+                # tp_dict is partially populated and the module loads
+                # with broken constants. Bail out cleanly so PyType_Ready
+                # never sees a half-initialized enum.
                 out.write((
                     "    integer_object = PyLong_FromLong({value:s});\n"
-                    "\n"
-                    "    PyDict_SetItemString(type_object->tp_dict, \"{value:s}\", integer_object);\n"
-                    "\n"
+                    "    if(integer_object == NULL) {{\n"
+                    "        Py_DecRef(type_object->tp_dict);\n"
+                    "        type_object->tp_dict = NULL;\n"
+                    "        return 0;\n"
+                    "    }}\n"
+                    "    if(PyDict_SetItemString(type_object->tp_dict, \"{value:s}\", integer_object) < 0) {{\n"
+                    "        Py_DecRef(integer_object);\n"
+                    "        Py_DecRef(type_object->tp_dict);\n"
+                    "        type_object->tp_dict = NULL;\n"
+                    "        return 0;\n"
+                    "    }}\n"
                     "    Py_DecRef(integer_object);\n"
                     "\n").format(**values_dict))
 
@@ -4076,11 +4108,8 @@ class EnumType(Integer):
 
         return (
             "    PyErr_Clear();\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    {result:s} = PyLong_FromLong({name:s});\n"
-            "#else\n"
-            "    {result:s} = PyInt_FromLong({name:s});\n"
-            "#endif\n").format(**values_dict)
+                        "    {result:s} = PyLong_FromLong({name:s});\n"
+            ).format(**values_dict)
 
     def pre_call(self, method, **kwargs):
         method.error_set = True

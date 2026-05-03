@@ -14,6 +14,40 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+/* Note on thread-safety:
+ *
+ * pytsk3 declares Py_MOD_GIL_NOT_USED on free-threaded Python builds
+ * and is built against libtsk with TSK_MULTITHREAD_LIB enabled. The
+ * intended contract for callers is:
+ *
+ *   - Any pytsk3 object may be shared across threads. Methods on
+ *     Img_Info, FS_Info, File, Directory, Volume_Info, and Attribute
+ *     can be called concurrently from multiple threads on the same
+ *     instance without external locking.
+ *
+ *   - Per-instance state (iterator cursors, open/close transitions)
+ *     is protected by a per-instance tsk_lock_t inside the C class
+ *     struct. Iterators advance atomically, so two threads sharing a
+ *     Directory or Volume_Info will each consume distinct entries
+ *     without skipping or duplicating.
+ *
+ *   - libtsk's image cache (cache_lock) and per-thread error TLS
+ *     (tsk_error_get) provide the underlying primitives. Both depend
+ *     on TSK_MULTITHREAD_LIB; see setup.py.
+ *
+ *   - Python subclasses that override read() (e.g. an Img_Info that
+ *     wraps a file-like object) must provide their own locking around
+ *     any stateful resource they touch -- pytsk3 will dispatch into
+ *     the override from any thread. tests/test_lib.py shows the
+ *     pattern.
+ *
+ *   - User code that mixes raw libtsk handles obtained from a pytsk3
+ *     wrapper (e.g. via .info on a borrowed struct) with concurrent
+ *     parent destruction is unsafe; the parent-keepalive on yielded
+ *     children prevents this for normal Python reference flow.
+ */
+
 #if !defined( TSK3_H_ )
 #define TSK3_H_
 
@@ -63,6 +97,11 @@ BIND_STRUCT(TSK_VS_INFO);
     Then open an inode or path
 
     f = fs.open_dir(inode = 2)
+
+    Thread-safety: methods on Img_Info are safe to call concurrently
+    from multiple threads. Img_Info_close serializes against in-flight
+    Img_Info_read via state_lock so a reader never observes a torn
+    img_is_open transition.
 */
 CCLASS(Img_Info, Object)
      PRIVATE Extended_TSK_IMG_INFO *img;
@@ -71,9 +110,18 @@ CCLASS(Img_Info, Object)
       */
      PRIVATE int img_is_internal;
 
-     /* Value to indicate if img is open 
+     /* Value to indicate if img is open. Read/written under state_lock
+      * so concurrent close() and read() see a consistent value.
       */
      PRIVATE int img_is_open;
+
+     /* Per-instance mutex protecting open/close transitions. Init in
+      * Con, deinit in dest. Held while Img_Info_read consults
+      * img_is_open and dispatches to libtsk so a parallel close()
+      * cannot tear down state mid-read. Not exposed to Python.
+      */
+     PRIVATE tsk_lock_t state_lock;
+     PRIVATE int state_lock_initialized;
 
      /* Open an image using the Sleuthkit.
       *
@@ -93,10 +141,19 @@ CCLASS(Img_Info, Object)
 END_CCLASS
 
 /** This object handles volumes.
+
+    Thread-safety: the iterator cursor (current) is mutated under
+    iter_lock during __iter__ and iternext, so two threads can share
+    a Volume_Info and iterate concurrently without skipping or
+    duplicating partitions or scribbling on the cursor.
  */
 CCLASS(Volume_Info, Object)
   FOREIGN TSK_VS_INFO *info;
   int current;
+
+  /* Per-instance mutex serializing iterator cursor updates. */
+  PRIVATE tsk_lock_t iter_lock;
+  PRIVATE int iter_lock_initialized;
 
   /** Open a volume using the Sleuthkit.
 
@@ -123,6 +180,12 @@ struct Directory_t;
 CCLASS(Attribute, Object)
    FOREIGN TSK_FS_ATTR *info;
    FOREIGN TSK_FS_ATTR_RUN *current;
+
+   /* Per-instance mutex serializing iterator cursor updates. See
+    * Volume_Info above for rationale.
+    */
+   PRIVATE tsk_lock_t iter_lock;
+   PRIVATE int iter_lock_initialized;
 
    Attribute METHOD(Attribute, Con, TSK_FS_ATTR *info);
 
@@ -155,6 +218,12 @@ CCLASS(File, Object)
 
      int max_attr;
      int current_attr;
+
+     /* Per-instance mutex serializing iterator cursor updates so two
+      * threads can share a File and iterate its attributes safely.
+      */
+     PRIVATE tsk_lock_t iter_lock;
+     PRIVATE int iter_lock_initialized;
 
      File METHOD(File, Con, struct FS_Info_t *fs, TSK_FS_FILE *info);
 
@@ -193,8 +262,14 @@ CCLASS(Directory, Object)
      /* Total number of files in this directory */
      size_t size;
 
-     /* Current file returned in the next iteration */
+     /* Current file returned in the next iteration. Mutated under
+      * iter_lock so two threads can share a Directory and iterate
+      * concurrently without missed or duplicated entries.
+      */
      int current;
+
+     PRIVATE tsk_lock_t iter_lock;
+     PRIVATE int iter_lock_initialized;
 
      /* We can open the directory using a path, its inode number.
 
