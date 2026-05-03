@@ -377,32 +377,6 @@ static int TOTAL_CCLASSES=0;
 #undef BUFF_SIZE
 #define BUFF_SIZE 10240
 
-/* Python compatibility macros
- */
-#if !defined( PyMODINIT_FUNC )
-#if PY_MAJOR_VERSION >= 3
-#define PyMODINIT_FUNC PyObject *
-#else
-#define PyMODINIT_FUNC void
-#endif
-#endif /* !defined( PyMODINIT_FUNC ) */
-
-#if !defined( PyVarObject_HEAD_INIT )
-#define PyVarObject_HEAD_INIT( type, size ) \\
-    PyObject_HEAD_INIT( type ) \\
-    size,
-
-#endif /* !defined( PyVarObject_HEAD_INIT ) */
-
-#if PY_MAJOR_VERSION >= 3
-#define Py_TPFLAGS_HAVE_ITER		0
-#endif
-
-#if !defined( Py_TYPE )
-#define Py_TYPE( object ) \\
-    ( ( (PyObject *) object )->ob_type )
-
-#endif /* !defined( Py_TYPE ) */
 
 /* Generic wrapper type
  */
@@ -566,11 +540,7 @@ static int check_method_override(PyObject *self, PyTypeObject *type, const char 
     }}
     mro = ob_type->tp_mro;
 
-#if PY_MAJOR_VERSION >= 3
     py_method = PyUnicode_FromString(method);
-#else
-    py_method = PyString_FromString(method);
-#endif
     if(py_method == NULL) {{
         return 0;
     }}
@@ -623,9 +593,7 @@ void pytsk_fetch_error(void) {{
     char *error_str = NULL;
     int *error_type = (int *) {get_current_error:s}(&error_str);
 
-#if PY_MAJOR_VERSION >= 3
     PyObject *utf8_string_object  = NULL;
-#endif
 
     // Fetch the exception state and convert it to a string:
     PyErr_Fetch(&exception_type, &exception_value, &exception_traceback);
@@ -650,7 +618,6 @@ void pytsk_fetch_error(void) {{
 
     string_object = PyObject_Repr(exception_value);
 
-#if PY_MAJOR_VERSION >= 3
     if(string_object != NULL) {{
         utf8_string_object = PyUnicode_AsUTF8String(string_object);
     }}
@@ -658,11 +625,6 @@ void pytsk_fetch_error(void) {{
     if(utf8_string_object != NULL) {{
         str_c = PyBytes_AsString(utf8_string_object);
     }}
-#else
-    if(string_object != NULL) {{
-        str_c = PyString_AsString(string_object);
-    }}
-#endif
 
     if(str_c != NULL) {{
         strncpy(error_str, str_c, BUFF_SIZE-1);
@@ -686,11 +648,9 @@ void pytsk_fetch_error(void) {{
     }}
     PyErr_Restore(exception_type, exception_value, exception_traceback);
 
-#if PY_MAJOR_VERSION >= 3
     if( utf8_string_object != NULL ) {{
         Py_DecRef(utf8_string_object);
     }}
-#endif
     if(string_object != NULL) {{
         Py_DecRef(string_object);
     }}
@@ -743,33 +703,6 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
             return (uint64_t) -1;
         }}
     }}
-#if PY_MAJOR_VERSION < 3
-    if(result == 0) {{
-        PyErr_Clear();
-
-        result = PyObject_IsInstance(integer_object, (PyObject *) &PyInt_Type);
-
-        if(result == -1) {{
-            pytsk_fetch_error();
-
-            return (uint64_t) -1;
-
-        }} else if(result != 0) {{
-            PyErr_Clear();
-
-#if defined( HAVE_LONG_LONG )
-            long_value = PyInt_AsUnsignedLongLongMask(integer_object);
-#else
-            long_value = PyInt_AsUnsignedLongMask(integer_object);
-#endif
-            if(PyErr_Occurred()) {{
-                pytsk_fetch_error();
-
-                return (uint64_t) -1;
-            }}
-        }}
-    }}
-#endif /* PY_MAJOR_VERSION < 3 */
     if(result == 0) {{
         if(PyErr_Occurred()) {{
             pytsk_fetch_error();
@@ -940,8 +873,7 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
             "    {{NULL, NULL, 0, NULL}}  /* Sentinel */\n"
             "}};\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "\n"
+                        "\n"
             "/* The {module:s} module definition\n"
             " */\n"
             "PyModuleDef {module:s}_module_definition = {{\n"
@@ -965,15 +897,10 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
             "	NULL,\n"
             "}};\n"
             "\n"
-            "#endif /* PY_MAJOR_VERSION >= 3 */\n"
             "\n"
             "/* Initializes the {module:s} module\n"
             " */\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "PyMODINIT_FUNC PyInit_{module:s}(void) {{\n"
-            "#else\n"
-            "PyMODINIT_FUNC init{module:s}(void) {{\n"
-            "#endif\n"
+            "PyObject * PyInit_{module:s}(void) {{\n"
             "    PyGILState_STATE gil_state;\n"
             "\n"
             "    PyObject *module = NULL;\n"
@@ -984,21 +911,12 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
             "     * This function must be called before grabbing the GIL\n"
             "     * otherwise the module will segfault on a version mismatch\n"
             "     */\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    module = PyModule_Create(\n"
+                        "    module = PyModule_Create(\n"
             "        &{module:s}_module_definition );\n"
-            "#else\n"
-            "    module = Py_InitModule3(\n"
-            "        \"{module:s}\",\n"
-            "        {module:s}_module_methods,\n"
-            "        \"Python {module:s} module.\" );\n"
-            "#endif\n"
+            
             "    if (module == NULL) {{\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "        return(NULL);\n"
-            "#else\n"
-            "        return;\n"
-            "#endif\n"
+                        "        return(NULL);\n"
+            
             "    }}\n"
             "\n"
             "#ifdef Py_GIL_DISABLED\n"
@@ -1037,19 +955,13 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
             elif type == "string":
                 if constant == "TSK_VERSION_STR":
                     out.write((
-                        "#if PY_MAJOR_VERSION >= 3\n"
-                        "    tmp = PyUnicode_FromString((char *){0:s});\n"
-                        "#else\n"
-                        "    tmp = PyString_FromString((char *){0:s});\n"
-                        "#endif\n").format(constant))
+                                                "    tmp = PyUnicode_FromString((char *){0:s});\n"
+                        ).format(constant))
 
                 else:
                     out.write((
-                        "#if PY_MAJOR_VERSION >= 3\n"
-                        "    tmp = PyBytes_FromString((char *){0:s});\n"
-                        "#else\n"
-                        "    tmp = PyString_FromString((char *){0:s});\n"
-                        "#endif\n").format(constant))
+                                                "    tmp = PyBytes_FromString((char *){0:s});\n"
+                        ).format(constant))
             else:
                 out.write(
                     "    /* I dont know how to convert {0:s} type {1:s} */\n".format(
@@ -1064,20 +976,14 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
         out.write(
             "    PyGILState_Release(gil_state);\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "	return module;\n"
-            "#else\n"
-            "	return;\n"
-            "#endif\n"
+                        "	return module;\n"
+            
             "\n"
             "on_error:\n"
             "	PyGILState_Release(gil_state);\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "	return NULL;\n"
-            "#else\n"
-            "	return;\n"
-            "#endif\n"
+                        "	return NULL;\n"
+            
             "}\n"
             "\n"
             "#ifdef __cplusplus\n"
@@ -1201,11 +1107,8 @@ class String(Type):
             "        Py_IncRef(Py_None);\n"
             "        {result:s} = Py_None;\n"
             "    }} else {{\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "        {result:s} = PyBytes_FromStringAndSize((char *){name:s}, {length:s});\n"
-            "#else\n"
-            "        {result:s} = PyString_FromStringAndSize((char *){name:s}, {length:s});\n"
-            "#endif\n"
+                        "        {result:s} = PyBytes_FromStringAndSize((char *){name:s}, {length:s});\n"
+            
             "        if(!{result:s}) {{\n"
             "            goto on_error;\n"
             "        }}\n"
@@ -1231,11 +1134,8 @@ class String(Type):
             "\n"
             "    PyErr_Clear();\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    if(PyBytes_AsStringAndSize({source:s}, &buff, &length) == -1) {{\n"
-            "#else\n"
-            "    if(PyString_AsStringAndSize({source:s}, &buff, &length) == -1) {{\n"
-            "#endif\n"
+                        "    if(PyBytes_AsStringAndSize({source:s}, &buff, &length) == -1) {{\n"
+            
             "        goto on_error;\n"
             "    }}\n"
             "    {destination:s} = (char *) talloc_size({context:s}, length + 1);\n"
@@ -1267,11 +1167,8 @@ class BorrowedString(String):
 
         return (
             "    PyErr_Clear();\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    {result:s} = PyBytes_FromStringAndSize((char *){name:s}, {length:s});\n"
-            "#else\n"
-            "    {result:s} = PyString_FromStringAndSize((char *){name:s}, {length:s});\n"
-            "#endif\n").format(**values_dict)
+                        "    {result:s} = PyBytes_FromStringAndSize((char *){name:s}, {length:s});\n"
+            ).format(**values_dict)
 
 
 class Char_and_Length(Type):
@@ -1312,11 +1209,8 @@ class Char_and_Length(Type):
 
         return (
             "    PyErr_Clear();\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    {result:s} = PyBytes_FromStringAndSize((char *){name:s}, {length:s});\n"
-            "#else\n"
-            "    {result:s} = PyString_FromStringAndSize((char *){name:s}, {length:s});\n"
-            "#endif\n"
+                        "    {result:s} = PyBytes_FromStringAndSize((char *){name:s}, {length:s});\n"
+            
             "\n"
             "    if(!{result:s}) {{\n"
             "        goto on_error;\n"
@@ -1376,11 +1270,8 @@ class IntegerUnsigned(Integer):
                 "    PyErr_Clear();\n"
                 "    {result:s} = PyList_New(0);\n"
                 "    for(array_index = 0; array_index < {array_size:s}; array_index++) {{\n"
-                "#if PY_MAJOR_VERSION >= 3\n"
-                "       PyList_Append({result:s}, PyLong_FromLong((long) {name:s}[array_index]));\n"
-                "#else\n"
-                "       PyList_Append({result:s}, PyInt_FromLong((long) {name:s}[array_index]));\n"
-                "#endif\n"
+                                "       PyList_Append({result:s}, PyLong_FromLong((long) {name:s}[array_index]));\n"
+                
                 "    }}\n"
             ).format(**values_dict)
         else:
@@ -1404,11 +1295,8 @@ class IntegerUnsigned(Integer):
 
         return (
             "    PyErr_Clear();\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    {destination:s} = PyLong_AsUnsignedLongMask({source:s});\n"
-            "#else\n"
-            "    {destination:s} = PyInt_AsUnsignedLongMask({source:s});\n"
-            "#endif\n").format(**values_dict)
+                        "    {destination:s} = PyLong_AsUnsignedLongMask({source:s});\n"
+            ).format(**values_dict)
 
 
 class Integer8(Integer):
@@ -1465,19 +1353,11 @@ class Integer64(Integer):
 
         return (
             "    PyErr_Clear();\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
             "#if defined( HAVE_LONG_LONG )\n"
             "    {destination:s} = PyLong_AsLongLongMask({source:s});\n"
             "#else\n"
             "    {destination:s} = PyLong_AsLongMask({source:s});\n"
-            "#endif\n"
-            "#else\n"
-            "#if defined( HAVE_LONG_LONG )\n"
-            "    {destination:s} = PyInt_AsLongLongMask({source:s});\n"
-            "#else\n"
-            "    {destination:s} = PyInt_AsLongMask({source:s});\n"
-            "#endif\n"
-            "#endif /* PY_MAJOR_VERSION >= 3 */\n").format(**values_dict)
+            "#endif\n").format(**values_dict)
 
 
 class Integer64Unsigned(Integer):
@@ -1512,19 +1392,11 @@ class Integer64Unsigned(Integer):
         # long and int objects.
         return (
             "    PyErr_Clear();\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
             "#if defined( HAVE_LONG_LONG )\n"
             "    {destination:s} = PyLong_AsUnsignedLongLongMask({source:s});\n"
             "#else\n"
             "    {destination:s} = PyLong_AsUnsignedLongMask({source:s});\n"
-            "#endif\n"
-            "#else\n"
-            "#if defined( HAVE_LONG_LONG )\n"
-            "    {destination:s} = PyInt_AsUnsignedLongLongMask({source:s});\n"
-            "#else\n"
-            "    {destination:s} = PyInt_AsUnsignedLongMask({source:s});\n"
-            "#endif\n"
-            "#endif /* PY_MAJOR_VERSION >= 3 */\n").format(**values_dict)
+            "#endif\n").format(**values_dict)
 
 
 class Long(Integer):
@@ -1602,11 +1474,8 @@ class Char(Integer):
             "    char *str_{name:s} = &{name:s};\n"
             "\n"
             "    PyErr_Clear();\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    {result:s} = PyBytes_FromStringAndSize(str_{name:s}, 1);\n"
-            "#else\n"
-            "    {result:s} = PyString_FromStringAndSize(str_{name:s}, 1);\n"
-            "#endif\n"
+                        "    {result:s} = PyBytes_FromStringAndSize(str_{name:s}, 1);\n"
+            
             "\n"
             "    if(!{result:s}) {{\n"
             "        goto on_error;\n"
@@ -1732,20 +1601,14 @@ class Char_and_Length_OUT(Char_and_Length):
         return (
             "    PyErr_Clear();\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    tmp_{name:s} = PyBytes_FromStringAndSize(NULL, {length:s});\n"
-            "#else\n"
-            "    tmp_{name:s} = PyString_FromStringAndSize(NULL, {length:s});\n"
-            "#endif\n"
+                        "    tmp_{name:s} = PyBytes_FromStringAndSize(NULL, {length:s});\n"
+            
             "    if(!tmp_{name:s}) {{\n"
             "        goto on_error;\n"
             "    }}\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    PyBytes_AsStringAndSize(tmp_{name:s}, &{name:s}, (Py_ssize_t *)&{length:s});\n"
-            "#else\n"
-            "    PyString_AsStringAndSize(tmp_{name:s}, &{name:s}, (Py_ssize_t *)&{length:s});\n"
-            "#endif\n").format(**values_dict)
+                        "    PyBytes_AsStringAndSize(tmp_{name:s}, &{name:s}, (Py_ssize_t *)&{length:s});\n"
+            ).format(**values_dict)
 
     def to_python_object(self, name=None, result="Py_result", sense="in", **kwargs):
         if "results" in kwargs:
@@ -1773,11 +1636,8 @@ class Char_and_Length_OUT(Char_and_Length):
             "\n"
             "    // Do we need to truncate the buffer for a short read?\n"
             "    }} else if(func_return < (uint64_t) {length:s}) {{\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "        _PyBytes_Resize(&tmp_{name:s}, (Py_ssize_t) func_return);\n"
-            "#else\n"
-            "        _PyString_Resize(&tmp_{name:s}, (Py_ssize_t) func_return);\n"
-            "#endif\n"
+                        "        _PyBytes_Resize(&tmp_{name:s}, (Py_ssize_t) func_return);\n"
+            
             "    }}\n"
             "\n"
             "    {result:s} = tmp_{name:s};\n").format(**values_dict)
@@ -1793,11 +1653,8 @@ class Char_and_Length_OUT(Char_and_Length):
             "    char *tmp_buff = NULL;\n"
             "    Py_ssize_t tmp_len = 0;\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    if(PyBytes_AsStringAndSize({result:s}, &tmp_buff, &tmp_len) == -1) {{\n"
-            "#else\n"
-            "    if(PyString_AsStringAndSize({result:s}, &tmp_buff, &tmp_len) == -1) {{\n"
-            "#endif\n"
+                        "    if(PyBytes_AsStringAndSize({result:s}, &tmp_buff, &tmp_len) == -1) {{\n"
+            
             "        goto on_error;\n"
             "    }}\n"
             "    /* Bound the user-controlled return length to the buffer\n"
@@ -1842,11 +1699,8 @@ class TDB_DATA_P(Char_and_Length_OUT):
 
         return (
             "    PyErr_Clear();\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    {result:s} = PyBytes_FromStringAndSize((char *){name:s}->dptr, {name:s}->dsize);\n"
-            "#else\n"
-            "    {result:s} = PyString_FromStringAndSize((char *){name:s}->dptr, {name:s}->dsize);\n"
-            "#endif\n"
+                        "    {result:s} = PyBytes_FromStringAndSize((char *){name:s}->dptr, {name:s}->dsize);\n"
+            
             "    talloc_free({name:s});\n").format(**values_dict)
 
     def from_python_object(self, source, destination, method, **kwargs):
@@ -1864,11 +1718,8 @@ class TDB_DATA_P(Char_and_Length_OUT):
             "\n"
             "    PyErr_Clear();\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    if(PyBytes_AsStringAndSize({source:s}, &buf, &tmp) == -1) {{\n"
-            "#else\n"
-            "    if(PyString_AsStringAndSize({source:s}, &buf, &tmp) == -1) {{\n"
-            "#endif\n"
+                        "    if(PyBytes_AsStringAndSize({source:s}, &buf, &tmp) == -1) {{\n"
+            
             "        goto on_error;\n"
             "    }}\n"
             "\n"
@@ -1898,11 +1749,8 @@ class TDB_DATA(TDB_DATA_P):
             "\n"
             "    PyErr_Clear();\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    if(PyBytes_AsStringAndSize({source:s}, &buf, &tmp) == -1) {{\n"
-            "#else\n"
-            "    if(PyString_AsStringAndSize({source:s}, &buf, &tmp) == -1) {{\n"
-            "#endif\n"
+                        "    if(PyBytes_AsStringAndSize({source:s}, &buf, &tmp) == -1) {{\n"
+            
             "        goto on_error;\n"
             "    }}\n"
             "    // Take a copy of the Python string - This leaks - how to fix it?\n"
@@ -1919,11 +1767,8 @@ class TDB_DATA(TDB_DATA_P):
 
         return (
             "    PyErr_Clear();\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    {result:s} = PyBytes_FromStringAndSize((char *){name:s}.dptr, {name:s}.dsize);\n"
-            "#else\n"
-            "    {result:s} = PyString_FromStringAndSize((char *){name:s}.dptr, {name:s}.dsize);\n"
-            "#endif\n").format(**values_dict)
+                        "    {result:s} = PyBytes_FromStringAndSize((char *){name:s}.dptr, {name:s}.dsize);\n"
+            ).format(**values_dict)
 
 
 class Void(Type):
@@ -2004,11 +1849,8 @@ class StringArray(String):
             "        if(!tmp) {{\n"
             "            goto on_error;\n"
             "        }}\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "        {destination:s}[i] = PyBytes_AsString(tmp);\n"
-            "#else\n"
-            "        {destination:s}[i] = PyString_AsString(tmp);\n"
-            "#endif\n"
+                        "        {destination:s}[i] = PyBytes_AsString(tmp);\n"
+            
             "\n"
             "        if(!{destination:s}[i]) {{\n"
             "            Py_DecRef(tmp);\n"
@@ -3241,11 +3083,8 @@ class GetattrMethod(Method):
                 "name": attr.name}
 
             out.write((
-                "#if PY_MAJOR_VERSION >= 3\n"
-                "        string_object = PyUnicode_FromString(\"{name:s}\");\n"
-                "#else\n"
-                "        string_object = PyString_FromString(\"{name:s}\");\n"
-                "#endif\n"
+                                "        string_object = PyUnicode_FromString(\"{name:s}\");\n"
+                
                 "        if(string_object == NULL) {{\n"
                 "            Py_DecRef(list_object);\n"
                 "            goto on_error;\n"
@@ -3262,11 +3101,8 @@ class GetattrMethod(Method):
         out.write((
             "\n"
             "        for(i = {0:s}_methods; i->ml_name; i++) {{\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "            string_object = PyUnicode_FromString(i->ml_name);\n"
-            "#else\n"
-            "            string_object = PyString_FromString(i->ml_name);\n"
-            "#endif\n"
+                        "            string_object = PyUnicode_FromString(i->ml_name);\n"
+            
             "            if(string_object == NULL) {{\n"
             "                Py_DecRef(list_object);\n"
             "                goto on_error;\n"
@@ -3278,11 +3114,9 @@ class GetattrMethod(Method):
             "            }}\n"
             "            Py_DecRef(string_object);\n"
             "        }}\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
             "        if( utf8_string_object != NULL ) {{\n"
             "            Py_DecRef(utf8_string_object);\n"
             "        }}\n"
-            "#endif\n"
             "        return list_object;\n"
             "    }}\n").format(self.class_name))
 
@@ -3299,9 +3133,7 @@ class GetattrMethod(Method):
             "    PyObject *result = NULL;\n"
             "    char *name = NULL;\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
             "    PyObject *utf8_string_object  = NULL;\n"
-            "#endif\n"
             "\n"
             "    // Try to hand it off to the Python native handler first\n"
             "    result = PyObject_GenericGetAttr((PyObject*) self, pyname);\n"
@@ -3312,22 +3144,16 @@ class GetattrMethod(Method):
             "\n"
             "    PyErr_Clear();\n"
             "    // No - nothing interesting was found by python\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
             "    utf8_string_object = PyUnicode_AsUTF8String(pyname);\n"
             "\n"
             "    if(utf8_string_object != NULL) {{\n"
             "        name = PyBytes_AsString(utf8_string_object);\n"
             "    }}\n"
-            "#else\n"
-            "    name = PyString_AsString(pyname);\n"
-            "#endif\n"
             "\n"
             "    if(!self->base) {{\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
             "        if( utf8_string_object != NULL ) {{\n"
             "            Py_DecRef(utf8_string_object);\n"
             "        }}\n"
-            "#endif\n"
             "        return PyErr_Format(PyExc_RuntimeError, \"Wrapped object ({class_name:s}.{name:s}) no longer valid\");\n"
             "    }}\n"
             "    if(!name) {{\n"
@@ -3338,22 +3164,18 @@ class GetattrMethod(Method):
 
         out.write(
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
             "    if( utf8_string_object != NULL ) {{\n"
             "        Py_DecRef(utf8_string_object);\n"
             "    }}\n"
-            "#endif\n"
             "    return PyObject_GenericGetAttr((PyObject *) self, pyname);\n")
 
         # Write the error part of the function.
         if self.error_set:
             out.write(
                 "on_error:\n"
-                "#if PY_MAJOR_VERSION >= 3\n"
                 "    if( utf8_string_object != NULL ) {{\n"
                 "        Py_DecRef(utf8_string_object);\n"
-                "    }}\n"
-                "#endif\n" + self.error_condition())
+                "    }}\n" + self.error_condition())
 
         out.write("}\n\n")
 
@@ -3482,11 +3304,7 @@ class ProxiedMethod(Method):
             "    // Grab the GIL so we can do Python stuff\n"
             "    gil_state = PyGILState_Ensure();\n"
             "\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
             "    method_name = PyUnicode_FromString(\"{0:s}\");\n"
-            "#else\n"
-            "    method_name = PyString_FromString(\"{0:s}\");\n"
-            "#endif\n"
             "    /* PyUnicode_FromString sets MemoryError on failure;\n"
             "     * propagate via the proxied error machinery rather than\n"
             "     * passing NULL to PyObject_CallMethodObjArgs (which would\n"
@@ -3903,8 +3721,7 @@ class ClassGenerator(object):
                 args[type] = "0"
 
         out.write((
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "static PyNumberMethods {class:s}_as_number = {{\n"
+                        "static PyNumberMethods {class:s}_as_number = {{\n"
             "    (binaryfunc)    0,             /* nb_add */\n"
             "    (binaryfunc)    0,             /* nb_subtract */\n"
             "    (binaryfunc)    0,             /* nb_multiply */\n"
@@ -3943,52 +3760,7 @@ class ClassGenerator(object):
             "\n"
             "    (unaryfunc)     0,             /* nb_index */\n"
             "}};\n"
-            "#else\n"
-            "static PyNumberMethods {class:s}_as_number = {{\n"
-            "    (binaryfunc)    0,             /* nb_add */\n"
-            "    (binaryfunc)    0,             /* nb_subtract */\n"
-            "    (binaryfunc)    0,             /* nb_multiply */\n"
-            "    (binaryfunc)    0,             /* nb_divide */\n"
-            "    (binaryfunc)    0,             /* nb_remainder */\n"
-            "    (binaryfunc)    0,             /* nb_divmod */\n"
-            "    (ternaryfunc)   0,             /* nb_power */\n"
-            "    (unaryfunc)     0,             /* nb_negative */\n"
-            "    (unaryfunc)     0,             /* nb_positive */\n"
-            "    (unaryfunc)     0,             /* nb_absolute */\n"
-            "    (inquiry)       {nonzero:s},   /* nb_nonzero */\n"
-            "    (unaryfunc)     0,             /* nb_invert */\n"
-            "    (binaryfunc)    0,             /* nb_lshift */\n"
-            "    (binaryfunc)    0,             /* nb_rshift */\n"
-            "    (binaryfunc)    0,             /* nb_and */\n"
-            "    (binaryfunc)    0,             /* nb_xor */\n"
-            "    (binaryfunc)    0,             /* nb_or */\n"
-            "    (coercion)      0,             /* nb_coerce */\n"
-            "    (unaryfunc)     {int:s},       /* nb_int */\n"
-            "    (unaryfunc)     0,             /* nb_long */\n"
-            "    (unaryfunc)     0,             /* nb_float */\n"
-            "    (unaryfunc)     0,             /* nb_oct */\n"
-            "    (unaryfunc)     0,             /* nb_hex */\n"
-            "\n"
-            "    (binaryfunc)    0,             /* nb_inplace_add */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_subtract */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_multiply */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_divide */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_remainder */\n"
-            "    (ternaryfunc)   0,             /* nb_inplace_power */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_lshift */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_rshift */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_and */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_xor */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_or */\n"
-            "\n"
-            "    (binaryfunc)    0,             /* nb_floor_divide */\n"
-            "    (binaryfunc)    0,             /* nb_true_divide */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_floor_divide */\n"
-            "    (binaryfunc)    0,             /* nb_inplace_true_divide */\n"
-            "\n"
-            "    (unaryfunc)     0,             /* nb_index */\n"
-            "}};\n"
-            "#endif /* PY_MAJOR_VERSION >= 3 */\n"
+            
             "\n").format(**args))
 
         return "&{class:s}_as_number".format(**args)
@@ -4336,11 +4108,8 @@ class EnumType(Integer):
 
         return (
             "    PyErr_Clear();\n"
-            "#if PY_MAJOR_VERSION >= 3\n"
-            "    {result:s} = PyLong_FromLong({name:s});\n"
-            "#else\n"
-            "    {result:s} = PyInt_FromLong({name:s});\n"
-            "#endif\n").format(**values_dict)
+                        "    {result:s} = PyLong_FromLong({name:s});\n"
+            ).format(**values_dict)
 
     def pre_call(self, method, **kwargs):
         method.error_set = True
