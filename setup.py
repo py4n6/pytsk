@@ -26,8 +26,6 @@ SLEUTHKIT_PATH: A path to the locally build sleuthkit source tree. If not
 
 """
 
-from __future__ import print_function
-
 import copy
 import glob
 import re
