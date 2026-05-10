@@ -454,54 +454,25 @@ class SharedFileConcurrentReadTest(unittest.TestCase):
 
 
 class RecursiveWalkStressTest(unittest.TestCase):
-  """Recursive directory walks under many threads, each on its own FS.
+  """Per-thread Img_Info + recursive walk soak test.
 
-  This is the soak test: long-running concurrent allocation churn
-  exercises every yield path through new_class_wrapper +
-  StructWrapper.assign + dealloc. A regression in the parent
-  keepalive (extra Py_IncRef without matching DecRef, or vice versa)
-  would surface as a steady leak; a refcount asymmetry surfaces as
-  an immediate crash.
+  Long-running concurrent allocation churn exercises every yield path
+  through new_class_wrapper, StructWrapper.assign, and dealloc. A
+  parent-keepalive imbalance surfaces as a leak or immediate crash.
   """
 
-  def setUp(self):
-    self._test_file = _TEST_IMAGE
-
-  def _walk(self, fs, directory, depth=0):
-    count = 0
-    if depth > 8:
-      return count
-    for entry in directory:
-      count += 1
-      if not entry.info or not entry.info.name:
-        continue
-      name = entry.info.name.name
-      if name in (b'.', b'..'):
-        continue
-      if not entry.info.meta:
-        continue
-      meta_type = entry.info.meta.type
-      if meta_type == pytsk3.TSK_FS_META_TYPE_DIR:
-        try:
-          sub = entry.as_directory()
-        except IOError:
-          continue
-        count += self._walk(fs, sub, depth + 1)
-    return count
-
   def testRecursiveWalkStress(self):
-
     def worker(_index):
-      img = pytsk3.Img_Info(url=self._test_file)
+      img = pytsk3.Img_Info(url=_TEST_IMAGE)
       fs = pytsk3.FS_Info(img, offset=0)
       total = 0
       for _ in range(20):
-        directory = fs.open_dir('/')
-        total += self._walk(fs, directory)
+        total += sum(1 for _ in test_lib.walk_filesystem(fs.open_dir('/')))
       return total
 
     results = _run_concurrently(worker, 8)
-    # Every thread must have visited the same number of entries.
+    # Same entry count across all threads -- mismatch implies a
+    # cursor / lock bug in iteration.
     self.assertTrue(all(r == results[0] for r in results), results)
     self.assertGreater(results[0], 0)
 
@@ -754,24 +725,16 @@ class SubinterpreterImportTest(unittest.TestCase):
 class ProxiedReadConcurrencyTest(unittest.TestCase):
   """Python-backed Img_Info hammered through libtsk's proxied read path.
 
-  Covers two FT-correctness fixes: Img_Info_read no longer holds
-  state_lock across tsk_img_read (so a Python callback's own locks
-  cannot ABBA), and the proxied Wrapper-return swap on python_object2
-  is now critical-section-protected (3.13+) against double-decref.
+  Covers Img_Info_read no longer holding state_lock across tsk_img_read
+  (Python callback's own lock cannot ABBA) and the python_object2 swap
+  in proxied Wrapper-returning callbacks (critical-section-protected
+  on 3.13+ against double-decref).
   """
 
-  def setUp(self):
-    self._test_file = _TEST_IMAGE
-    self._file_size = os.stat(self._test_file).st_size
-
-  def _open_python_backed_img(self):
-    with open(self._test_file, 'rb') as f:
-      data = f.read()
-    return _SharedBytesImg(data)
-
-  def testConcurrentReadsViaProxiedCallback(self):
-    """Concurrent libtsk reads against one Python-backed Img_Info."""
-    img = self._open_python_backed_img()
+  def testConcurrentReadsThroughProxiedCallback(self):
+    """Concurrent reads + bounded join: covers correctness AND no deadlock."""
+    with open(_TEST_IMAGE, 'rb') as f:
+      img = _SharedBytesImg(f.read())
     try:
       def worker(_index):
         for _ in range(20):
@@ -779,26 +742,14 @@ class ProxiedReadConcurrencyTest(unittest.TestCase):
           fobj = fs.open_meta(15)
           self.assertEqual(fobj.info.meta.size, 116)
           self.assertEqual(len(fobj.read_random(0, 116)), 116)
-      _run_concurrently(worker, 8)
-    finally:
-      img.close()
-
-  def testReadOverrideAcquiresOwnLockNoAbba(self):
-    """Subclass read() taking its own lock must not deadlock with state_lock."""
-    img = self._open_python_backed_img()
-    try:
-      def worker(_index):
-        for _ in range(50):
-          fs = pytsk3.FS_Info(img, offset=0)
-          _ = fs.open_meta(15)
-      threads = [threading.Thread(target=worker, args=(i,)) for i in range(6)]
+      threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]
       for t in threads:
         t.start()
-      # Bounded join: a deadlock would silently hang the test runner.
+      # Bounded join so a deadlock fails the test instead of hanging.
       for t in threads:
         t.join(timeout=30)
       for t in threads:
-        self.assertFalse(t.is_alive(), 'reader thread deadlocked')
+        self.assertFalse(t.is_alive(), 'worker deadlocked')
     finally:
       img.close()
 
@@ -865,6 +816,42 @@ class ProxiedExceptionPathTest(unittest.TestCase):
         _ = pytsk3.FS_Info(img, offset=0)
     finally:
       img.close()
+
+
+class CycleCollectionTest(unittest.TestCase):
+  """Wrapper objects participate in cyclic GC.
+
+  img._cycle = directory; directory.python_object1 = fs (C keepalive);
+  fs.python_object1 = img (C keepalive) is a real cycle. Without
+  tp_traverse / tp_clear / Py_TPFLAGS_HAVE_GC the libtsk handle (plus
+  any user payload) leaks for the process lifetime.
+  """
+
+  def testCycleIsCollected(self):
+    sentinel_alive = [True]
+
+    class Sentinel:
+      def __del__(self_inner):
+        sentinel_alive[0] = False
+
+    class CycleImg(pytsk3.Img_Info):
+      pass
+
+    def build():
+      img = CycleImg(_TEST_IMAGE)
+      # Precondition: GC must track the wrapper or the cycle below
+      # is unreachable to the collector regardless of fix correctness.
+      assert gc.is_tracked(img), 'wrapper must be GC-tracked'
+      fs = pytsk3.FS_Info(img)
+      d = fs.open_dir('/')
+      img._cycle = d            # img -> d -> fs (python_object1) -> img
+      img._sentinel = Sentinel()
+
+    build()
+    gc.collect()
+    self.assertFalse(
+        sentinel_alive[0],
+        'cycle through python_object1 keepalive was not collected')
 
 
 class _RaisingImg(pytsk3.Img_Info):

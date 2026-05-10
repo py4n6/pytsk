@@ -73,6 +73,43 @@ class TSKFsInfoTest(TSKFsInfoTestCase):
     fs_info = pytsk3.FS_Info(self._img_info, offset=0)
     self._testOpenMeta(fs_info)
 
+  def testReadAttributesByTypeId(self):
+    """Read every file attribute by (type, id).
+
+    GRR's sleuthkit.py reads NTFS ADS streams via
+    `read_random(offset, size, attr.info.type, attr.info.id)`; the
+    same shape works on ext for the default data attribute. Iterating
+    a File's attributes was the most race-prone API pre-FT-fix.
+    """
+    fs_info = pytsk3.FS_Info(self._img_info, offset=0)
+    file_object = fs_info.open_meta(15)  # passwords.txt
+    sizes = [
+        len(file_object.read_random(
+            0, attribute.info.size,
+            attribute.info.type, attribute.info.id))
+        for attribute in file_object]
+    self.assertIn(116, sizes)  # the passwords.txt data attribute
+
+  def testChunkedReadMatchesWhole(self):
+    """Streaming reads in small chunks must equal the whole-file read.
+
+    dfvfs's tsk_file_io.py and dfirwizard both stream files this way;
+    short chunks amplify any off-by-one in the snapshot/lock path.
+    """
+    fs_info = pytsk3.FS_Info(self._img_info, offset=0)
+    file_object = fs_info.open_meta(15)
+    size = file_object.info.meta.size
+    whole = file_object.read_random(0, size)
+    chunks = []
+    offset = 0
+    while offset < size:
+      chunk = file_object.read_random(offset, 16)
+      if not chunk:
+        break
+      chunks.append(chunk)
+      offset += len(chunk)
+    self.assertEqual(b''.join(chunks), whole)
+
 
 class TSKFsInfoBogusTest(TSKFsInfoTestCase):
   """FS_Info for testing that fails."""
@@ -110,6 +147,26 @@ class TSKFsInfoFileObjectTest(TSKFsInfoTestCase):
     """Test the open meta functionality."""
     fs_info = pytsk3.FS_Info(self._img_info, offset=0)
     self._testOpenMeta(fs_info)
+
+  def testRecursiveWalkMatchesAcrossOpenPaths(self):
+    """Walk every file via FileObject-backed image; bytes via inode == bytes via path.
+
+    Mirrors the dominant dfvfs pipeline (TSKFileSystemImage subclass
+    feeding TSKFileSystem). End-to-end exercise of the proxied read
+    callback, parent keepalive, and the open-by-inode vs open-by-path
+    paths in one walk.
+    """
+    fs_info = pytsk3.FS_Info(self._img_info, offset=0)
+    paths = dict(test_lib.walk_filesystem(fs_info.open_dir('/')))
+    self.assertIn(b'/passwords.txt', paths)
+    self.assertIn(b'/a_directory/a_file', paths)
+    for path, entry in paths.items():
+      meta = entry.info.meta
+      if meta is None or meta.type != pytsk3.TSK_FS_META_TYPE_REG:
+        continue
+      by_inode = fs_info.open_meta(meta.addr).read_random(0, meta.size)
+      by_path = fs_info.open(path.decode('utf-8')).read_random(0, meta.size)
+      self.assertEqual(by_inode, by_path, msg=path)
 
 
 class TSKFsInfoFileObjectWithDetectTest(TSKFsInfoTestCase):
