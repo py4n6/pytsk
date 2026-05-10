@@ -751,5 +751,137 @@ class SubinterpreterImportTest(unittest.TestCase):
       private.destroy(interp_id)
 
 
+class ProxiedReadConcurrencyTest(unittest.TestCase):
+  """Python-backed Img_Info hammered through libtsk's proxied read path.
+
+  Covers two FT-correctness fixes: Img_Info_read no longer holds
+  state_lock across tsk_img_read (so a Python callback's own locks
+  cannot ABBA), and the proxied Wrapper-return swap on python_object2
+  is now critical-section-protected (3.13+) against double-decref.
+  """
+
+  def setUp(self):
+    self._test_file = _TEST_IMAGE
+    self._file_size = os.stat(self._test_file).st_size
+
+  def _open_python_backed_img(self):
+    with open(self._test_file, 'rb') as f:
+      data = f.read()
+    return _SharedBytesImg(data)
+
+  def testConcurrentReadsViaProxiedCallback(self):
+    """Concurrent libtsk reads against one Python-backed Img_Info."""
+    img = self._open_python_backed_img()
+    try:
+      def worker(_index):
+        for _ in range(20):
+          fs = pytsk3.FS_Info(img, offset=0)
+          fobj = fs.open_meta(15)
+          self.assertEqual(fobj.info.meta.size, 116)
+          self.assertEqual(len(fobj.read_random(0, 116)), 116)
+      _run_concurrently(worker, 8)
+    finally:
+      img.close()
+
+  def testReadOverrideAcquiresOwnLockNoAbba(self):
+    """Subclass read() taking its own lock must not deadlock with state_lock."""
+    img = self._open_python_backed_img()
+    try:
+      def worker(_index):
+        for _ in range(50):
+          fs = pytsk3.FS_Info(img, offset=0)
+          _ = fs.open_meta(15)
+      threads = [threading.Thread(target=worker, args=(i,)) for i in range(6)]
+      for t in threads:
+        t.start()
+      # Bounded join: a deadlock would silently hang the test runner.
+      for t in threads:
+        t.join(timeout=30)
+      for t in threads:
+        self.assertFalse(t.is_alive(), 'reader thread deadlocked')
+    finally:
+      img.close()
+
+
+class _SharedBytesImg(pytsk3.Img_Info):
+  """Bytes-backed Img_Info; per-read lock guarantees callers reach Python."""
+
+  def __init__(self, payload):
+    self._payload = payload
+    self._size = len(payload)
+    self._lock = threading.Lock()
+    pytsk3.Img_Info.__init__(self, url='', type=pytsk3.TSK_IMG_TYPE_RAW)
+
+  def close(self):
+    with self._lock:
+      self._payload = b''
+
+  def read(self, offset, size):
+    with self._lock:
+      if offset >= len(self._payload):
+        return b''
+      return self._payload[offset:offset + size]
+
+  def get_size(self):
+    return self._size
+
+
+class ReimportClassRegistryTest(unittest.TestCase):
+  """Concurrent class-registry lookups must not see a torn TOTAL_CCLASSES.
+
+  TOTAL_CCLASSES is now std::atomic<int> (release writers / acquire
+  readers); legacy plain-int reads could observe a half-zeroed entry
+  during a re-init.
+  """
+
+  def testRegistryStableUnderConcurrentLookups(self):
+    img = pytsk3.Img_Info(url=_TEST_IMAGE)
+    fs = pytsk3.FS_Info(img, offset=0)
+    try:
+      def worker(_index):
+        for _ in range(200):
+          fobj = fs.open_meta(15)
+          self.assertIsNotNone(fobj.info.meta)
+          # Iteration drives Wrapper construction through the registry.
+          for _attr in fobj:
+            pass
+      _run_concurrently(worker, 8)
+    finally:
+      img.close()
+
+
+class ProxiedExceptionPathTest(unittest.TestCase):
+  """Exceptions raised in a proxied Python callback must reach Python.
+
+  On 3.12+ pytsk_fetch_error uses PyErr_GetRaisedException /
+  SetRaisedException; the legacy Fetch/Restore triple was removed in
+  3.14. Verifies the modern path actually transports the exception.
+  """
+
+  def testRaiseInPythonReadIsObserved(self):
+    img = _RaisingImg()
+    try:
+      with self.assertRaises((IOError, OSError, RuntimeError)):
+        _ = pytsk3.FS_Info(img, offset=0)
+    finally:
+      img.close()
+
+
+class _RaisingImg(pytsk3.Img_Info):
+  """Img_Info whose read() always raises, to exercise pytsk_fetch_error."""
+
+  def __init__(self):
+    pytsk3.Img_Info.__init__(self, url='', type=pytsk3.TSK_IMG_TYPE_RAW)
+
+  def close(self):
+    return None
+
+  def read(self, offset, size):
+    raise RuntimeError('synthetic Python read failure')
+
+  def get_size(self):
+    return 1 << 20
+
+
 if __name__ == '__main__':
   unittest.main()

@@ -369,7 +369,12 @@ class Module(object):
  * at runtime depending on the actual returned type. We use this lookup
  * table to do so.
  */
-static int TOTAL_CCLASSES=0;
+/* std::atomic so a re-import (subinterpreter or importlib.reload) cannot
+ * expose a half-zeroed table to a concurrent new_class_wrapper reader.
+ * Writers use release / readers acquire so seeing the bumped count
+ * implies seeing the matching python_wrappers[] entry.
+ */
+static std::atomic<int> TOTAL_CCLASSES(0);
 
 #define CONSTRUCT_INITIALIZE(cclass, virt_cclass, constructor, object, ...) \\
     (cclass)(((virt_cclass) (&__ ## cclass))->constructor(object, ## __VA_ARGS__))
@@ -451,8 +456,10 @@ Gen_wrapper new_class_wrapper(Object item, int item_is_python_object, PyObject *
         return (Gen_wrapper) Py_None;
     }}
     // Search for subclasses
+    {{
+    int total = TOTAL_CCLASSES.load(std::memory_order_acquire);
     for(cls = (Object) item->__class__; cls != cls->__super__; cls = cls->__super__) {{
-        for(cls_index = 0; cls_index < TOTAL_CCLASSES; cls_index++) {{
+        for(cls_index = 0; cls_index < total; cls_index++) {{
             python_wrapper = &(python_wrappers[cls_index]);
 
             if(python_wrapper->class_ref == cls) {{
@@ -478,6 +485,7 @@ Gen_wrapper new_class_wrapper(Object item, int item_is_python_object, PyObject *
                 return result;
             }}
         }}
+    }}
     }}
     PyErr_Format(PyExc_RuntimeError, "Unable to find a wrapper for object %s", NAMEOF(item));
 
@@ -612,12 +620,21 @@ static int check_method_override(PyObject *self, PyTypeObject *type, const char 
     return found;
 }}
 
-/* Fetches the Python error (exception)
+/* Fetches the Python error (exception).
+ * 3.12+ uses PyErr_GetRaisedException/SetRaisedException -- the legacy
+ * Fetch/Restore triple was deprecated in 3.12, removed in 3.14, and has
+ * normalization races under free-threading. Pre-3.12 path retained for
+ * 3.10/3.11 build compatibility.
  */
 void pytsk_fetch_error(void) {{
+#if PY_VERSION_HEX >= 0x030C0000
+    PyObject *raised_exception = NULL;
+#else
     PyObject *exception_traceback = NULL;
     PyObject *exception_type = NULL;
     PyObject *exception_value = NULL;
+#endif
+    PyObject *exception_repr = NULL;
     PyObject *string_object = NULL;
     char *str_c = NULL;
     char *error_str = NULL;
@@ -628,12 +645,19 @@ void pytsk_fetch_error(void) {{
 #endif
 
     // Fetch the exception state and convert it to a string:
+#if PY_VERSION_HEX >= 0x030C0000
+    raised_exception = PyErr_GetRaisedException();
+    exception_repr = raised_exception;
+#else
     PyErr_Fetch(&exception_type, &exception_value, &exception_traceback);
+    exception_repr = exception_value;
+#endif
 
-    /* exception_value can be NULL when the original exception was
-     * raised via PyErr_SetNone(type) (e.g. KeyboardInterrupt).
+    /* NULL on the legacy path means PyErr_SetNone(type) raised without
+     * a value (e.g. KeyboardInterrupt); on the modern path means no
+     * exception was actually set.
      */
-    if(exception_value == NULL) {{
+    if(exception_repr == NULL) {{
         if(error_str != NULL) {{
             const char *placeholder = "Python exception raised without value";
             size_t placeholder_len = strlen(placeholder);
@@ -644,11 +668,15 @@ void pytsk_fetch_error(void) {{
             error_str[placeholder_len] = 0;
         }}
         *error_type = ERuntimeError;
+#if PY_VERSION_HEX >= 0x030C0000
+        PyErr_SetRaisedException(raised_exception);
+#else
         PyErr_Restore(exception_type, exception_value, exception_traceback);
+#endif
         return;
     }}
 
-    string_object = PyObject_Repr(exception_value);
+    string_object = PyObject_Repr(exception_repr);
 
 #if PY_MAJOR_VERSION >= 3
     if(string_object != NULL) {{
@@ -684,7 +712,11 @@ void pytsk_fetch_error(void) {{
         }}
         *error_type = ERuntimeError;
     }}
+#if PY_VERSION_HEX >= 0x030C0000
+    PyErr_SetRaisedException(raised_exception);
+#else
     PyErr_Restore(exception_type, exception_value, exception_traceback);
+#endif
 
 #if PY_MAJOR_VERSION >= 3
     if( utf8_string_object != NULL ) {{
@@ -883,6 +915,7 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
         out.write(
             "\n"
             "#ifdef __cplusplus\n"
+            "#include <atomic>\n"
             "extern \"C\" {\n"
             "#endif\n"
             "\n"
@@ -1016,10 +1049,10 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
             "\n"
             "    gil_state = PyGILState_Ensure();\n"
             "\n"
-            "    /* Reset class registry so reimport or subinterpreter import\n"
-            "     * repopulates from scratch and never overruns python_wrappers[].\n"
+            "    /* Relaxed: per-class registration's release fetch_add\n"
+            "     * carries the happens-before for any acquire-load reader.\n"
             "     */\n"
-            "    TOTAL_CCLASSES = 0;\n").format(**values_dict))
+            "    TOTAL_CCLASSES.store(0, std::memory_order_relaxed);\n").format(**values_dict))
 
         # The trick is to initialise the classes in order of their
         # inheritance. The following code will order initializations
@@ -3540,16 +3573,27 @@ class ProxiedMethod(Method):
             "Py_result", self.return_type.name, self, context="self")
         out.write("    {0:s}".format(return_type))
 
-        # For Wrapper return types the Python wrapper keeps the C object alive.
-        # Transfer ownership to the parent's python_object2 so the C pointer
-        # remains valid after this callback returns to libtsk.
+        # python_object2 keeps the returned Wrapper's C pointer alive
+        # after this callback returns to libtsk. Under free-threading,
+        # concurrent proxied callbacks would race the read-decref-write
+        # triple (double-decref of the old value, leak of the new).
+        # Py_BEGIN_CRITICAL_SECTION (3.13+) serializes the swap; under
+        # the GIL on older versions the original serialization still holds.
         if isinstance(self.return_type, Wrapper) and not isinstance(
                 self.return_type, (StructWrapper, PointerStructWrapper)):
             out.write(
                 "    if(Py_result != NULL) {\n"
-                "        PyObject *old = ((Gen_wrapper) ((Object) self)->extension)->python_object2;\n"
+                "        PyObject *extension = (PyObject *) ((Object) self)->extension;\n"
+                "        PyObject *old = NULL;\n"
+                "#if PY_VERSION_HEX >= 0x030D0000\n"
+                "        Py_BEGIN_CRITICAL_SECTION(extension);\n"
+                "#endif\n"
+                "        old = ((Gen_wrapper) extension)->python_object2;\n"
+                "        ((Gen_wrapper) extension)->python_object2 = Py_result;\n"
+                "#if PY_VERSION_HEX >= 0x030D0000\n"
+                "        Py_END_CRITICAL_SECTION();\n"
+                "#endif\n"
                 "        if(old != NULL) Py_DecRef(old);\n"
-                "        ((Gen_wrapper) ((Object) self)->extension)->python_object2 = Py_result;\n"
                 "        Py_result = NULL;\n"
                 "    }\n"
                 "    Py_DecRef(method_name);\n"
@@ -3815,17 +3859,23 @@ class ClassGenerator(object):
         values_dict = {
             "class_name": self.class_name}
 
+        # Release fetch_add publishes the entry: an acquire-load reader
+        # that sees the bumped count is guaranteed to see the writes above.
         result = (
-            "python_wrappers[TOTAL_CCLASSES].class_ref = (Object)&__{class_name:s};\n"
-            "python_wrappers[TOTAL_CCLASSES].python_type = &{class_name:s}_Type;\n").format(**values_dict)
+            "{{\n"
+            "    int idx = TOTAL_CCLASSES.load(std::memory_order_relaxed);\n"
+            "    python_wrappers[idx].class_ref = (Object)&__{class_name:s};\n"
+            "    python_wrappers[idx].python_type = &{class_name:s}_Type;\n").format(**values_dict)
 
         func_name = "py{class_name:s}_initialize_proxies".format(**values_dict)
         if func_name in self.module.function_definitions:
             result += (
-                "python_wrappers[TOTAL_CCLASSES].initialize_proxies = (void (*)(Gen_wrapper, void *)) &{0:s};\n").format(
+                "    python_wrappers[idx].initialize_proxies = (void (*)(Gen_wrapper, void *)) &{0:s};\n").format(
                 func_name)
 
-        result += "TOTAL_CCLASSES++;\n"
+        result += (
+            "    (void) TOTAL_CCLASSES.fetch_add(1, std::memory_order_release);\n"
+            "}\n")
         return result
 
     def PyGetSetDef(self, out):

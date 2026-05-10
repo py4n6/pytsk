@@ -149,6 +149,7 @@ static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type) {
 
 uint64_t Img_Info_read(Img_Info self, TSK_OFF_T off, OUT char *buf, size_t len) {
     ssize_t read_count = 0;
+    int is_open = 0;
 
     if(self == NULL) {
         RaiseError(EInvalidParameter, "Invalid parameter: self.");
@@ -162,20 +163,20 @@ uint64_t Img_Info_read(Img_Info self, TSK_OFF_T off, OUT char *buf, size_t len) 
         RaiseError(EInvalidParameter, "Invalid parameter: buf.");
         return 0;
     }
-    /* Take state_lock around the open-check and the read so a parallel
-     * Img_Info_close cannot flip img_is_open mid-read and tear down
-     * libtsk image state under us. tsk_img_read internally takes the
-     * libtsk cache_lock, so we acquire state_lock first and then
-     * cache_lock inside libtsk -- a fixed order that avoids deadlock
-     * since close() never touches cache_lock.
+    /* Snapshot under state_lock then release before tsk_img_read.
+     * tsk_lock_t is non-recursive: for internal images tsk_img_read can
+     * call back into Python via IMG_INFO_read, and any path that re-enters
+     * Img_Info_read self-deadlocks. Holding it across the callback also
+     * inverts lock order with any Python lock the callback takes.
      */
     if(self->state_lock_initialized != 0) {
         tsk_take_lock(&self->state_lock);
     }
-    if(self->img_is_open == 0) {
-        if(self->state_lock_initialized != 0) {
-            tsk_release_lock(&self->state_lock);
-        }
+    is_open = self->img_is_open;
+    if(self->state_lock_initialized != 0) {
+        tsk_release_lock(&self->state_lock);
+    }
+    if(is_open == 0) {
         RaiseError(EIOError, "Invalid Img_Info not opened.");
         return 0;
     }
@@ -187,10 +188,6 @@ uint64_t Img_Info_read(Img_Info self, TSK_OFF_T off, OUT char *buf, size_t len) 
      * "assumes we are under a lock" contract.
      */
     read_count = tsk_img_read((TSK_IMG_INFO *) self->img, off, buf, len);
-
-    if(self->state_lock_initialized != 0) {
-        tsk_release_lock(&self->state_lock);
-    }
 
     if(read_count < 0) {
         RaiseError(EIOError, "Unable to read image: %s", safe_tsk_error_get());
