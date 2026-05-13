@@ -166,7 +166,6 @@ class SourceUpdater:
                 ["git", "checkout", f"tags/sleuthkit-{self.SLEUTHKIT_GIT_TAG:s}"],
                 cwd="sleuthkit",
             )
-
             self._apply_patches()
 
         if sys.platform == "win32":
@@ -185,7 +184,7 @@ class SourceUpdater:
                             "#define _TSK_INCS_H",
                             "#include <unistd.h>",
                             "#ifndef __STDC_FORMAT_MACROS",
-                            "#define  __STDC_FORMAT_MACROS",
+                            "#define __STDC_FORMAT_MACROS",
                             "#endif",
                             "#include <inttypes.h>",
                             "#include <sys/param.h>",
@@ -197,8 +196,7 @@ class SourceUpdater:
         else:
             subprocess.check_call(["./bootstrap"], cwd="sleuthkit")
 
-            # We want to build as much as possible self contained Python
-            # binding.
+            # We want to build as much as possible self contained Python binding.
             command = [
                 "sh",
                 "configure",
