@@ -26,21 +26,14 @@ SLEUTHKIT_PATH: A path to the locally build sleuthkit source tree. If not
 
 """
 
-from __future__ import print_function
-
-import copy
 import glob
-import re
 import os
 import subprocess
 import sys
-import time
 
-from setuptools import setup, Command, Extension
+from setuptools import setup, Extension
 from setuptools.command.build_ext import build_ext
 from setuptools.command.sdist import sdist
-
-import distutils.ccompiler
 
 from distutils import log
 from distutils.ccompiler import new_compiler
@@ -236,140 +229,6 @@ class SDistCommand(sdist):
     sdist.run(self)
 
 
-class UpdateCommand(Command):
-  """Update sleuthkit source.
-
-  This is normally only run by packagers to make a new release.
-  """
-  _SLEUTHKIT_GIT_TAG = "4.15.0"
-
-  version = time.strftime("%Y%m%d")
-
-  timezone_minutes, _ = divmod(time.timezone, 60)
-  timezone_hours, timezone_minutes = divmod(timezone_minutes, 60)
-
-  # If timezone_hours is -1 %02d will format as -1 instead of -01
-  # hence we detect the sign and force a leading zero.
-  if timezone_hours < 0:
-    timezone_string = "-%02d%02d" % (-timezone_hours, timezone_minutes)
-  else:
-    timezone_string = "+%02d%02d" % (timezone_hours, timezone_minutes)
-
-  version_pkg = "%s %s" % (
-      time.strftime("%a, %d %b %Y %H:%M:%S"), timezone_string)
-
-  user_options = [("use-head", None, (
-      "Use the latest version of Sleuthkit checked into git (HEAD) instead of "
-      "tag: {0:s}".format(_SLEUTHKIT_GIT_TAG)))]
-
-  def initialize_options(self):
-    self.use_head = False
-
-  def finalize_options(self):
-    self.use_head = bool(self.use_head)
-
-  files = {
-      "sleuthkit/Makefile.am": [
-          ("SUBDIRS = .+", "SUBDIRS = tsk"),
-      ],
-      "class_parser.py": [
-          ('VERSION = "[^"]+"', 'VERSION = "%s"' % version),
-      ],
-      "dpkg/changelog": [
-          (r"pytsk3 \([^\)]+\)", "pytsk3 (%s-1)" % version),
-          ("(<[^>]+>).+", r"\1  %s" % version_pkg),
-      ],
-  }
-
-  def patch_sleuthkit(self):
-    """Applies patches to the SleuthKit source code."""
-    for filename, rules in iter(self.files.items()):
-      filename = os.path.join(*filename.split("/"))
-
-      with open(filename, "r") as file_object:
-        data = file_object.read()
-
-      for search, replace in rules:
-        data = re.sub(search, replace, data)
-
-      with open(filename, "w") as fd:
-        fd.write(data)
-
-    patch_files = [
-        "sleuthkit-{0:s}-configure.ac".format(self._SLEUTHKIT_GIT_TAG)]
-
-    for patch_file in patch_files:
-      patch_file = os.path.join("patches", patch_file)
-      if not os.path.exists(patch_file):
-        print("No such patch file: {0:s}".format(patch_file))
-        continue
-
-      patch_file = os.path.join("..", patch_file)
-      print("Applying patch file: {0:s}".format(patch_file))
-      subprocess.check_call(["git", "apply", patch_file], cwd="sleuthkit")
-
-  def run(self):
-    subprocess.check_call(["git", "stash"], cwd="sleuthkit")
-
-    subprocess.check_call(["git", "submodule", "init"])
-    subprocess.check_call(["git", "submodule", "update"])
-
-    print("Updating sleuthkit")
-    subprocess.check_call(["git", "reset", "--hard"], cwd="sleuthkit")
-    subprocess.check_call(["git", "clean", "-x", "-f", "-d"], cwd="sleuthkit")
-    subprocess.check_call(["git", "checkout", "main"], cwd="sleuthkit")
-    subprocess.check_call(["git", "pull"], cwd="sleuthkit")
-    if self.use_head:
-      print("Pulling from HEAD")
-    else:
-      print("Pulling from tag: {0:s}".format(self._SLEUTHKIT_GIT_TAG))
-      subprocess.check_call(["git", "fetch", "--force", "--tags"], cwd="sleuthkit")
-      git_tag_path = "tags/sleuthkit-{0:s}".format(self._SLEUTHKIT_GIT_TAG)
-      subprocess.check_call(["git", "checkout", git_tag_path], cwd="sleuthkit")
-
-      self.patch_sleuthkit()
-
-    files = [
-        os.path.join('sleuthkit', 'win32', 'PostgreSQL_CRT', 'win32',
-                     'msvcr120.dll'),
-        os.path.join('sleuthkit', 'win32', 'PostgreSQL_CRT', 'win64',
-                     'msvcr120.dll'),
-    ]
-
-    for file in files:
-      print("Removing: {0:s}".format(file))
-      os.remove(file)
-
-    compiler_type = distutils.ccompiler.get_default_compiler()
-    if compiler_type != "msvc":
-      subprocess.check_call(["./bootstrap"], cwd="sleuthkit")
-
-    # Now derive the version based on the date.
-    with open("setup.cfg", "r", encoding="utf-8") as file_object:
-      setup_cfg_lines = file_object.readlines()
-
-    with open("setup.cfg", "w", encoding="utf-8") as file_object:
-      for line in setup_cfg_lines:
-        if line.startswith("version = "):
-          line = "version = {0:s}\n".format(self.version)
-        file_object.write(line)
-
-    libtsk_path = os.path.join("sleuthkit", "tsk")
-
-    # Generate the Python binding code (pytsk3.cpp).
-    libtsk_header_files = [
-        os.path.join(libtsk_path, "libtsk.h"),
-        os.path.join(libtsk_path, "base", "tsk_base.h"),
-        os.path.join(libtsk_path, "fs", "tsk_fs.h"),
-        os.path.join(libtsk_path, "img", "tsk_img.h"),
-        os.path.join(libtsk_path, "vs", "tsk_vs.h"),
-        "tsk3.h"]
-
-    print("Generating bindings...")
-    generate_bindings.generate_bindings(
-        "pytsk3.cpp", libtsk_header_files, initialization="tsk_init();")
-
-
 class ProjectBuilder:
   """Class to help build the project."""
 
@@ -417,8 +276,7 @@ class ProjectBuilder:
     setup_args = dict(
         cmdclass={
             "build_ext": BuildExtCommand,
-            "sdist": SDistCommand,
-            "update": UpdateCommand},
+            "sdist": SDistCommand},
         ext_modules=ext_modules)
 
     setup(**setup_args)

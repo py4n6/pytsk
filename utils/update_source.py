@@ -1,0 +1,201 @@
+#!/usr/bin/env python3
+#
+# Copyright 2010, Michael Cohen <scudette@gmail.com>.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+"""Script to update source."""
+
+import argparse
+import re
+import os
+import subprocess
+import sys
+import time
+
+# Update PYTHONPATH.
+sys.path.insert(0, ".")
+
+import generate_bindings
+
+
+class SourceUpdater:
+    """Updates the source."""
+
+    SLEUTHKIT_GIT_TAG = "4.15.0"
+
+    def __init__(self, use_head=False):
+        """Initializes the source updater.
+
+        Args:
+          use_head (bool): Value to indicate if git HEAD should be used instead of
+              the predefined SleuthKit git tag (SLEUTHKIT_GIT_TAG).
+        """
+        super().__init__()
+        self.patch_files = [
+            f"sleuthkit-{self.SLEUTHKIT_GIT_TAG:s}-configure.ac",
+            f"sleuthkit-{self.SLEUTHKIT_GIT_TAG:s}-Makefile.am",
+        ]
+        self.use_head = use_head
+        self.version = time.strftime("%Y%m%d")
+
+    def _apply_patches(self):
+        """Applies patches."""
+        for patch_file in self.patch_files:
+            patch_file = os.path.join("patches", patch_file)
+            if not os.path.exists(patch_file):
+                print(f"No such patch file: {patch_file:s}")
+                continue
+
+            print(f"Applying patch file: {patch_file:s}")
+            subprocess.check_call(
+                ["git", "apply", os.path.join("..", patch_file)], cwd="sleuthkit"
+            )
+
+    def _generate_module(self):
+        """Generates the Python module."""
+        libtsk_path = os.path.join("sleuthkit", "tsk")
+
+        # Generate the Python binding code (pytsk3.cpp).
+        libtsk_header_files = [
+            os.path.join(libtsk_path, "libtsk.h"),
+            os.path.join(libtsk_path, "base", "tsk_base.h"),
+            os.path.join(libtsk_path, "fs", "tsk_fs.h"),
+            os.path.join(libtsk_path, "img", "tsk_img.h"),
+            os.path.join(libtsk_path, "vs", "tsk_vs.h"),
+            "tsk3.h",
+        ]
+
+        print("Generating pytsk3.cpp")
+        generate_bindings.generate_bindings(
+            "pytsk3.cpp", libtsk_header_files, initialization="tsk_init();"
+        )
+
+    def _remove_files(self):
+        """Remove files."""
+        files_to_remove = [
+            os.path.join(
+                "sleuthkit", "win32", "PostgreSQL_CRT", "win32", "msvcr120.dll"
+            ),
+            os.path.join(
+                "sleuthkit", "win32", "PostgreSQL_CRT", "win64", "msvcr120.dll"
+            ),
+        ]
+        for path in files_to_remove:
+            print(f"Removing: {path:s}")
+            os.remove(path)
+
+    def _update_files(self):
+        """Updates files."""
+        dpkg_version = time.strftime("%a, %d %b %Y %H:%M:%S")
+
+        timezone_minutes, _ = divmod(time.timezone, 60)
+        timezone_hours, timezone_minutes = divmod(timezone_minutes, 60)
+
+        # If timezone_hours is -1 %02d will format as -1 instead of -01
+        # hence we detect the sign and force a leading zero.
+        if timezone_hours < 0:
+            timezone_string = "-%02d%02d" % (-timezone_hours, timezone_minutes)
+        else:
+            timezone_string = "+%02d%02d" % (timezone_hours, timezone_minutes)
+
+        files = {
+            "class_parser.py": [
+                ('VERSION = "[^"]+"', f'VERSION = "{self.version:s}"'),
+            ],
+            "dpkg/changelog": [
+                (r"pytsk3 \([^\)]+\)", f"pytsk3 ({self.version:s}-1)"),
+                ("(<[^>]+>).+", f"\\1  {dpkg_version:s} {timezone_string:s}"),
+            ],
+            "setup.cfg": [
+                ('version = "[^"]+"', f'version = "{self.version:s}"'),
+            ],
+        }
+        for filename, rules in files.items():
+            filename = os.path.join(*filename.split("/"))
+
+            with open(filename, "r") as file_object:
+                data = file_object.read()
+
+            for search, replace in rules:
+                data = re.sub(search, replace, data)
+
+            with open(filename, "w") as file_object:
+                file_object.write(data)
+
+    def run(self):
+        """Updates the source."""
+        subprocess.check_call(["git", "stash"], cwd="sleuthkit")
+
+        subprocess.check_call(["git", "submodule", "init"])
+        subprocess.check_call(["git", "submodule", "update"])
+
+        if self.use_head:
+            print("Updating SleuthKit from HEAD")
+        else:
+            print(f"Updating SleuthKit from tag: {self.SLEUTHKIT_GIT_TAG:s}")
+
+        subprocess.check_call(["git", "reset", "--hard"], cwd="sleuthkit")
+        subprocess.check_call(["git", "clean", "-x", "-f", "-d"], cwd="sleuthkit")
+        subprocess.check_call(["git", "checkout", "main"], cwd="sleuthkit")
+        subprocess.check_call(["git", "pull"], cwd="sleuthkit")
+
+        if not self.use_head:
+            subprocess.check_call(
+                ["git", "fetch", "--force", "--tags"], cwd="sleuthkit"
+            )
+            subprocess.check_call(
+                ["git", "checkout", f"tags/sleuthkit-{self.SLEUTHKIT_GIT_TAG:s}"],
+                cwd="sleuthkit",
+            )
+
+            self._apply_patches()
+
+        if sys.platform != "win32":
+            subprocess.check_call(["./bootstrap"], cwd="sleuthkit")
+
+        self._remove_files()
+        self._update_files()
+
+        self._generate_module()
+
+
+def Main():
+    """The main program function.
+
+    Returns:
+      int: exit code that is provided to sys.exit().
+    """
+    argument_parser = argparse.ArgumentParser(description=("Updates the source."))
+
+    argument_parser.add_argument(
+        "--use-head",
+        "--use_head",
+        dest="use_head",
+        action="store_true",
+        default=False,
+        help=(
+            f"Use the latest version of Sleuthkit checked into git (HEAD) "
+            "instead of tag: {SourceUpdater.SLEUTHKIT_GIT_TAG:s}"
+        ),
+    )
+    options = argument_parser.parse_args()
+
+    updater = SourceUpdater(use_head=options.use_head)
+
+    updater.run()
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(Main())

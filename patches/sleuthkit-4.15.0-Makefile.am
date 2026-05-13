@@ -1,0 +1,13 @@
+diff --git a/Makefile.am b/Makefile.am
+index 356be7d9b..581780c71 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -28,7 +28,7 @@ else
+   JAVA_CASEUCO=
+ endif
+ 
+-SUBDIRS = tsk tools tests samples man $(UNIT_TESTS) $(JAVA_BINDINGS) $(JAVA_CASEUCO)
++SUBDIRS = tsk
+ 
+ nobase_include_HEADERS = tsk/libtsk.h tsk/tsk_incs.h \
+     tsk/base/tsk_base.h tsk/base/tsk_os.h \
