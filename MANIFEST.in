@@ -1,4 +1,7 @@
 include AUTHORS
+include *.c
+include *.h
+include *.py
 include utils/update_source.py
 recursive-include dpkg *
 recursive-include patches *
