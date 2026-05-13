@@ -22,13 +22,12 @@ import sys
 import class_parser
 
 
-def generate_bindings(target, source_files, env=None, initialization="",
-                      free="talloc_free"):
-    """ Generated the Python bindings """
+def generate_bindings(
+    target, source_files, env=None, initialization="", free="talloc_free"
+):
+    """Generated the Python bindings"""
     module_name = os.path.splitext(os.path.basename(target))[0]
-    print("Generating Python bindings for module %s from %s" % (
-        module_name, source_files))
-
+    print(f"Generating Python bindings {module_name:s} from {source_files!s}")
     env = env or dict(V=0)
 
     # Sets the free function
@@ -41,29 +40,24 @@ def generate_bindings(target, source_files, env=None, initialization="",
     p.write(fd)
     fd.close()
 
+
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: ./generate_bindings.py path_to_source")
         sys.exit(1)
 
     tsk_source_path = sys.argv[1]
-    include_base = "tsk3"
 
-    if not os.path.exists(os.path.join(tsk_source_path, include_base)):
-        # sleuthkit 4.1 changed the names of the include headers.
-        include_base = "tsk"
-
-    if not os.path.exists(os.path.join(tsk_source_path, include_base)):
-        print("Unable to find sleuthkit include headers.")
+    if not os.path.exists(os.path.join(tsk_source_path, "tsk")):
+        print("Unable to find SleuthKit include headers.")
         sys.exit(1)
 
     sources = [
-        os.path.join(tsk_source_path, include_base, "libtsk.h"),
-        os.path.join(tsk_source_path, include_base, "base", "tsk_base.h"),
-        os.path.join(tsk_source_path, include_base, "fs", "tsk_fs.h"),
-        os.path.join(tsk_source_path, include_base, "img", "tsk_img.h"),
-        os.path.join(tsk_source_path, include_base, "vs", "tsk_vs.h"),
+        os.path.join(tsk_source_path, "tsk", "libtsk.h"),
+        os.path.join(tsk_source_path, "tsk", "base", "tsk_base.h"),
+        os.path.join(tsk_source_path, "tsk", "fs", "tsk_fs.h"),
+        os.path.join(tsk_source_path, "tsk", "img", "tsk_img.h"),
+        os.path.join(tsk_source_path, "tsk", "vs", "tsk_vs.h"),
         "tsk3.h",
     ]
-
     generate_bindings("pytsk3.c", sources, initialization="tsk_init();")
