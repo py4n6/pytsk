@@ -48,16 +48,16 @@ if __name__ == "__main__":
 
     tsk_source_path = sys.argv[1]
 
-    if not os.path.exists(os.path.join(tsk_source_path, "tsk3")):
+    if not os.path.exists(os.path.join(tsk_source_path, "tsk")):
         print("Unable to find SleuthKit include headers.")
         sys.exit(1)
 
     sources = [
-        os.path.join(tsk_source_path, "tsk3", "libtsk.h"),
-        os.path.join(tsk_source_path, "tsk3", "base", "tsk_base.h"),
-        os.path.join(tsk_source_path, "tsk3", "fs", "tsk_fs.h"),
-        os.path.join(tsk_source_path, "tsk3", "img", "tsk_img.h"),
-        os.path.join(tsk_source_path, "tsk3", "vs", "tsk_vs.h"),
+        os.path.join(tsk_source_path, "tsk", "libtsk.h"),
+        os.path.join(tsk_source_path, "tsk", "base", "tsk_base.h"),
+        os.path.join(tsk_source_path, "tsk", "fs", "tsk_fs.h"),
+        os.path.join(tsk_source_path, "tsk", "img", "tsk_img.h"),
+        os.path.join(tsk_source_path, "tsk", "vs", "tsk_vs.h"),
         "tsk3.h",
     ]
     generate_bindings("pytsk3.c", sources, initialization="tsk_init();")

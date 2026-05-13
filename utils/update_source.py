@@ -64,15 +64,13 @@ class SourceUpdater:
 
     def _generate_module(self):
         """Generates the Python module."""
-        libtsk_path = os.path.join("sleuthkit", "tsk")
-
         # Generate the Python binding code (pytsk3.cpp).
         libtsk_header_files = [
-            os.path.join(libtsk_path, "libtsk.h"),
-            os.path.join(libtsk_path, "base", "tsk_base.h"),
-            os.path.join(libtsk_path, "fs", "tsk_fs.h"),
-            os.path.join(libtsk_path, "img", "tsk_img.h"),
-            os.path.join(libtsk_path, "vs", "tsk_vs.h"),
+            os.path.join("sleuthkit", "tsk", "libtsk.h"),
+            os.path.join("sleuthkit", "tsk", "base", "tsk_base.h"),
+            os.path.join("sleuthkit", "tsk", "fs", "tsk_fs.h"),
+            os.path.join("sleuthkit", "tsk", "img", "tsk_img.h"),
+            os.path.join("sleuthkit", "tsk", "vs", "tsk_vs.h"),
             "tsk3.h",
         ]
 
@@ -162,10 +160,11 @@ class SourceUpdater:
             self._apply_patches()
 
         if sys.platform == "win32":
-            shutil.copy(
-                os.path.join("sleuthkit", "tsk", "libtsk.h.in"),
-                os.path.join("sleuthkit", "tsk", "libtsk.h"),
-            )
+            files_to_generate = [
+                os.path.join("sleuthkit", "tsk", "tsk_config.h"),
+            ]
+            for path in files_to_generate:
+                shutil.copy(f"{path:s}.in", path)
         else:
             subprocess.check_call(["./bootstrap"], cwd="sleuthkit")
 
