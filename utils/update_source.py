@@ -130,7 +130,7 @@ class SourceUpdater:
                 (r"pytsk3 \([^\)]+\)", f"pytsk3 ({self.version:s}-1)"),
                 ("(<[^>]+>).+", f"\\1  {dpkg_version:s} {timezone_string:s}"),
             ],
-            "setup.cfg": [
+            "pyproject.toml": [
                 ('version = "[^"]+"', f'version = "{self.version:s}"'),
             ],
         }
