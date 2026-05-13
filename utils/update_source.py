@@ -63,9 +63,10 @@ class SourceUpdater:
             )
 
     def _generate_module(self):
-        """Generates the Python module."""
-        # Generate the Python binding code (pytsk3.cpp).
-        libtsk_header_files = [
+        """Generates the Python module (pytsk3.cpp)."""
+        print("Generating pytsk3.cpp")
+
+        header_files = [
             os.path.join("sleuthkit", "tsk", "libtsk.h"),
             os.path.join("sleuthkit", "tsk", "base", "tsk_base.h"),
             os.path.join("sleuthkit", "tsk", "fs", "tsk_fs.h"),
@@ -73,10 +74,8 @@ class SourceUpdater:
             os.path.join("sleuthkit", "tsk", "vs", "tsk_vs.h"),
             "tsk3.h",
         ]
-
-        print("Generating pytsk3.cpp")
         generate_bindings.generate_bindings(
-            "pytsk3.cpp", libtsk_header_files, initialization="tsk_init();"
+            "pytsk3.cpp", header_files, initialization="tsk_init();"
         )
 
     def _print_configure_summary(self, output):
@@ -176,6 +175,25 @@ class SourceUpdater:
             ]
             for path in files_to_generate:
                 shutil.copy(f"{path:s}.in", path)
+
+            path = os.path.join("sleuthkit", "tsk", "tsk_incs.h")
+            with open(path, "w") as file_object:
+                file_object.write(
+                    "\n".join(
+                        [
+                            "#ifndef _TSK_INCS_H",
+                            "#define _TSK_INCS_H",
+                            "#include <unistd.h>",
+                            "#ifndef __STDC_FORMAT_MACROS",
+                            "#define  __STDC_FORMAT_MACROS",
+                            "#endif",
+                            "#include <inttypes.h>",
+                            "#include <sys/param.h>",
+                            "#endif",
+                            "",
+                        ]
+                    )
+                )
         else:
             subprocess.check_call(["./bootstrap"], cwd="sleuthkit")
 
@@ -194,7 +212,6 @@ class SourceUpdater:
                 "--without-libvslvm",
                 "--without-zlib",
             ]
-
             output = subprocess.check_output(command, cwd="sleuthkit")
             self._print_configure_summary(output)
 
@@ -220,7 +237,7 @@ def Main():
         default=False,
         help=(
             f"Use the latest version of Sleuthkit checked into git (HEAD) "
-            "instead of tag: {SourceUpdater.SLEUTHKIT_GIT_TAG:s}"
+            f"instead of tag: {SourceUpdater.SLEUTHKIT_GIT_TAG:s}"
         ),
     )
     options = argument_parser.parse_args()
