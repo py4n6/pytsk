@@ -146,7 +146,7 @@ class BuildExtCommand(build_ext):
     Args:
       compiler: distutils compiler object.
     """
-    define_macros = [("HAVE_TSK_LIBTSK_H", "")]
+    define_macros = []
 
     if compiler.compiler_type == "msvc":
       define_macros.extend([
