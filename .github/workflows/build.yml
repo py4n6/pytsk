@@ -24,7 +24,7 @@ jobs:
         python3 -m pip install setuptools
     - name: Build and test Python module
       run: |
-        python setup.py update
+        ./utils/update_source.py
         export CXXFLAGS="-std=c++14"
         python setup.py build
         tox -e${{ matrix.toxenv }}
@@ -56,7 +56,7 @@ jobs:
         python3 -m pip install tox
     - name: Build and test Python module
       run: |
-        python setup.py update
+        ./utils/update_source.py
         python setup.py build
         tox -e${{ matrix.toxenv }}
   build_windows:
@@ -76,7 +76,7 @@ jobs:
         python3 -m pip install setuptools
     - name: Build Python module
       run: |
-        python setup.py update
+        ./utils/update_source.py
         python setup.py build
         python setup.py install
     - name: Test Python module
