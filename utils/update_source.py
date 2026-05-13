@@ -79,6 +79,17 @@ class SourceUpdater:
             "pytsk3.cpp", libtsk_header_files, initialization="tsk_init();"
         )
 
+    def _print_configure_summary(self, output):
+        """Prints the configure summary."""
+        print_line = False
+        for line in output.split("\n"):
+            line = line.rstrip()
+            if line == "configure:":
+                print_line = True
+
+            if print_line:
+                print(line)
+
     def _remove_files(self):
         """Remove files."""
         files_to_remove = [
@@ -167,6 +178,17 @@ class SourceUpdater:
                 shutil.copy(f"{path:s}.in", path)
         else:
             subprocess.check_call(["./bootstrap"], cwd="sleuthkit")
+
+            # We want to build as much as possible self contained Python
+            # binding.
+            command = [
+                "sh", "configure", "--disable-java", "--disable-multithreading",
+                "--without-afflib", "--without-libbfio", "--without-libewf",
+                "--without-libvhdi", "--without-libvmdk", "--without-libvslvm",
+                "--without-zlib"]
+
+            output = subprocess.check_output(command, cwd="sleuthkit")
+            self._print_configure_summary(output)
 
         self._remove_files()
         self._update_files()
