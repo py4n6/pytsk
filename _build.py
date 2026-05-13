@@ -16,15 +16,16 @@
 
 import glob
 import os
+import shlex
 import subprocess
 import sys
 
 from setuptools import Extension
+from setuptools import errors
+from setuptools._distutils import log
+from setuptools._distutils._modified import newer_group
 from setuptools._distutils.ccompiler import new_compiler
 from setuptools.command.build_ext import build_ext
-
-from distutils import log
-from distutils.dep_util import newer_group
 
 
 class custom_build_ext(build_ext):
@@ -45,19 +46,6 @@ class custom_build_ext(build_ext):
             ]
 
         return [("HAVE_CONFIG_H", "1"), ("LOCALEDIR", '"/usr/share/locale"')]
-
-    def _get_extra_compile_args(self, compiler_type):
-        """Determine the extra compile arguments."""
-        if compiler_type == "msvc":
-            arguments = ["/EHsc"]
-        else:
-            arguments = ["-std=c++14"]
-
-        if compiler_type == "mingw32":
-            # Statically link libgcc and libstdc++
-            arguments.extend(["-static-libgcc", "-static-libstdc++"])
-
-        return arguments
 
     def _get_include_directories(self):
         """Determine the include directories."""
@@ -95,13 +83,33 @@ class custom_build_ext(build_ext):
     def _print_configure_summary(self, output):
         """Prints the configure summary."""
         print_line = False
-        for line in output.decode("utf8").split("\n"):
+        for line in output.split("\n"):
             line = line.rstrip()
             if line == "configure:":
                 print_line = True
 
             if print_line:
                 print(line)
+
+    def _run_shell_command(self, command):
+        """Runs a command."""
+        arguments = shlex.split(f"sh {command:s}")
+        process = subprocess.Popen(
+            arguments,
+            cwd="sleuthkit",
+            stderr=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            universal_newlines=True,
+        )
+        if not process:
+            raise RuntimeError(f"Running: {command:s} failed.")
+
+        output, error = process.communicate()
+        if process.returncode != 0:
+            error = "\n".join(error.split("\n")[-5:])
+            raise RuntimeError(f"Running: {command:s} failed with error:\n{error:s}.")
+
+        return output
 
     def initialize_options(self):
         """Initialize build options."""
@@ -116,12 +124,91 @@ class custom_build_ext(build_ext):
             Extension(
                 "pytsk3",
                 define_macros=self._get_define_macros(compiler.compiler_type),
-                extra_compile_args=self._get_extra_compile_args(compiler.compiler_type),
                 include_dirs=self._get_include_directories(),
                 libraries=self._get_libraries(compiler.compiler_type),
                 sources=self._get_sources(),
             )
         ]
+
+    # Override build_extension to not have clang on Mac OS fail with:
+    # invalid argument '-std=c++14' not allowed with 'C'
+    def build_extension(self, extension):
+        """Builds the extension."""
+        sources = extension.sources
+        if sources is None or not isinstance(sources, (list, tuple)):
+            raise SetupError(
+                f"in 'ext_modules' option (extension '{extension.name:s}'), 'sources' "
+                f"must be present and must be a list of source filenames"
+            )
+        sources = sorted(sources)
+
+        extension_path = self.get_ext_fullpath(extension.name)
+        depends = extension.sources + extension.depends
+        if not (self.force or newer_group(depends, extension_path, "newer")):
+            log.debug("skipping '%s' extension (up-to-date)", extension.name)
+            return
+
+        log.info("building '%s' extension", extension.name)
+
+        c_sources = []
+        cxx_sources = []
+        for source in extension.sources:
+            if source.endswith(".c"):
+                c_sources.append(source)
+            else:
+                cxx_sources.append(source)
+
+        objects = []
+        for lang, sources in (("c", c_sources), ("c++", cxx_sources)):
+            extra_args = extension.extra_compile_args or []
+            if lang == "c++":
+                if self.compiler.compiler_type == "msvc":
+                    extra_args.append("/EHsc")
+                else:
+                    extra_args.append("-std=c++14")
+
+            macros = extension.define_macros[:]
+            for undef in extension.undef_macros:
+                macros.append((undef,))
+
+            compiled_objects = self.compiler.compile(
+                sources,
+                output_dir=self.build_temp,
+                macros=macros,
+                include_dirs=extension.include_dirs,
+                debug=self.debug,
+                extra_postargs=extra_args,
+                depends=extension.depends,
+            )
+            objects.extend(compiled_objects)
+
+        self._built_objects = objects[:]
+        if extension.extra_objects:
+            objects.extend(extension.extra_objects)
+
+        extra_args = extension.extra_link_args or []
+        # When MinGW32 is used statically link libgcc and libstdc++.
+        if self.compiler.compiler_type == "mingw32":
+            extra_args.extend(["-static-libgcc", "-static-libstdc++"])
+
+        if extension.extra_objects:
+            objects.extend(extension.extra_objects)
+        extra_args = extension.extra_link_args or []
+
+        language = extension.language or self.compiler.detect_language(sources)
+
+        self.compiler.link_shared_object(
+            objects,
+            extension_path,
+            libraries=self.get_libraries(extension),
+            library_dirs=extension.library_dirs,
+            runtime_library_dirs=extension.runtime_library_dirs,
+            extra_postargs=extra_args,
+            export_symbols=self.get_export_symbols(extension),
+            debug=self.debug,
+            build_temp=self.build_temp,
+            target_lang=language,
+        )
 
     def run(self):
         if not os.access("pytsk3.cpp", os.R_OK):
@@ -130,20 +217,22 @@ class custom_build_ext(build_ext):
         compiler = new_compiler(compiler=self.compiler)
         if compiler.compiler_type != "msvc":
             # We want to build as much as possible self contained Python binding.
-            command = [
-                "sh",
-                "configure",
-                "--disable-java",
-                "--disable-multithreading",
-                "--without-afflib",
-                "--without-libbfio",
-                "--without-libewf",
-                "--without-libvhdi",
-                "--without-libvmdk",
-                "--without-libvslvm",
-                "--without-zlib",
-            ]
-            output = subprocess.check_output(command, cwd="sleuthkit")
+            output = self._run_shell_command(
+                " ".join(
+                    [
+                        "configure",
+                        "--disable-java",
+                        "--disable-multithreading",
+                        "--without-afflib",
+                        "--without-libbfio",
+                        "--without-libewf",
+                        "--without-libvhdi",
+                        "--without-libvmdk",
+                        "--without-libvslvm",
+                        "--without-zlib",
+                    ]
+                )
+            )
             self._print_configure_summary(output)
 
         super().run()

@@ -1,5 +1,4 @@
 include AUTHORS
-include *.c
 include *.h
 include *.py
 include utils/update_source.py
@@ -9,10 +8,6 @@ recursive-include sleuthkit *
 recursive-include talloc *
 recursive-include test_data *
 recursive-include tests *.py
-exclude .gitignore .gitmodules
-exclude *.pyc
-exclude .indent.pro
-exclude pylintrc
 exclude sleuthkit/.coderabbit.yaml
 exclude sleuthkit/.git
 exclude sleuthkit/.gitattributes
@@ -21,7 +16,6 @@ exclude sleuthkit/.travis.yml
 exclude sleuthkit/appveyor.yml
 exclude sleuthkit/ruleset.xml
 exclude sleuthkit/travis_install_libs.sh
-recursive-exclude .github *
 recursive-exclude sleuthkit *.Plo
 recursive-exclude sleuthkit/.github *
 recursive-exclude sleuthkit/autom4te.cache *
@@ -30,7 +24,6 @@ recursive-exclude sleuthkit/case-uco *
 recursive-exclude sleuthkit/db_diff *
 recursive-exclude sleuthkit/debian *
 recursive-exclude sleuthkit/docs *
-recursive-exclude sleuthkit/framework *
 recursive-exclude sleuthkit/licenses *
 recursive-exclude sleuthkit/man *
 recursive-exclude sleuthkit/packages *
