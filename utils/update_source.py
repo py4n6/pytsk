@@ -18,6 +18,7 @@
 import argparse
 import re
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -160,7 +161,12 @@ class SourceUpdater:
 
             self._apply_patches()
 
-        if sys.platform != "win32":
+        if sys.platform == "win32":
+            shutil.copy(
+                os.path.join("sleuthkit", "tsk", "libtsk.h.in"),
+                os.path.join("sleuthkit", "tsk", "libtsk.h"),
+            )
+        else:
             subprocess.check_call(["./bootstrap"], cwd="sleuthkit")
 
         self._remove_files()
