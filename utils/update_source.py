@@ -82,9 +82,9 @@ class SourceUpdater:
     def _print_configure_summary(self, output):
         """Prints the configure summary."""
         print_line = False
-        for line in output.split("\n"):
+        for line in output.split(b"\n"):
             line = line.rstrip()
-            if line == "configure:":
+            if line == b"configure:":
                 print_line = True
 
             if print_line:
@@ -182,10 +182,18 @@ class SourceUpdater:
             # We want to build as much as possible self contained Python
             # binding.
             command = [
-                "sh", "configure", "--disable-java", "--disable-multithreading",
-                "--without-afflib", "--without-libbfio", "--without-libewf",
-                "--without-libvhdi", "--without-libvmdk", "--without-libvslvm",
-                "--without-zlib"]
+                "sh",
+                "configure",
+                "--disable-java",
+                "--disable-multithreading",
+                "--without-afflib",
+                "--without-libbfio",
+                "--without-libewf",
+                "--without-libvhdi",
+                "--without-libvmdk",
+                "--without-libvslvm",
+                "--without-zlib",
+            ]
 
             output = subprocess.check_output(command, cwd="sleuthkit")
             self._print_configure_summary(output)
