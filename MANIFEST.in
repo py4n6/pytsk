@@ -1,29 +1,38 @@
-include AUTHORS LICENSE version.txt
-include *.c
+include AUTHORS
 include *.h
 include *.py
-exclude *.pyc
-exclude .git .gitignore .gitmodules
-exclude .travis.yml
-exclude API-CHANGES.txt config.log ruleset.xml setupDevRepos.py travis_build.sh
+include utils/update_source.py
 recursive-include dpkg *
 recursive-include patches *
 recursive-include sleuthkit *
+recursive-include talloc *
+recursive-include test_data *
+recursive-include tests *.py
+exclude sleuthkit/.coderabbit.yaml
+exclude sleuthkit/.git
+exclude sleuthkit/.gitattributes
+exclude sleuthkit/.gitignore
+exclude sleuthkit/.travis.yml
+exclude sleuthkit/appveyor.yml
+exclude sleuthkit/ruleset.xml
+exclude sleuthkit/travis_install_libs.sh
+recursive-exclude sleuthkit *.Plo
+recursive-exclude sleuthkit/.github *
 recursive-exclude sleuthkit/autom4te.cache *
 recursive-exclude sleuthkit/bindings *
+recursive-exclude sleuthkit/case-uco *
+recursive-exclude sleuthkit/db_diff *
 recursive-exclude sleuthkit/debian *
 recursive-exclude sleuthkit/docs *
-recursive-exclude sleuthkit/framework *
+recursive-exclude sleuthkit/licenses *
 recursive-exclude sleuthkit/man *
 recursive-exclude sleuthkit/packages *
 recursive-exclude sleuthkit/rejistry++ *
 recursive-exclude sleuthkit/release *
 recursive-exclude sleuthkit/samples *
+recursive-exclude sleuthkit/test *
 recursive-exclude sleuthkit/tests *
 recursive-exclude sleuthkit/tools *
 recursive-exclude sleuthkit/unit_tests *
 recursive-exclude sleuthkit/win32 *
 recursive-exclude sleuthkit/xcode *
-recursive-include talloc *
-recursive-include test_data *
-recursive-include travis *

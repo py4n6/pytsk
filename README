@@ -22,10 +22,10 @@ If you want to use the latest version of Sleuthkit that is checked into git
 
 python utils/update_source.py --use-head
 
-To build the bindings just use the standard Python setuptools:
+To build the bindings just use the standard Python build module:
 
-python setup.py build
-python setup.py install
+python -m build --wheel
+python -m pip install --no-index --find-links=dist pytsk3
 
 At the top level of the source tree.
 

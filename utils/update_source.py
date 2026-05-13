@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 #
 # Copyright 2010, Michael Cohen <scudette@gmail.com>.
+# Copyright 2012, 2026, Joachim Metz <joachim.metz@gmail.com>.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,7 +27,7 @@ import time
 # Update PYTHONPATH.
 sys.path.insert(0, ".")
 
-import generate_bindings
+import class_parser
 
 
 class SourceUpdater:
@@ -34,12 +35,14 @@ class SourceUpdater:
 
     SLEUTHKIT_GIT_TAG = "4.15.0"
 
-    def __init__(self, use_head=False):
+    def __init__(self, use_head=False, verbose=False):
         """Initializes the source updater.
 
         Args:
           use_head (bool): Value to indicate if git HEAD should be used instead of
               the predefined SleuthKit git tag (SLEUTHKIT_GIT_TAG).
+          verbose (bool): Value to indicate if the class parser should produce verbose
+              output.
         """
         super().__init__()
         self.patch_files = [
@@ -47,6 +50,7 @@ class SourceUpdater:
             f"sleuthkit-{self.SLEUTHKIT_GIT_TAG:s}-Makefile.am",
         ]
         self.use_head = use_head
+        self.verbose = verbose
         self.version = time.strftime("%Y%m%d")
 
     def _apply_patches(self):
@@ -74,9 +78,18 @@ class SourceUpdater:
             os.path.join("sleuthkit", "tsk", "vs", "tsk_vs.h"),
             "tsk3.h",
         ]
-        generate_bindings.generate_bindings(
-            "pytsk3.cpp", header_files, initialization="tsk_init();"
-        )
+        if self.verbose:
+          verbose = 1
+        else:
+          verbose = 0
+
+        class_parser.FREE = "talloc_free"
+        parser = class_parser.HeaderParser("pytsk3", verbose=verbose)
+        parser.module.init_string = "tsk_init();"
+        parser.parse_filenames(header_files)
+
+        with open("pytsk3.cpp", "w") as file_object:
+            parser.write(file_object)
 
     def _print_configure_summary(self, output):
         """Prints the configure summary."""
@@ -125,7 +138,7 @@ class SourceUpdater:
                 (r"pytsk3 \([^\)]+\)", f"pytsk3 ({self.version:s}-1)"),
                 ("(<[^>]+>).+", f"\\1  {dpkg_version:s} {timezone_string:s}"),
             ],
-            "setup.cfg": [
+            "pyproject.toml": [
                 ('version = "[^"]+"', f'version = "{self.version:s}"'),
             ],
         }
@@ -238,9 +251,19 @@ def Main():
             f"instead of tag: {SourceUpdater.SLEUTHKIT_GIT_TAG:s}"
         ),
     )
+    argument_parser.add_argument(
+        "-v",
+        "--verbose",
+        dest="verbose",
+        action="store_true",
+        default=False,
+        help=(
+            "Verbose output"
+        ),
+    )
     options = argument_parser.parse_args()
 
-    updater = SourceUpdater(use_head=options.use_head)
+    updater = SourceUpdater(use_head=options.use_head, verbose=options.verbose)
 
     updater.run()
 
