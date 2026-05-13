@@ -38,4 +38,11 @@ typedef _W64 int ssize_t;
 
 #endif /* defined( _MSC_VER ) */
 
+#define TALLOC_BUILD_VERSION_MAJOR 2
+#define TALLOC_BUILD_VERSION_MINOR 4
+#define TALLOC_BUILD_VERSION_RELEASE 4
+
+#define memset_s(dest, destsz, ch, count ) \
+	memset(dest, ch, count)
+
 #endif /* _REPLACE_H_ */
