@@ -35,12 +35,14 @@ class SourceUpdater:
 
     SLEUTHKIT_GIT_TAG = "4.15.0"
 
-    def __init__(self, use_head=False):
+    def __init__(self, use_head=False, verbose=False):
         """Initializes the source updater.
 
         Args:
           use_head (bool): Value to indicate if git HEAD should be used instead of
               the predefined SleuthKit git tag (SLEUTHKIT_GIT_TAG).
+          verbose (bool): Value to indicate if the class parser should produce verbose
+              output.
         """
         super().__init__()
         self.patch_files = [
@@ -48,6 +50,7 @@ class SourceUpdater:
             f"sleuthkit-{self.SLEUTHKIT_GIT_TAG:s}-Makefile.am",
         ]
         self.use_head = use_head
+        self.verbose = verbose
         self.version = time.strftime("%Y%m%d")
 
     def _apply_patches(self):
@@ -75,8 +78,13 @@ class SourceUpdater:
             os.path.join("sleuthkit", "tsk", "vs", "tsk_vs.h"),
             "tsk3.h",
         ]
+        if self.verbose:
+          verbose = 1
+        else:
+          verbose = 0
+
         class_parser.FREE = "talloc_free"
-        parser = class_parser.HeaderParser("pytsk3")
+        parser = class_parser.HeaderParser("pytsk3", verbose=verbose)
         parser.module.init_string = "tsk_init();"
         parser.parse_filenames(header_files)
 
@@ -243,9 +251,19 @@ def Main():
             f"instead of tag: {SourceUpdater.SLEUTHKIT_GIT_TAG:s}"
         ),
     )
+    argument_parser.add_argument(
+        "-v",
+        "--verbose",
+        dest="verbose",
+        action="store_true",
+        default=False,
+        help=(
+            "Verbose output"
+        ),
+    )
     options = argument_parser.parse_args()
 
-    updater = SourceUpdater(use_head=options.use_head)
+    updater = SourceUpdater(use_head=options.use_head, verbose=options.verbose)
 
     updater.run()
 
