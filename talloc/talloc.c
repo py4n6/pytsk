@@ -432,7 +432,7 @@ void talloc_lib_init(void)
 	}
 	talloc_magic = random_value & ~TALLOC_FLAG_MASK;
 }
-#else
+#elif !defined( _MSC_VER )
 #warning "No __attribute__((constructor)) support found on this platform, additional talloc security measures not available"
 #endif
 
