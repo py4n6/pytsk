@@ -26,7 +26,6 @@ jobs:
       run: |
         python ./utils/update_source.py
         export CXXFLAGS="-std=c++14"
-        python setup.py build
         tox -e${{ matrix.toxenv }}
   build_ubuntu:
     runs-on: ubuntu-latest
@@ -57,7 +56,6 @@ jobs:
     - name: Build and test Python module
       run: |
         python ./utils/update_source.py
-        python setup.py build
         tox -e${{ matrix.toxenv }}
   build_windows:
     runs-on: windows-latest
@@ -77,8 +75,8 @@ jobs:
     - name: Build Python module
       run: |
         python ./utils/update_source.py
-        python setup.py build
-        python setup.py install
+        python -m build --wheel
+        python -m pip install --no-index --find-links=dist pytsk3
     - name: Test Python module
       run: |
         python run_tests.py

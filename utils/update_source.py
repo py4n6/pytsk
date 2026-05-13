@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 #
 # Copyright 2010, Michael Cohen <scudette@gmail.com>.
+# Copyright 2012, 2026, Joachim Metz <joachim.metz@gmail.com>.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,7 +27,7 @@ import time
 # Update PYTHONPATH.
 sys.path.insert(0, ".")
 
-import generate_bindings
+import class_parser
 
 
 class SourceUpdater:
@@ -77,6 +78,13 @@ class SourceUpdater:
         generate_bindings.generate_bindings(
             "pytsk3.cpp", header_files, initialization="tsk_init();"
         )
+        class_parser.FREE = free
+        parser = class_parser.HeaderParser(module_name, verbose={"V": 0})
+        parser.module.init_string = initialization
+        parser.parse_filenames(header_files)
+
+        with open(target, "w") as file_object:
+            parser.write(file_object)
 
     def _print_configure_summary(self, output):
         """Prints the configure summary."""
