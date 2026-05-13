@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 #
 # Copyright 2010, Michael Cohen <scudette@gmail.com>.
 #
@@ -235,7 +235,7 @@ import lexer
 DEBUG = 0
 
 # The pytsk3 version.
-VERSION = "20260418"
+VERSION = "20260502"
 
 # These functions are used to manage library memory.
 FREE = "aff4_free"
@@ -287,7 +287,7 @@ def format_as_docstring(string):
     return byte_string.decode("utf-8")
 
 
-class Module(object):
+class Module:
     public_api = None
     public_header = None
 
@@ -1009,7 +1009,7 @@ uint64_t integer_object_copy_to_uint64(PyObject *integer_object) {{
             "#endif\n")
 
 
-class Type(object):
+class Type:
     interface = None
     buildstr = "O"
     sense = "IN"
@@ -1017,7 +1017,7 @@ class Type(object):
     active = True
 
     def __init__(self, name, type, *args, **kwargs):
-        super(Type, self).__init__()
+        super().__init__()
         self.name = name
         self.type = type
         self.attributes = set()
@@ -1106,7 +1106,7 @@ class String(Type):
     error_value = "return NULL;"
 
     def __init__(self, name, type, *args, **kwargs):
-        super(String, self).__init__(name, type, *args, **kwargs)
+        super().__init__(name, type, *args, **kwargs)
         self.length = "strlen({0:s})".format(name)
 
     def byref(self):
@@ -1175,7 +1175,7 @@ class ZString(String):
         if default == "\"\"":
             default = "(char *) \"\""
 
-        return super(ZString, self).definition(default=default, **kwargs)
+        return super().definition(default=default, **kwargs)
 
 
 class BorrowedString(String):
@@ -1200,7 +1200,7 @@ class Char_and_Length(Type):
     error_value = "return NULL;"
 
     def __init__(self, data, data_type, length, length_type, *args, **kwargs):
-        super(Char_and_Length, self).__init__(data, data_type, *args, **kwargs)
+        super().__init__(data, data_type, *args, **kwargs)
 
         self.name = data
         self.data_type = data_type
@@ -1249,7 +1249,7 @@ class Integer(Type):
     int_type = "int"
 
     def __init__(self, name, type, *args, **kwargs):
-        super(Integer, self).__init__(name, type, *args, **kwargs)
+        super().__init__(name, type, *args, **kwargs)
         self.type = self.int_type
         self.original_type = type
 
@@ -1704,7 +1704,7 @@ class TDB_DATA_P(Char_and_Length_OUT):
     bare_type = "TDB_DATA"
 
     def __init__(self, name, type, *args, **kwargs):
-        super(TDB_DATA_P, self).__init__(name, type, *args, **kwargs)
+        super().__init__(name, type, *args, **kwargs)
 
     def definition(self, default=None, **kwargs):
         return Type.definition(self)
@@ -1815,7 +1815,7 @@ class Void(Type):
     original_type = ""
 
     def __init__(self, name, type="void", *args, **kwargs):
-        super(Void, self).__init__(name, type, *args, **kwargs)
+        super().__init__(name, type, *args, **kwargs)
 
     def comment(self):
         return "void *ctx"
@@ -1847,7 +1847,7 @@ class Void(Type):
 
 class PVoid(Void):
     def __init__(self, name, type="void *", *args, **kwargs):
-        super(PVoid, self).__init__(name, type, *args, **kwargs)
+        super().__init__(name, type, *args, **kwargs)
 
 
 class StringArray(String):
@@ -2077,7 +2077,7 @@ class PointerWrapper(Wrapper):
 
     def __init__(self, name, type, *args, **kwargs):
         type = type.split()[0]
-        super(PointerWrapper, self).__init__(name, type, *args, **kwargs)
+        super().__init__(name, type, *args, **kwargs)
 
     def comment(self):
         return "{0:s} *{1:s}".format(self.type, self.name)
@@ -2117,7 +2117,7 @@ class StructWrapper(Wrapper):
     active = False
 
     def __init__(self, name, type, *args, **kwargs):
-        super(StructWrapper, self).__init__(name, type, *args, **kwargs)
+        super().__init__(name, type, *args, **kwargs)
         self.original_type = type.split()[0]
 
     def assign(self, call, method, target=None, borrowed=True, **kwargs):
@@ -2306,7 +2306,7 @@ type_dispatcher = {
 method_attributes = ["BORROWED", "DESTRUCTOR", "IGNORE"]
 
 
-class ResultException(object):
+class ResultException:
     value = 0
     exception = "PyExc_IOError"
 
@@ -2326,7 +2326,7 @@ class ResultException(object):
             "\n").format(self.check, self.exception, self.message))
 
 
-class Method(object):
+class Method:
     default_re = re.compile(r"DEFAULT\(([A-Z_a-z0-9]+)\) =(.+);")
     exception_re = re.compile(r"RAISES\(([^,]+),\s*([^\)]+)\) =(.+);")
     typedefed_re = re.compile(r"struct (.+)_t \*")
@@ -2694,7 +2694,7 @@ class IteratorMethod(Method):
     """A method which implements an iterator."""
 
     def __init__(self, *args, **kwargs):
-        super(IteratorMethod, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # Tell the return type that a NULL Python return is ok
         self.return_type.attributes.add("NULL_OK")
@@ -3437,7 +3437,7 @@ class EmptyConstructor(ConstructorMethod):
             "\n".format(**values_dict))
 
 
-class ClassGenerator(object):
+class ClassGenerator:
     docstring = ""
 
     def __init__(self, class_name, base_class_name, module):
@@ -3965,7 +3965,7 @@ class EnumConstructor(ConstructorMethod):
 
 class Enum(StructGenerator):
     def __init__(self, name, module):
-        super(Enum, self).__init__(name, module)
+        super().__init__(name, module)
         self.values = []
         self.name = name
         self.attributes = None
@@ -4058,7 +4058,7 @@ class EnumType(Integer):
     buildstr = "i"
 
     def __init__(self, name, type, *args, **kwargs):
-        super(EnumType, self).__init__(name, type, *args, **kwargs)
+        super().__init__(name, type, *args, **kwargs)
         self.type = type
 
     def definition(self, default=None, **kwargs):
@@ -4178,7 +4178,7 @@ class HeaderParser(lexer.SelfFeederMixIn):
 
         self.module = Module(name)
         self.base = base
-        super(HeaderParser, self).__init__(verbose=verbose)
+        super().__init__(verbose=verbose)
 
         file_object = io.BytesIO(
             b"// Base object\n"

@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 #
 # Copyright 2010, Michael Cohen <scudette@gmail.com>.
 #
@@ -370,7 +370,7 @@ class UpdateCommand(Command):
         "pytsk3.cpp", libtsk_header_files, initialization="tsk_init();")
 
 
-class ProjectBuilder(object):
+class ProjectBuilder:
   """Class to help build the project."""
 
   def __init__(self, argv):
