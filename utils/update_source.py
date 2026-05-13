@@ -75,15 +75,12 @@ class SourceUpdater:
             os.path.join("sleuthkit", "tsk", "vs", "tsk_vs.h"),
             "tsk3.h",
         ]
-        generate_bindings.generate_bindings(
-            "pytsk3.cpp", header_files, initialization="tsk_init();"
-        )
         class_parser.FREE = free
-        parser = class_parser.HeaderParser(module_name, verbose={"V": 0})
-        parser.module.init_string = initialization
+        parser = class_parser.HeaderParser("pytsk3", verbose={"V": 0})
+        parser.module.init_string = "tsk_init();"
         parser.parse_filenames(header_files)
 
-        with open(target, "w") as file_object:
+        with open("pytsk3.cpp", "w") as file_object:
             parser.write(file_object)
 
     def _print_configure_summary(self, output):
