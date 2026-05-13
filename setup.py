@@ -148,6 +148,7 @@ class BuildExtCommand(build_ext):
     """
     define_macros = []
 
+    print("XXX: ", compiler.compiler_type)
     if compiler.compiler_type == "msvc":
       define_macros.extend([
           ("WIN32", "1"),
