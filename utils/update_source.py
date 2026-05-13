@@ -76,7 +76,7 @@ class SourceUpdater:
             "tsk3.h",
         ]
         class_parser.FREE = "talloc_free"
-        parser = class_parser.HeaderParser("pytsk3", verbose={"V": 0})
+        parser = class_parser.HeaderParser("pytsk3")
         parser.module.init_string = "tsk_init();"
         parser.parse_filenames(header_files)
 
