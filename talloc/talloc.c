@@ -116,8 +116,8 @@ static unsigned int talloc_magic = TALLOC_MAGIC_NON_RANDOM;
    NULL
 */
 static void *null_context;
-static bool talloc_report_null;
-static bool talloc_report_null_full;
+static talloc_bool talloc_report_null;
+static talloc_bool talloc_report_null_full;
 static void *autofree_context;
 
 static void talloc_setup_atexit(void);
@@ -126,8 +126,8 @@ static void talloc_setup_atexit(void);
  * catching use after free errors when valgrind is too slow
  */
 static struct {
-	bool initialised;
-	bool enabled;
+	talloc_bool initialised;
+	talloc_bool enabled;
 	uint8_t fill_value;
 } talloc_fill;
 
@@ -243,7 +243,7 @@ struct talloc_memlimit {
 	size_t cur_size;
 };
 
-static inline bool talloc_memlimit_check(struct talloc_memlimit *limit, size_t size);
+static inline talloc_bool talloc_memlimit_check(struct talloc_memlimit *limit, size_t size);
 static inline void talloc_memlimit_grow(struct talloc_memlimit *limit,
 				size_t size);
 static inline void talloc_memlimit_shrink(struct talloc_memlimit *limit,
@@ -453,7 +453,7 @@ static void talloc_lib_atexit(void)
 
 static void talloc_setup_atexit(void)
 {
-	static bool done;
+	static talloc_bool done;
 
 	if (done) {
 		return;
@@ -1802,7 +1802,7 @@ _PUBLIC_ void *_talloc_realloc(const void *context, void *ptr, size_t size, cons
 {
 	struct talloc_chunk *tc;
 	void *new_ptr;
-	bool malloced = false;
+	talloc_bool malloced = false;
 	struct talloc_pool_hdr *pool_hdr = NULL;
 	size_t old_size = 0;
 	size_t new_size = 0;
@@ -2980,7 +2980,7 @@ static inline size_t _talloc_total_limit_size(const void *ptr,
 					  old_limit, new_limit);
 }
 
-static inline bool talloc_memlimit_check(struct talloc_memlimit *limit, size_t size)
+static inline talloc_bool talloc_memlimit_check(struct talloc_memlimit *limit, size_t size)
 {
 	struct talloc_memlimit *l;
 
