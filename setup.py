@@ -36,7 +36,6 @@ from setuptools.command.build_ext import build_ext
 from setuptools.command.sdist import sdist
 
 from distutils import log
-from distutils.ccompiler import new_compiler
 from distutils.dep_util import newer_group
 
 # Change PYTHONPATH.
@@ -188,10 +187,6 @@ class BuildExtCommand(build_ext):
     self.define = define_macros
 
   def run(self):
-    compiler = new_compiler(compiler=self.compiler)
-    # pylint: disable=attribute-defined-outside-init
-    self.configure_source(compiler)
-
     libtsk_path = os.path.join("sleuthkit", "tsk")
 
     if not os.access("pytsk3.cpp", os.R_OK):
