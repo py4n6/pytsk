@@ -32,6 +32,7 @@ import subprocess
 import sys
 
 from setuptools import setup, Extension
+from setuptools._distutils.ccompiler import new_compiler
 from setuptools.command.build_ext import build_ext
 from setuptools.command.sdist import sdist
 
@@ -140,16 +141,15 @@ class BuildExtCommand(build_ext):
         build_temp=self.build_temp,
         target_lang=language)
 
-  def configure_source(self, compiler):
+  def configure_source(self, compiler_type):
     """Configures the source.
 
     Args:
-      compiler: distutils compiler object.
+      compiler_type (str): compiler type.
     """
     define_macros = []
 
-    print("XXX: ", compiler.compiler_type)
-    if compiler.compiler_type == "msvc":
+    if compiler_type == "msvc":
       define_macros.extend([
           ("WIN32", "1"),
           ("UNICODE", "1"),
@@ -188,6 +188,9 @@ class BuildExtCommand(build_ext):
     self.define = define_macros
 
   def run(self):
+    compiler = new_compiler(compiler=self.compiler)
+    self.configure_source(compiler.compiler_type)
+
     libtsk_path = os.path.join("sleuthkit", "tsk")
 
     if not os.access("pytsk3.cpp", os.R_OK):
