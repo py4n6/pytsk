@@ -13,7 +13,7 @@ maintainers = [
     { name = "Joachim Metz", email = "joachim.metz@gmail.com" },
 ]
 license = "Apache-2.0"
-license-files = ["LICENSE", "sleuthkit/licenses/cpl1.0.txt", "sleuthkit/licenses/IBM-LICENSE"]
+license-files = ["LICENSE", "sleuthkit/licenses/cpl1.0.txt", "sleuthkit/licenses/IBM-LICENSE", "talloc/LICENSE"]
 readme = {file = "README", content-type = "text/markdown"}
 classifiers = [
     "Development Status :: 3 - Alpha",
