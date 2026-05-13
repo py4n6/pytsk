@@ -206,24 +206,6 @@ class BuildExtCommand(build_ext):
     build_ext.run(self)
 
 
-class SDistCommand(sdist):
-  """Custom handler for generating source dist."""
-  def run(self):
-    libtsk_path = os.path.join("sleuthkit", "tsk")
-
-    # sleuthkit submodule is not there, probably because this has been
-    # freshly checked out.
-    if not os.access(libtsk_path, os.R_OK):
-      subprocess.check_call(["git", "submodule", "init"])
-      subprocess.check_call(["git", "submodule", "update"])
-
-    if not os.path.exists(os.path.join("sleuthkit", "configure")):
-      raise RuntimeError(
-          "Missing: sleuthkit/configure run 'setup.py build' first.")
-
-    sdist.run(self)
-
-
 class ProjectBuilder:
   """Class to help build the project."""
 
@@ -270,8 +252,7 @@ class ProjectBuilder:
 
     setup_args = dict(
         cmdclass={
-            "build_ext": BuildExtCommand,
-            "sdist": SDistCommand},
+            "build_ext": BuildExtCommand},
         ext_modules=ext_modules)
 
     setup(**setup_args)
