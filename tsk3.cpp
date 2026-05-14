@@ -41,7 +41,7 @@ void IMG_INFO_close(TSK_IMG_INFO *self);
 
 /* tsk_error_get() returns NULL when libtsk did not record a t_errno
  * for the failure (some EOF / bounds paths return -1 without setting
- * one). safe_tsk_error_get() guarantees a usable string. All call sites 
+ * one). safe_tsk_error_get() guarantees a usable string. All call sites
  * in pytsk pass through this wrapper.
  */
 static const char *safe_tsk_error_get(void) {
@@ -60,6 +60,11 @@ static int Img_Info_dest(Img_Info self) {
     if(self == NULL) {
         return -1;
     }
+    /* Guard against a partially-constructed Img_Info reaching the
+     * destructor before self->img was assigned (e.g. talloc_set_destructor
+     * is installed early so dest() runs on error-path return from
+     * Img_Info_Con before tsk_img_open succeeds).
+     */
     if(self->img != NULL) {
         tsk_img_close((TSK_IMG_INFO *) self->img);
 
@@ -94,6 +99,13 @@ static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type) {
      */
     tsk_init_lock(&self->state_lock);
     self->state_lock_initialized = 1;
+
+    /* Install the destructor before any allocation: tsk_img_open and
+     * talloc_zero below can fail and return NULL, in which case
+     * Img_Info_Con returns NULL and talloc still owns self. Without
+     * the destructor installed, talloc's free of self would skip
+     * Img_Info_dest and leak the partially-built img.
+     */
     talloc_set_destructor((void *) self, (int(*)(void *)) &Img_Info_dest);
 
     if(urn != NULL && urn[0] != 0) {
@@ -255,6 +267,13 @@ ssize_t IMG_INFO_read(TSK_IMG_INFO *img, TSK_OFF_T off, char *buf, size_t len) {
     if(len == 0) {
       return 0;
     }
+    /* The CALL macro suppresses any Python exception that the proxied
+     * subclass.read() may have raised. libtsk has no exception channel,
+     * so a Python error is invisible to it; the caller would receive
+     * whatever zero / garbage bytes the C return path produced. Check
+     * the pytsk error slot and report a hard failure so libtsk treats
+     * this as a read error rather than ambiguously short data.
+     */
     {
         uint64_t n = CALL(self->container, read, (uint64_t) off, buf, len);
         char *unused_buf;
@@ -362,6 +381,11 @@ static File FS_Info_open(FS_Info self, ZString path) {
     // CONSTRUCT_CREATE calls _talloc_memdup to allocate memory for the object.
     object = CONSTRUCT_CREATE(File, File, NULL);
 
+    /* Explicit ENoMemory raise: previously a NULL return silently fell
+     * through to "return object" (returning NULL) without setting an
+     * error, so the caller saw a SystemError "returned NULL without
+     * setting an exception" instead of a clean MemoryError.
+     */
     if(object == NULL) {
         RaiseError(ENoMemory, "Unable to allocate File.");
         goto on_error;
@@ -908,6 +932,11 @@ static TSK_FS_ATTR_RUN *Attribute_iternext(Attribute self) {
         tsk_release_lock(&self->iter_lock);
     }
     {
+        /* Parent the duplicated run on self so it does not leak if the
+         * caller drops the returned object without an explicit free; the
+         * NULL parent in the previous code made each iteration a
+         * standalone allocation that nothing else would ever reap.
+         */
         TSK_FS_ATTR_RUN *dup = (TSK_FS_ATTR_RUN *) talloc_memdup(
             self, result, sizeof(*result));
         if(dup == NULL) {
