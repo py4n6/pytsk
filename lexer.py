@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 #
 # Copyright 2013, Michael Cohen <scudette@gmail.com>.
 #
@@ -19,7 +19,7 @@ import re
 import sys
 
 
-class Lexer(object):
+class Lexer:
   """A generic feed lexer."""
   ## The following is a description of the states we have and the
   ## way we move through them: format is an array of
@@ -36,7 +36,7 @@ class Lexer(object):
   flags = 0
 
   def __init__(self, verbose=0, fd=None):
-    super(Lexer, self).__init__()
+    super().__init__()
     self.encoding = "utf-8"
 
     if not self.verbose:

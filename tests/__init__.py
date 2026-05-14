@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 #
 # Copyright 2013, Joachim Metz <joachim.metz@gmail.com>.
 #
