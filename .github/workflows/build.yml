@@ -21,11 +21,10 @@ jobs:
       run: |
         brew update -q
         brew install -q autoconf automake gettext gnu-sed libtool pkgconfig tox
-        # No brew formula for free-threaded; setup-python supplies 3.14t.
+        # There currently is no brew formula for free-threaded Python, but setup-python will install it if necessary.
         if [[ "${{ matrix.python-version }}" != *t ]]; then
           brew install -q python@${{ matrix.python-version }}
         fi
-        brew link --force gettext
         ln -s /usr/local/bin/glibtoolize /usr/local/bin/libtoolize
         python3 -m pip install setuptools
     - name: Build and test Python module
@@ -55,18 +54,16 @@ jobs:
     - uses: actions/checkout@v6
     # deadsnakes ships python3.14-nogil without Python.h; setup-python includes headers.
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
     - name: Install build dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y autoconf automake autopoint \
-          autotools-dev build-essential git libtool pkg-config
-    # setup-python no longer bundles setuptools on 3.12+.
-    - name: Install Python build tooling
+        sudo apt-get install -y autoconf automake autopoint autotools-dev build-essential git libtool pkg-config
+    - name: Install tox
       run: |
-        python -m pip install setuptools tox
+        python -m pip install tox
     - name: Build and test Python module
       run: |
         python ./utils/update_source.py
