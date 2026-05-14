@@ -430,6 +430,34 @@ static struct python_wrapper_map_t {{
     void (*initialize_proxies)(Gen_wrapper self, void *item);
 }} python_wrappers[{classes_length:d}];
 
+/* Cycle-collection support shared by every Gen_wrapper-shaped type
+ * (real classes and struct wrappers; not enums, which keep their own
+ * layout). python_object1/2 hold strong refs to other wrappers that
+ * can reference back through Python attributes -- without GC support
+ * the cycle leaks for the process lifetime.
+ */
+static int Gen_wrapper_traverse(PyObject *self, visitproc visit, void *arg) {{
+    Gen_wrapper g = (Gen_wrapper) self;
+    Py_VISIT(g->python_object1);
+    Py_VISIT(g->python_object2);
+    if(g->base_is_python_object != 0 && g->base != NULL) {{
+        Py_VISIT((PyObject *) g->base);
+    }}
+    return 0;
+}}
+
+static int Gen_wrapper_clear(PyObject *self) {{
+    Gen_wrapper g = (Gen_wrapper) self;
+    Py_CLEAR(g->python_object1);
+    Py_CLEAR(g->python_object2);
+    if(g->base_is_python_object != 0 && g->base != NULL) {{
+        PyObject *tmp = (PyObject *) g->base;
+        g->base = NULL;
+        Py_DECREF(tmp);
+    }}
+    return 0;
+}}
+
 /* Create the relevant wrapper from the item based on the lookup table.
  */
 Gen_wrapper new_class_wrapper(Object item, int item_is_python_object) {{
@@ -451,7 +479,12 @@ Gen_wrapper new_class_wrapper(Object item, int item_is_python_object) {{
             if(python_wrapper->class_ref == cls) {{
                 PyErr_Clear();
 
-                result = (Gen_wrapper) _PyObject_New(python_wrapper->python_type);
+                /* PyObject_GC_New: the type carries Py_TPFLAGS_HAVE_GC so
+                 * the object must be allocated through the GC machinery;
+                 * GC_Track is deferred until python_object1/2 and base are
+                 * fully wired so traverse never sees a half-built wrapper.
+                 */
+                result = PyObject_GC_New(struct Gen_wrapper_t, python_wrapper->python_type);
                 if(result == NULL) {{
                     return NULL;
                 }}
@@ -463,6 +496,7 @@ Gen_wrapper new_class_wrapper(Object item, int item_is_python_object) {{
 
                 python_wrapper->initialize_proxies(result, (void *) item);
 
+                PyObject_GC_Track((PyObject *) result);
                 return result;
             }}
         }}
@@ -2236,7 +2270,10 @@ class StructWrapper(Wrapper):
             "\n"
             "        PyErr_Clear();\n"
             "\n"
-            "        wrapped_{name:s} = (Gen_wrapper) PyObject_New(py{type:s}, &{type:s}_Type);\n"
+            "        /* GC_New (not PyObject_New) because the type carries\n"
+            "         * Py_TPFLAGS_HAVE_GC; GC_Track is deferred to after the\n"
+            "         * keepalive fields below are wired. */\n"
+            "        wrapped_{name:s} = (Gen_wrapper) PyObject_GC_New(py{type:s}, &{type:s}_Type);\n"
             "        if(wrapped_{name:s} == NULL) {{\n"
             "            return NULL;\n"
             "        }}\n"
@@ -2259,6 +2296,11 @@ class StructWrapper(Wrapper):
                 "        wrapped_{name:s}->python_object1 = NULL;\n"
                 "        wrapped_{name:s}->python_object2 = NULL;\n"
                 "\n").format(**values_dict)
+
+        # All keepalive fields are wired; safe to expose to the GC.
+        result += (
+            "        PyObject_GC_Track((PyObject *) wrapped_{name:s});\n"
+            "\n").format(**values_dict)
 
         if "NULL_OK" in self.attributes:
             result += (
@@ -2909,6 +2951,9 @@ class ConstructorMethod(Method):
             "    struct _typeobject *ob_type = NULL;\n"
             "\n"
             "    if(self != NULL) {{\n"
+            "        /* UnTrack first: dealloc tears down PyObject* fields\n"
+            "         * the GC traverse function reads. */\n"
+            "        PyObject_GC_UnTrack((PyObject *) self);\n"
             "        if(self->base != NULL) {{\n"
             "            if(self->base_is_python_object != 0) {{\n"
             "                Py_DecRef((PyObject*) self->base);\n"
@@ -3075,6 +3120,11 @@ class ConstructorMethod(Method):
             "        goto on_error;\n"
             "    }}\n"
             "\n"
+            "    /* Track only after every PyObject* field is wired. The\n"
+            "     * IsTracked guard makes re-init (a second __init__) a no-op. */\n"
+            "    if(!PyObject_GC_IsTracked((PyObject *) self)) {{\n"
+            "        PyObject_GC_Track((PyObject *) self);\n"
+            "    }}\n"
             "    return 0;\n").format(**values_dict))
 
         # Write the error part of the function.
@@ -3594,8 +3644,20 @@ class StructConstructor(ConstructorMethod):
             "    struct _typeobject *ob_type = NULL;\n"
             "\n"
             "    if(self != NULL) {{\n"
+            "        PyObject_GC_UnTrack((PyObject *) self);\n"
             "        if(self->base != NULL) {{\n"
             "            self->base = NULL;\n"
+            "        }}\n"
+            "        /* Drop the parent keepalive (python_object1/2 wired\n"
+            "         * by the C->Py struct getter that yielded this borrow).\n"
+            "         */\n"
+            "        if(self->python_object2 != NULL) {{\n"
+            "            Py_DecRef(self->python_object2);\n"
+            "            self->python_object2 = NULL;\n"
+            "        }}\n"
+            "        if(self->python_object1 != NULL) {{\n"
+            "            Py_DecRef(self->python_object1);\n"
+            "            self->python_object1 = NULL;\n"
             "        }}\n"
             "        ob_type = Py_TYPE(self);\n"
             "        if(ob_type != NULL && ob_type->tp_free != NULL) {{\n"
@@ -3613,6 +3675,9 @@ class StructConstructor(ConstructorMethod):
             "static int py{class_name:s}_init(py{class_name:s} *self, PyObject *args, PyObject *kwds) {{\n"
             "    // Base is borrowed from another object.\n"
             "    self->base = NULL;\n"
+            "    if(!PyObject_GC_IsTracked((PyObject *) self)) {{\n"
+            "        PyObject_GC_Track((PyObject *) self);\n"
+            "    }}\n"
             "    return 0;\n"
             "}}\n"
             "\n").format(**values_dict))
@@ -3628,6 +3693,9 @@ class EmptyConstructor(ConstructorMethod):
 
         out.write(
             "static int py{class_name:s}_init(py{class_name:s} *self, PyObject *args, PyObject *kwds) {{\n"
+            "    if(!PyObject_GC_IsTracked((PyObject *) self)) {{\n"
+            "        PyObject_GC_Track((PyObject *) self);\n"
+            "    }}\n"
             "    return 0;\n"
             "}}\n"
             "\n".format(**values_dict))
@@ -3956,7 +4024,17 @@ class ClassGenerator:
             "tp_str": 0,
             "tp_eq": 0,
             "getattr_func": 0,
-            "docstring": docstring}
+            "docstring": docstring,
+            "tp_flags": "Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE",
+            "tp_traverse": 0,
+            "tp_clear": 0}
+
+        # Enums use a different struct layout (PyObject_HEAD + value only)
+        # and override their dealloc/init, so they don't need GC support.
+        if getattr(self, "supports_gc", True):
+            args["tp_flags"] += " | Py_TPFLAGS_HAVE_GC"
+            args["tp_traverse"] = "(traverseproc) Gen_wrapper_traverse"
+            args["tp_clear"] = "(inquiry) Gen_wrapper_clear"
 
         if self.attributes:
             args["getattr_func"] = self.attributes.name
@@ -4015,13 +4093,13 @@ class ClassGenerator:
             "    /* tp_as_buffer */\n"
             "    0,\n"
             "    /* tp_flags */\n"
-            "    Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,\n"
+            "    {tp_flags:s},\n"
             "    /* tp_doc */\n"
             "    \"{docstring:s}\",\n"
             "    /* tp_traverse */\n"
-            "    0,\n"
+            "    {tp_traverse!s},\n"
             "    /* tp_clear */\n"
-            "    0,\n"
+            "    {tp_clear!s},\n"
             "    /* tp_richcompare */\n"
             "    {tp_eq!s},\n"
             "    /* tp_weaklistoffset */\n"
@@ -4160,6 +4238,10 @@ class EnumConstructor(ConstructorMethod):
 
 
 class Enum(StructGenerator):
+    # Enum types use a different struct layout (PyObject_HEAD + PyObject*
+    # value) and cannot form Gen_wrapper-style cycles, so skip GC support.
+    supports_gc = False
+
     def __init__(self, name, module):
         super().__init__(name, module)
         self.values = []
