@@ -2,11 +2,79 @@
 """Tests for FS_Info."""
 
 import os
+import threading
 import unittest
 
 import pytsk3
 
-import test_lib
+
+def walk_filesystem(directory, prefix=b'', max_depth=8, _depth=0):
+  """Recursive directory walk yielding (path, entry) pairs.
+
+  Mirrors samples/fls.py and dfvfs's TSKFileSystem traversal: skip
+  '.', '..', and the synthetic '$OrphanFiles' node; recurse via
+  File.as_directory(); cap depth to avoid runaway loops on
+  pathological inputs (e.g. cyclic symlinks).
+  """
+  if _depth > max_depth:
+    return
+  for entry in directory:
+    if not entry.info or not entry.info.name:
+      continue
+    name = entry.info.name.name
+    if name in (b'.', b'..', b'$OrphanFiles'):
+      continue
+    yield prefix + b'/' + name, entry
+    meta = entry.info.meta
+    if meta is not None and meta.type == pytsk3.TSK_FS_META_TYPE_DIR:
+      try:
+        sub = entry.as_directory()
+      except (IOError, OSError):
+        continue
+      yield from walk_filesystem(
+          sub, prefix + b'/' + name, max_depth, _depth + 1)
+
+
+class FileObjectImageInfo(pytsk3.Img_Info):
+  """Img_Info that uses a file-like object.
+
+  Thread-safety: pytsk3 may invoke read() concurrently from multiple
+  threads (true under free-threaded Python; possible even with the
+  GIL via cooperative thread switches across the seek+read pair).
+  Most file-like objects implement read positioning as a stateful
+  seek+read on a single fd, so concurrent calls would race. We
+  serialize the seek/read pair under a per-instance lock so that
+  pytsk3 callers can share one FileObjectImageInfo across threads.
+  """
+
+  def __init__(
+      self, file_object, file_size, image_type=pytsk3.TSK_IMG_TYPE_RAW):
+    """Initializes the image object."""
+    if not file_object:
+      raise ValueError(u'Missing file-like object.')
+
+    self._file_object = file_object
+    self._file_size = file_size
+    self._read_lock = threading.Lock()
+    pytsk3.Img_Info.__init__(self, url='', type=image_type)
+
+  def close(self):
+    """Closes the volume IO object."""
+    with self._read_lock:
+      self._file_object = None
+
+  def read(self, offset, size):
+    """Reads a byte string from the image object at the specified offset."""
+    with self._read_lock:
+      file_object = self._file_object
+      if file_object is None:
+        return b''
+      file_object.seek(offset, os.SEEK_SET)
+      return file_object.read(size)
+
+  def get_size(self):
+    """Retrieves the size."""
+    return self._file_size
 
 
 # fls -l ./test_data/image.raw
@@ -72,6 +140,43 @@ class TSKFsInfoTest(TSKFsInfoTestCase):
     fs_info = pytsk3.FS_Info(self._img_info, offset=0)
     self._testOpenMeta(fs_info)
 
+  def testReadAttributesByTypeId(self):
+    """Read every file attribute by (type, id).
+
+    GRR's sleuthkit.py reads NTFS ADS streams via
+    `read_random(offset, size, attr.info.type, attr.info.id)`; the
+    same shape works on ext for the default data attribute. Iterating
+    a File's attributes was the most race-prone API pre-FT-fix.
+    """
+    fs_info = pytsk3.FS_Info(self._img_info, offset=0)
+    file_object = fs_info.open_meta(15)  # passwords.txt
+    sizes = [
+        len(file_object.read_random(
+            0, attribute.info.size,
+            attribute.info.type, attribute.info.id))
+        for attribute in file_object]
+    self.assertIn(116, sizes)  # the passwords.txt data attribute
+
+  def testChunkedReadMatchesWhole(self):
+    """Streaming reads in small chunks must equal the whole-file read.
+
+    dfvfs's tsk_file_io.py and dfirwizard both stream files this way;
+    short chunks amplify any off-by-one in the snapshot/lock path.
+    """
+    fs_info = pytsk3.FS_Info(self._img_info, offset=0)
+    file_object = fs_info.open_meta(15)
+    size = file_object.info.meta.size
+    whole = file_object.read_random(0, size)
+    chunks = []
+    offset = 0
+    while offset < size:
+      chunk = file_object.read_random(offset, 16)
+      if not chunk:
+        break
+      chunks.append(chunk)
+      offset += len(chunk)
+    self.assertEqual(b''.join(chunks), whole)
+
 
 class TSKFsInfoBogusTest(TSKFsInfoTestCase):
   """FS_Info for testing that fails."""
@@ -97,7 +202,7 @@ class TSKFsInfoFileObjectTest(TSKFsInfoTestCase):
 
     stat_info = os.stat(test_file)
     self._file_size = stat_info.st_size
-    self._img_info = test_lib.FileObjectImageInfo(
+    self._img_info = FileObjectImageInfo(
         self._file_object, self._file_size)
 
   def testInitialize(self):
@@ -110,6 +215,26 @@ class TSKFsInfoFileObjectTest(TSKFsInfoTestCase):
     fs_info = pytsk3.FS_Info(self._img_info, offset=0)
     self._testOpenMeta(fs_info)
 
+  def testRecursiveWalkMatchesAcrossOpenPaths(self):
+    """Walk every file via FileObject-backed image; bytes via inode == bytes via path.
+
+    Mirrors the dominant dfvfs pipeline (TSKFileSystemImage subclass
+    feeding TSKFileSystem). End-to-end exercise of the proxied read
+    callback, parent keepalive, and the open-by-inode vs open-by-path
+    paths in one walk.
+    """
+    fs_info = pytsk3.FS_Info(self._img_info, offset=0)
+    paths = dict(walk_filesystem(fs_info.open_dir('/')))
+    self.assertIn(b'/passwords.txt', paths)
+    self.assertIn(b'/a_directory/a_file', paths)
+    for path, entry in paths.items():
+      meta = entry.info.meta
+      if meta is None or meta.type != pytsk3.TSK_FS_META_TYPE_REG:
+        continue
+      by_inode = fs_info.open_meta(meta.addr).read_random(0, meta.size)
+      by_path = fs_info.open(path.decode('utf-8')).read_random(0, meta.size)
+      self.assertEqual(by_inode, by_path, msg=path)
+
 
 class TSKFsInfoFileObjectWithDetectTest(TSKFsInfoTestCase):
   """Tests the FS_Info object with auto-detect Img_Info."""
@@ -121,7 +246,7 @@ class TSKFsInfoFileObjectWithDetectTest(TSKFsInfoTestCase):
 
     stat_info = os.stat(test_file)
     self._file_size = stat_info.st_size
-    self._img_info = test_lib.FileObjectImageInfo(
+    self._img_info = FileObjectImageInfo(
         self._file_object, self._file_size,
         image_type=pytsk3.TSK_IMG_TYPE_DETECT)
 
@@ -145,7 +270,7 @@ class TSKFsInfoFileObjectWithLargeSize(TSKFsInfoTestCase):
     self._file_object = open(test_file, 'rb')
 
     self._file_size = 1024 * 1024 * 1024 * 1024
-    self._img_info = test_lib.FileObjectImageInfo(
+    self._img_info = FileObjectImageInfo(
         self._file_object, self._file_size)
 
   def testInitialize(self):

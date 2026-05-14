@@ -2,11 +2,52 @@
 """Tests for Volume_Info."""
 
 import os
+import threading
 import unittest
 
 import pytsk3
 
-import test_lib
+
+class FileObjectImageInfo(pytsk3.Img_Info):
+  """Img_Info that uses a file-like object.
+
+  Thread-safety: pytsk3 may invoke read() concurrently from multiple
+  threads (true under free-threaded Python; possible even with the
+  GIL via cooperative thread switches across the seek+read pair).
+  Most file-like objects implement read positioning as a stateful
+  seek+read on a single fd, so concurrent calls would race. We
+  serialize the seek/read pair under a per-instance lock so that
+  pytsk3 callers can share one FileObjectImageInfo across threads.
+  """
+
+  def __init__(
+      self, file_object, file_size, image_type=pytsk3.TSK_IMG_TYPE_RAW):
+    """Initializes the image object."""
+    if not file_object:
+      raise ValueError(u'Missing file-like object.')
+
+    self._file_object = file_object
+    self._file_size = file_size
+    self._read_lock = threading.Lock()
+    pytsk3.Img_Info.__init__(self, url='', type=image_type)
+
+  def close(self):
+    """Closes the volume IO object."""
+    with self._read_lock:
+      self._file_object = None
+
+  def read(self, offset, size):
+    """Reads a byte string from the image object at the specified offset."""
+    with self._read_lock:
+      file_object = self._file_object
+      if file_object is None:
+        return b''
+      file_object.seek(offset, os.SEEK_SET)
+      return file_object.read(size)
+
+  def get_size(self):
+    """Retrieves the size."""
+    return self._file_size
 
 
 # mmls ../test_data/tsk_volume_system.raw
@@ -89,6 +130,27 @@ class TSKVolumeInfoTest(TSKVolumeInfoTestCase):
     volume_info = pytsk3.Volume_Info(self._img_info)
     self._testIterate(volume_info)
 
+  def testMountAllocatedPartitions(self):
+    """Volume_Info → FS_Info(offset=part.start*512) → list root.
+
+    Mirrors dfirwizard / imagemounter / GRR. Exercises partition
+    offset arithmetic and clean OSError propagation when a partition
+    is too small to mount.
+    """
+    volume_info = pytsk3.Volume_Info(self._img_info)
+    allocated = [p for p in volume_info
+                 if p.flags & pytsk3.TSK_VS_PART_FLAG_ALLOC]
+    self.assertGreater(len(allocated), 0)
+    mounted = 0
+    for part in allocated:
+      try:
+        fs_info = pytsk3.FS_Info(self._img_info, offset=part.start * 512)
+      except (IOError, OSError):
+        continue
+      mounted += 1
+      list(fs_info.open_dir('/'))
+    self.assertGreater(mounted, 0)
+
 
 class TSKVolumeInfoBogusTest(TSKVolumeInfoTestCase):
   """Volume_Info for testing that fails."""
@@ -114,7 +176,7 @@ class TSKVolumeInfoFileObjectTest(TSKVolumeInfoTestCase):
 
     stat_info = os.stat(test_file)
     self._file_size = stat_info.st_size
-    self._img_info = test_lib.FileObjectImageInfo(
+    self._img_info = FileObjectImageInfo(
         self._file_object, self._file_size)
 
   def testInitialize(self):
@@ -138,7 +200,7 @@ class TSKVolumeInfoFileObjectWithDetectTest(TSKVolumeInfoTestCase):
 
     stat_info = os.stat(test_file)
     self._file_size = stat_info.st_size
-    self._img_info = test_lib.FileObjectImageInfo(
+    self._img_info = FileObjectImageInfo(
         self._file_object, self._file_size,
         image_type=pytsk3.TSK_IMG_TYPE_DETECT)
 
@@ -162,7 +224,7 @@ class TSKVolumeInfoFileObjectWithLargeSize(TSKVolumeInfoTestCase):
     self._file_object = open(test_file, 'rb')
 
     self._file_size = 1024 * 1024 * 1024 * 1024
-    self._img_info = test_lib.FileObjectImageInfo(
+    self._img_info = FileObjectImageInfo(
         self._file_object, self._file_size)
 
   def testInitialize(self):
