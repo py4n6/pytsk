@@ -23,11 +23,36 @@ import unittest
 
 import pytsk3
 
-import test_lib
-
 
 _TEST_IMAGE = os.path.join('test_data', 'image.raw')
 _TEST_VOLUME = os.path.join('test_data', 'tsk_volume_system.raw')
+
+
+def walk_filesystem(directory, prefix=b'', max_depth=8, _depth=0):
+  """Recursive directory walk yielding (path, entry) pairs.
+
+  Mirrors samples/fls.py and dfvfs's TSKFileSystem traversal: skip
+  '.', '..', and the synthetic '$OrphanFiles' node; recurse via
+  File.as_directory(); cap depth to avoid runaway loops on
+  pathological inputs (e.g. cyclic symlinks).
+  """
+  if _depth > max_depth:
+    return
+  for entry in directory:
+    if not entry.info or not entry.info.name:
+      continue
+    name = entry.info.name.name
+    if name in (b'.', b'..', b'$OrphanFiles'):
+      continue
+    yield prefix + b'/' + name, entry
+    meta = entry.info.meta
+    if meta is not None and meta.type == pytsk3.TSK_FS_META_TYPE_DIR:
+      try:
+        sub = entry.as_directory()
+      except (IOError, OSError):
+        continue
+      yield from walk_filesystem(
+          sub, prefix + b'/' + name, max_depth, _depth + 1)
 
 
 def _is_free_threaded():
@@ -467,7 +492,7 @@ class RecursiveWalkStressTest(unittest.TestCase):
       fs = pytsk3.FS_Info(img, offset=0)
       total = 0
       for _ in range(20):
-        total += sum(1 for _ in test_lib.walk_filesystem(fs.open_dir('/')))
+        total += sum(1 for _ in walk_filesystem(fs.open_dir('/')))
       return total
 
     results = _run_concurrently(worker, 8)

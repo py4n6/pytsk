@@ -6,33 +6,6 @@ import threading
 import pytsk3
 
 
-def walk_filesystem(directory, prefix=b'', max_depth=8, _depth=0):
-  """Recursive directory walk yielding (path, entry) pairs.
-
-  Mirrors samples/fls.py and dfvfs's TSKFileSystem traversal: skip
-  '.', '..', and the synthetic '$OrphanFiles' node; recurse via
-  File.as_directory(); cap depth to avoid runaway loops on
-  pathological inputs (e.g. cyclic symlinks).
-  """
-  if _depth > max_depth:
-    return
-  for entry in directory:
-    if not entry.info or not entry.info.name:
-      continue
-    name = entry.info.name.name
-    if name in (b'.', b'..', b'$OrphanFiles'):
-      continue
-    yield prefix + b'/' + name, entry
-    meta = entry.info.meta
-    if meta is not None and meta.type == pytsk3.TSK_FS_META_TYPE_DIR:
-      try:
-        sub = entry.as_directory()
-      except (IOError, OSError):
-        continue
-      yield from walk_filesystem(
-          sub, prefix + b'/' + name, max_depth, _depth + 1)
-
-
 class FileObjectImageInfo(pytsk3.Img_Info):
   """Img_Info that uses a file-like object.
 
