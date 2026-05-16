@@ -1,12 +1,22 @@
 """Shared test case."""
 
 import os
+import threading
 
 import pytsk3
 
 
 class FileObjectImageInfo(pytsk3.Img_Info):
-  """Img_Info that uses a file-like object."""
+  """Img_Info that uses a file-like object.
+
+  Thread-safety: pytsk3 may invoke read() concurrently from multiple
+  threads (true under free-threaded Python; possible even with the
+  GIL via cooperative thread switches across the seek+read pair).
+  Most file-like objects implement read positioning as a stateful
+  seek+read on a single fd, so concurrent calls would race. We
+  serialize the seek/read pair under a per-instance lock so that
+  pytsk3 callers can share one FileObjectImageInfo across threads.
+  """
 
   def __init__(
       self, file_object, file_size, image_type=pytsk3.TSK_IMG_TYPE_RAW):
@@ -27,6 +37,10 @@ class FileObjectImageInfo(pytsk3.Img_Info):
     # pytsk3.Img_Info does not let you set attributes after initialization.
     self._file_object = file_object
     self._file_size = file_size
+    # Guards the seek+read pair on _file_object. Created before the
+    # parent __init__ because pytsk3 may begin proxying read() calls
+    # as soon as the constructor returns from Python's perspective.
+    self._read_lock = threading.Lock()
     # Using the old parent class invocation style otherwise some versions
     # of pylint complain also setting type to RAW to make sure Img_Info
     # does not do detection.
@@ -37,7 +51,8 @@ class FileObjectImageInfo(pytsk3.Img_Info):
 
   def close(self):
     """Closes the volume IO object."""
-    self._file_object = None
+    with self._read_lock:
+      self._file_object = None
 
   def read(self, offset, size):
     """Reads a byte string from the image object at the specified offset.
@@ -49,8 +64,12 @@ class FileObjectImageInfo(pytsk3.Img_Info):
     Returns:
       A byte string containing the data read.
     """
-    self._file_object.seek(offset, os.SEEK_SET)
-    return self._file_object.read(size)
+    with self._read_lock:
+      file_object = self._file_object
+      if file_object is None:
+        return b''
+      file_object.seek(offset, os.SEEK_SET)
+      return file_object.read(size)
 
   def get_size(self):
     """Retrieves the size."""

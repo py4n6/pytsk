@@ -89,6 +89,27 @@ class TSKVolumeInfoTest(TSKVolumeInfoTestCase):
     volume_info = pytsk3.Volume_Info(self._img_info)
     self._testIterate(volume_info)
 
+  def testMountAllocatedPartitions(self):
+    """Volume_Info → FS_Info(offset=part.start*512) → list root.
+
+    Mirrors dfirwizard / imagemounter / GRR. Exercises partition
+    offset arithmetic and clean OSError propagation when a partition
+    is too small to mount.
+    """
+    volume_info = pytsk3.Volume_Info(self._img_info)
+    allocated = [p for p in volume_info
+                 if p.flags & pytsk3.TSK_VS_PART_FLAG_ALLOC]
+    self.assertGreater(len(allocated), 0)
+    mounted = 0
+    for part in allocated:
+      try:
+        fs_info = pytsk3.FS_Info(self._img_info, offset=part.start * 512)
+      except (IOError, OSError):
+        continue
+      mounted += 1
+      list(fs_info.open_dir('/'))
+    self.assertGreater(mounted, 0)
+
 
 class TSKVolumeInfoBogusTest(TSKVolumeInfoTestCase):
   """Volume_Info for testing that fails."""
