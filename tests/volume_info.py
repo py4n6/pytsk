@@ -2,52 +2,11 @@
 """Tests for Volume_Info."""
 
 import os
-import threading
 import unittest
 
 import pytsk3
 
-
-class FileObjectImageInfo(pytsk3.Img_Info):
-  """Img_Info that uses a file-like object.
-
-  Thread-safety: pytsk3 may invoke read() concurrently from multiple
-  threads (true under free-threaded Python; possible even with the
-  GIL via cooperative thread switches across the seek+read pair).
-  Most file-like objects implement read positioning as a stateful
-  seek+read on a single fd, so concurrent calls would race. We
-  serialize the seek/read pair under a per-instance lock so that
-  pytsk3 callers can share one FileObjectImageInfo across threads.
-  """
-
-  def __init__(
-      self, file_object, file_size, image_type=pytsk3.TSK_IMG_TYPE_RAW):
-    """Initializes the image object."""
-    if not file_object:
-      raise ValueError(u'Missing file-like object.')
-
-    self._file_object = file_object
-    self._file_size = file_size
-    self._read_lock = threading.Lock()
-    pytsk3.Img_Info.__init__(self, url='', type=image_type)
-
-  def close(self):
-    """Closes the volume IO object."""
-    with self._read_lock:
-      self._file_object = None
-
-  def read(self, offset, size):
-    """Reads a byte string from the image object at the specified offset."""
-    with self._read_lock:
-      file_object = self._file_object
-      if file_object is None:
-        return b''
-      file_object.seek(offset, os.SEEK_SET)
-      return file_object.read(size)
-
-  def get_size(self):
-    """Retrieves the size."""
-    return self._file_size
+import test_lib
 
 
 # mmls ../test_data/tsk_volume_system.raw
@@ -176,7 +135,7 @@ class TSKVolumeInfoFileObjectTest(TSKVolumeInfoTestCase):
 
     stat_info = os.stat(test_file)
     self._file_size = stat_info.st_size
-    self._img_info = FileObjectImageInfo(
+    self._img_info = test_lib.FileObjectImageInfo(
         self._file_object, self._file_size)
 
   def testInitialize(self):
@@ -200,7 +159,7 @@ class TSKVolumeInfoFileObjectWithDetectTest(TSKVolumeInfoTestCase):
 
     stat_info = os.stat(test_file)
     self._file_size = stat_info.st_size
-    self._img_info = FileObjectImageInfo(
+    self._img_info = test_lib.FileObjectImageInfo(
         self._file_object, self._file_size,
         image_type=pytsk3.TSK_IMG_TYPE_DETECT)
 
@@ -224,7 +183,7 @@ class TSKVolumeInfoFileObjectWithLargeSize(TSKVolumeInfoTestCase):
     self._file_object = open(test_file, 'rb')
 
     self._file_size = 1024 * 1024 * 1024 * 1024
-    self._img_info = FileObjectImageInfo(
+    self._img_info = test_lib.FileObjectImageInfo(
         self._file_object, self._file_size)
 
   def testInitialize(self):
