@@ -45,7 +45,14 @@ class custom_build_ext(build_ext):
                 ("_CRT_SECURE_NO_WARNINGS", "1"),
             ]
 
-        return [("HAVE_CONFIG_H", "1"), ("LOCALEDIR", '"/usr/share/locale"')]
+        return [
+            ("HAVE_CONFIG_H", "1"),
+            ("LOCALEDIR", '"/usr/share/locale"'),
+            # Make libtsk's lock_t and per-thread error storage active in
+            # pytsk3's own translation units so they match libtsk's. On
+            # MSVC this is set automatically by tsk_os.h via _MSC_VER.
+            ("TSK_MULTITHREAD_LIB", None),
+        ]
 
     def _get_include_directories(self):
         """Determine the include directories."""
@@ -60,7 +67,10 @@ class custom_build_ext(build_ext):
         if compiler_type == "msvc":
             return []
 
-        return ["stdc++"]
+        # pthread is needed because TSK_MULTITHREAD_LIB pulls in pthread_key_*
+        # and pthread_mutex_* from tsk_error.c and tsk_lock.c. Harmless on
+        # glibc 2.34+ (folded into libc) and macOS (libSystem stub).
+        return ["stdc++", "pthread"]
 
     def _get_sources(self):
         """Determine the sources."""
