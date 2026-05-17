@@ -25,9 +25,6 @@ jobs:
         if [[ "${{ matrix.python-version }}" != *t ]]; then
           brew install -q python@${{ matrix.python-version }}
         fi
-        # Force-link gettext to avoid an intermittent glibtoolize symlink race
-        # on macOS runners.
-        brew link --force gettext
         ln -s /usr/local/bin/glibtoolize /usr/local/bin/libtoolize
         python3 -m pip install setuptools
     - name: Build and test Python module
@@ -68,7 +65,7 @@ jobs:
     # explicitly alongside tox.
     - name: Install Python build tooling
       run: |
-        python -m pip install setuptools tox
+        python -m pip install tox
     - name: Build and test Python module
       run: |
         python ./utils/update_source.py
