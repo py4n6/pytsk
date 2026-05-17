@@ -22,6 +22,7 @@ jobs:
     - name: Build Python wheels
       uses: pypa/cibuildwheel@v3.4.1
       env:
+        CIBW_BEFORE_BUILD_LINUX: cd sleuthkit && ./bootstrap
         CIBW_TEST_COMMAND: python run_tests.py
         CIBW_TEST_SOURCES: run_tests.py test_data tests
       with:

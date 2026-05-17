@@ -5,7 +5,6 @@ include utils/update_source.py
 recursive-include dpkg *
 recursive-include patches *
 recursive-include sleuthkit *
-recursive-include sleuthkit/config *
 recursive-include talloc *
 recursive-include test_data *
 recursive-include tests *.py
