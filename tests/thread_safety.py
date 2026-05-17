@@ -628,3 +628,272 @@ class IteratorCursorThreadSafetyTest(unittest.TestCase):
     # could overshoot indefinitely.
     self.assertEqual(len(yielded), baseline)
 
+
+def _have_subinterpreters():
+  """True when the public test_support.interpreters API is available."""
+  try:
+    import test.support.interpreters  # noqa: F401
+    return True
+  except ImportError:
+    pass
+  try:
+    import _interpreters  # noqa: F401
+    return True
+  except ImportError:
+    return False
+
+
+_SUBINTERP_SCRIPT = (
+    'import pytsk3\n'
+    'img = pytsk3.Img_Info(url=' + repr(_TEST_IMAGE) + ')\n'
+    'assert img.get_size() == 102400\n'
+    'fs = pytsk3.FS_Info(img, offset=0)\n'
+    'f = fs.open_meta(15)\n'
+    "assert f.read_random(0, 16) == b'place,user,passw'\n")
+
+
+def _is_subinterpreter_load_unsupported(exc):
+  """Detect 'module does not support loading in subinterpreters'.
+
+  Python 3.12+ refuses to load single-phase-init C extension modules
+  into a subinterpreter unless they declare the
+  Py_mod_multiple_interpreters slot. pytsk3 still uses single-phase
+  init, so this ImportError is expected on 3.12 / 3.13. The message
+  bubbles up wrapped (e.g. as _xxsubinterpreters.RunFailedError) so
+  we have to match on the inner ImportError text.
+  """
+  text = str(exc)
+  return ('does not support loading in subinterpreters' in text
+          or 'is not allowed in subinterpreters' in text)
+
+
+class SubinterpreterImportTest(unittest.TestCase):
+  """pytsk3 must initialize cleanly inside a subinterpreter.
+
+  tsk_init() is wrapped in std::call_once so the C class templates
+  are only initialized once across all interpreters. Importing
+  pytsk3 in a fresh subinterpreter exercises that path and surfaces
+  any cross-subinterpreter state leak.
+
+  The subinterpreter API has shifted across Python versions:
+    * 3.11: only the private `_xxsubinterpreters` module, with a
+      `.run_string(id, script)` signature.
+    * 3.12-3.13: `test.support.interpreters` available but the
+      Interpreter object exposes `.run(script)`, not `.exec(...)`.
+      These versions also enforce PEP 489: single-phase-init C
+      modules (which pytsk3 still is) cannot load into a
+      subinterpreter, so this test is a no-op skip there.
+    * 3.14+: `interp.exec(script)` is the documented method, and the
+      default policy here permits the load.
+  This test probes each API in turn and skips when none works.
+  """
+
+  @unittest.skipUnless(_have_subinterpreters(),
+                       'subinterpreter API not available')
+  def testImportInSubinterpreter(self):
+    # Try the public API first.
+    try:
+      from test.support import interpreters  # type: ignore
+    except ImportError:
+      interpreters = None  # pylint: disable=invalid-name
+
+    if interpreters is not None:
+      interp = interpreters.create()
+      try:
+        runner = getattr(interp, 'exec', None) or getattr(interp, 'run', None)
+        if runner is None:
+          self.skipTest(
+              'test.support.interpreters has no exec/run on this build')
+        try:
+          runner(_SUBINTERP_SCRIPT)
+        except Exception as exc:  # pylint: disable=broad-except
+          if _is_subinterpreter_load_unsupported(exc):
+            self.skipTest(
+                'pytsk3 uses single-phase init; this Python version '
+                'forbids loading such modules in a subinterpreter')
+          raise
+        return
+      finally:
+        close = getattr(interp, 'close', None)
+        if close is not None:
+          close()
+
+    # Fall back to the private API. The module name and run_string
+    # signature both vary across versions; tolerate either.
+    try:
+      import _interpreters  # type: ignore  # noqa: F401
+      private = _interpreters
+    except ImportError:
+      try:
+        import _xxsubinterpreters  # type: ignore  # noqa: F401
+        private = _xxsubinterpreters
+      except ImportError:
+        self.skipTest('no usable subinterpreter API')
+
+    interp_id = private.create()
+    try:
+      run_string = getattr(private, 'run_string', None)
+      if run_string is None:
+        self.skipTest('private subinterpreter API has no run_string')
+      try:
+        run_string(interp_id, _SUBINTERP_SCRIPT)
+      except Exception as exc:  # pylint: disable=broad-except
+        if _is_subinterpreter_load_unsupported(exc):
+          self.skipTest(
+              'pytsk3 uses single-phase init; this Python version '
+              'forbids loading such modules in a subinterpreter')
+        raise
+    finally:
+      private.destroy(interp_id)
+
+
+class ProxiedReadConcurrencyTest(unittest.TestCase):
+  """Python-backed Img_Info hammered through libtsk's proxied read path.
+
+  Covers Img_Info_read no longer holding state_lock across tsk_img_read
+  (Python callback's own lock cannot ABBA) and the python_object2 swap
+  in proxied Wrapper-returning callbacks (critical-section-protected
+  on 3.13+ against double-decref).
+  """
+
+  def testConcurrentReadsThroughProxiedCallback(self):
+    """Concurrent reads + bounded join: covers correctness AND no deadlock."""
+    with open(_TEST_IMAGE, 'rb') as f:
+      img = _SharedBytesImg(f.read())
+    try:
+      def worker(_index):
+        for _ in range(20):
+          fs = pytsk3.FS_Info(img, offset=0)
+          fobj = fs.open_meta(15)
+          self.assertEqual(fobj.info.meta.size, 116)
+          self.assertEqual(len(fobj.read_random(0, 116)), 116)
+      threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]
+      for t in threads:
+        t.start()
+      # Bounded join so a deadlock fails the test instead of hanging.
+      for t in threads:
+        t.join(timeout=30)
+      for t in threads:
+        self.assertFalse(t.is_alive(), 'worker deadlocked')
+    finally:
+      img.close()
+
+
+class _SharedBytesImg(pytsk3.Img_Info):
+  """Bytes-backed Img_Info; per-read lock guarantees callers reach Python."""
+
+  def __init__(self, payload):
+    self._payload = payload
+    self._size = len(payload)
+    self._lock = threading.Lock()
+    pytsk3.Img_Info.__init__(self, url='', type=pytsk3.TSK_IMG_TYPE_RAW)
+
+  def close(self):
+    with self._lock:
+      self._payload = b''
+
+  def read(self, offset, size):
+    with self._lock:
+      if offset >= len(self._payload):
+        return b''
+      return self._payload[offset:offset + size]
+
+  def get_size(self):
+    return self._size
+
+
+class ReimportClassRegistryTest(unittest.TestCase):
+  """Concurrent class-registry lookups must not see a torn TOTAL_CCLASSES.
+
+  TOTAL_CCLASSES is now std::atomic<int> (release writers / acquire
+  readers); legacy plain-int reads could observe a half-zeroed entry
+  during a re-init.
+  """
+
+  def testRegistryStableUnderConcurrentLookups(self):
+    img = pytsk3.Img_Info(url=_TEST_IMAGE)
+    fs = pytsk3.FS_Info(img, offset=0)
+    try:
+      def worker(_index):
+        for _ in range(200):
+          fobj = fs.open_meta(15)
+          self.assertIsNotNone(fobj.info.meta)
+          # Iteration drives Wrapper construction through the registry.
+          for _attr in fobj:
+            pass
+      _run_concurrently(worker, 8)
+    finally:
+      img.close()
+
+
+class ProxiedExceptionPathTest(unittest.TestCase):
+  """Exceptions raised in a proxied Python callback must reach Python.
+
+  On 3.12+ pytsk_fetch_error uses PyErr_GetRaisedException /
+  SetRaisedException; the legacy Fetch/Restore triple was removed in
+  3.14. Verifies the modern path actually transports the exception.
+  """
+
+  def testRaiseInPythonReadIsObserved(self):
+    img = _RaisingImg()
+    try:
+      with self.assertRaises((IOError, OSError, RuntimeError)):
+        _ = pytsk3.FS_Info(img, offset=0)
+    finally:
+      img.close()
+
+
+class CycleCollectionTest(unittest.TestCase):
+  """Wrapper objects participate in cyclic GC.
+
+  img._cycle = directory; directory.python_object1 = fs (C keepalive);
+  fs.python_object1 = img (C keepalive) is a real cycle. Without
+  tp_traverse / tp_clear / Py_TPFLAGS_HAVE_GC the libtsk handle (plus
+  any user payload) leaks for the process lifetime.
+  """
+
+  def testCycleIsCollected(self):
+    sentinel_alive = [True]
+
+    class Sentinel:
+      def __del__(self_inner):
+        sentinel_alive[0] = False
+
+    class CycleImg(pytsk3.Img_Info):
+      pass
+
+    def build():
+      img = CycleImg(_TEST_IMAGE)
+      # Precondition: GC must track the wrapper or the cycle below
+      # is unreachable to the collector regardless of fix correctness.
+      assert gc.is_tracked(img), 'wrapper must be GC-tracked'
+      fs = pytsk3.FS_Info(img)
+      d = fs.open_dir('/')
+      img._cycle = d            # img -> d -> fs (python_object1) -> img
+      img._sentinel = Sentinel()
+
+    build()
+    gc.collect()
+    self.assertFalse(
+        sentinel_alive[0],
+        'cycle through python_object1 keepalive was not collected')
+
+
+class _RaisingImg(pytsk3.Img_Info):
+  """Img_Info whose read() always raises, to exercise pytsk_fetch_error."""
+
+  def __init__(self):
+    pytsk3.Img_Info.__init__(self, url='', type=pytsk3.TSK_IMG_TYPE_RAW)
+
+  def close(self):
+    return None
+
+  def read(self, offset, size):
+    raise RuntimeError('synthetic Python read failure')
+
+  def get_size(self):
+    return 1 << 20
+
+
+if __name__ == '__main__':
+  unittest.main()
