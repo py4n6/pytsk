@@ -20,190 +20,208 @@ import sys
 
 
 class Lexer:
-  """A generic feed lexer."""
-  ## The following is a description of the states we have and the
-  ## way we move through them: format is an array of
-  ## [ state_re, re, token/action, next state ]
-  tokens = []
-  state = "INITIAL"
-  buffer = ""
-  error = 0
-  verbose = 0
-  state_stack = []
-  processed = 0
-  processed_buffer = ""
-  saved_state = None
-  flags = 0
+    """A generic feed lexer."""
 
-  def __init__(self, verbose=0, fd=None):
-    super().__init__()
-    self.encoding = "utf-8"
+    ## The following is a description of the states we have and the
+    ## way we move through them: format is an array of
+    ## [ state_re, re, token/action, next state ]
+    tokens = []
+    state = "INITIAL"
+    buffer = ""
+    error = 0
+    verbose = 0
+    state_stack = []
+    processed = 0
+    processed_buffer = ""
+    saved_state = None
+    flags = 0
 
-    if not self.verbose:
-      self.verbose = verbose
+    def __init__(self, verbose=0, fd=None):
+        super().__init__()
+        self.encoding = "utf-8"
 
-    if len(self.tokens[0]) == 4:
-      for row in self.tokens:
-        row.append(re.compile(row[0], re.DOTALL))
-        row.append(re.compile(row[1], re.DOTALL | re.M | re.S | self.flags))
+        if not self.verbose:
+            self.verbose = verbose
 
-    self.fd = fd
+        if len(self.tokens[0]) == 4:
+            for row in self.tokens:
+                row.append(re.compile(row[0], re.DOTALL))
+                row.append(re.compile(row[1], re.DOTALL | re.M | re.S | self.flags))
 
-  def save_state(self, dummy_t=None, m=None):
-    """Returns a dict which represents the current state of the lexer.
+        self.fd = fd
 
-       When provided to restore_state, the lexer is guaranteed to be
-       in the same state as when the save_state was called.
+    def save_state(self, dummy_t=None, m=None):
+        """Returns a dict which represents the current state of the lexer.
 
-       Note that derived classes may need to extend this.
-    """
-    ## Unable to save our state if we have errors. We need to guarantee
-    ## that we rewind to a good part of the file.
-    if self.error:
-      return
-    try:
-      end = m.end()
-    except:
-      end = 0
+        When provided to restore_state, the lexer is guaranteed to be
+        in the same state as when the save_state was called.
 
-    self.saved_state = dict(
-        state_stack = self.state_stack[:],
-        processed = self.processed - end,
-        processed_buffer = self.processed_buffer,
-        readptr = self.fd.tell() - len(self.buffer) - end,
-        state = self.state,
-        objects = self.objects[:],
-        error = self.error,
-    )
-    if self.verbose > 1:
-      sys.stderr.write("Saving state {0:s}\n".format(self.processed))
+        Note that derived classes may need to extend this.
+        """
+        ## Unable to save our state if we have errors. We need to guarantee
+        ## that we rewind to a good part of the file.
+        if self.error:
+            return
+        try:
+            end = m.end()
+        except:
+            end = 0
 
-  def restore_state(self):
-    state = self.saved_state
-    if not state:
-      return
+        self.saved_state = dict(
+            state_stack=self.state_stack[:],
+            processed=self.processed - end,
+            processed_buffer=self.processed_buffer,
+            readptr=self.fd.tell() - len(self.buffer) - end,
+            state=self.state,
+            objects=self.objects[:],
+            error=self.error,
+        )
+        if self.verbose > 1:
+            sys.stderr.write("Saving state {0:s}\n".format(self.processed))
 
-    self.state_stack = state["state_stack"]
-    self.processed = state["processed"]
-    self.processed_buffer = state["processed_buffer"]
-    self.buffer = ""
-    self.fd.seek(state["readptr"])
-    self.state = state["state"]
-    self.objects = state["objects"]
-    self.error = state["error"]
+    def restore_state(self):
+        state = self.saved_state
+        if not state:
+            return
 
-    if self.verbose > 1:
-      sys.stderr.write("Restoring state to offset {0:s}\n".format(self.processed))
+        self.state_stack = state["state_stack"]
+        self.processed = state["processed"]
+        self.processed_buffer = state["processed_buffer"]
+        self.buffer = ""
+        self.fd.seek(state["readptr"])
+        self.state = state["state"]
+        self.objects = state["objects"]
+        self.error = state["error"]
 
-  def next_token(self, end=True):
-    ## Now try to match any of the regexes in order:
-    current_state = self.state
-    for _, re_str, token, next_state, state, regex in self.tokens:
-      ## Does the rule apply for us now?
-      if state.match(current_state):
+        if self.verbose > 1:
+            sys.stderr.write("Restoring state to offset {0:s}\n".format(self.processed))
+
+    def next_token(self, end=True):
+        ## Now try to match any of the regexes in order:
+        current_state = self.state
+        for _, re_str, token, next_state, state, regex in self.tokens:
+            ## Does the rule apply for us now?
+            if state.match(current_state):
+                if self.verbose > 2:
+                    sys.stderr.write(
+                        "{0:s}: Trying to match {1:s} with {2:s}\n".format(
+                            self.state, repr(self.buffer[:10]), repr(re_str)
+                        )
+                    )
+                match = regex.match(self.buffer)
+                if match:
+                    if self.verbose > 3:
+                        sys.stderr.write(
+                            "{0:s} matched {1:s}\n".format(
+                                re_str, match.group(0).encode("utf8")
+                            )
+                        )
+
+                    ## The match consumes the data off the buffer (the
+                    ## handler can put it back if it likes)
+                    self.processed_buffer += self.buffer[: match.end()]
+                    self.buffer = self.buffer[match.end() :]
+                    self.processed += match.end()
+
+                    ## Try to iterate over all the callbacks specified:
+                    for t in token.split(","):
+                        try:
+                            if self.verbose > 0:
+                                sys.stderr.write(
+                                    "0x{0:X}: Calling {1:s} {2:s}\n".format(
+                                        self.processed, t, repr(match.group(0))
+                                    )
+                                )
+                            cb = getattr(self, t, self.default_handler)
+                        except AttributeError:
+                            continue
+
+                        ## Is there a callback to handle this action?
+                        callback_state = cb(t, match)
+                        if callback_state == "CONTINUE":
+                            continue
+
+                        elif callback_state:
+                            next_state = callback_state
+                            self.state = next_state
+
+                    if next_state:
+                        self.state = next_state
+
+                    return token
+
+        ## Check that we are making progress - if we are too full, we
+        ## assume we are stuck:
+        if end and len(self.buffer) > 0 or len(self.buffer) > 1024:
+            self.processed_buffer += self.buffer[:1]
+            self.buffer = self.buffer[1:]
+            self.ERROR(
+                "Lexer Stuck, discarding 1 byte ({0:s}) - state {1:s}".format(
+                    repr(self.buffer[:10]), self.state
+                )
+            )
+            return "ERROR"
+
+        ## No token were found
+        return
+
+    def feed(self, data):
+        """Feeds the lexer.
+
+        Args:
+          data: binary string containing the data (instance of bytes).
+        """
+        self.buffer += data.decode(self.encoding)
+
+    def empty(self):
+        return not len(self.buffer)
+
+    def default_handler(self, token, match):
         if self.verbose > 2:
-          sys.stderr.write("{0:s}: Trying to match {1:s} with {2:s}\n".format(
-              self.state, repr(self.buffer[:10]), repr(re_str)))
-        match = regex.match(self.buffer)
-        if match:
-          if self.verbose > 3:
-            sys.stderr.write("{0:s} matched {1:s}\n".format(
-                re_str, match.group(0).encode("utf8")))
+            sys.stderr.write(
+                "Default handler: {0:s} with {1:s}\n".format(
+                    token, repr(match.group(0))
+                )
+            )
 
-          ## The match consumes the data off the buffer (the
-          ## handler can put it back if it likes)
-          self.processed_buffer += self.buffer[:match.end()]
-          self.buffer = self.buffer[match.end():]
-          self.processed += match.end()
+    def ERROR(self, message=None, weight=1):
+        if self.verbose > 0 and message:
+            sys.stderr.write("Error({0:d}): {1!s}\n".format(weight, message))
 
-          ## Try to iterate over all the callbacks specified:
-          for t in token.split(","):
-            try:
-              if self.verbose > 0:
-                sys.stderr.write("0x{0:X}: Calling {1:s} {2:s}\n".format(
-                    self.processed, t, repr(match.group(0))))
-              cb = getattr(self, t, self.default_handler)
-            except AttributeError:
-              continue
+        self.error += weight
 
-            ## Is there a callback to handle this action?
-            callback_state = cb(t, match)
-            if callback_state == "CONTINUE":
-              continue
+    def PUSH_STATE(self, dummy_token=None, dummy_match=None):
+        if self.verbose > 1:
+            sys.stderr.write("Storing state {0:s}\n".format(self.state))
 
-            elif callback_state:
-              next_state = callback_state
-              self.state = next_state
+        self.state_stack.append(self.state)
 
-          if next_state:
-            self.state = next_state
+    def POP_STATE(self, dummy_token=None, dummy_match=None):
+        try:
+            state = self.state_stack.pop()
+            if self.verbose > 1:
+                sys.stderr.write("Returned state to {0:s}\n".format(state))
+        except IndexError:
+            sys.stderr.write(
+                "Tried to pop the state but failed - possible recursion error\n"
+            )
+            state = None
+        return state
 
-          return token
-
-    ## Check that we are making progress - if we are too full, we
-    ## assume we are stuck:
-    if end and len(self.buffer) > 0 or len(self.buffer) > 1024:
-      self.processed_buffer += self.buffer[:1]
-      self.buffer = self.buffer[1:]
-      self.ERROR(
-          "Lexer Stuck, discarding 1 byte ({0:s}) - state {1:s}".format(
-              repr(self.buffer[:10]), self.state))
-      return "ERROR"
-
-    ## No token were found
-    return
-
-  def feed(self, data):
-    """Feeds the lexer.
-
-    Args:
-      data: binary string containing the data (instance of bytes).
-    """
-    self.buffer += data.decode(self.encoding)
-
-  def empty(self):
-    return not len(self.buffer)
-
-  def default_handler(self, token, match):
-    if self.verbose > 2:
-      sys.stderr.write("Default handler: {0:s} with {1:s}\n".format(
-          token, repr(match.group(0))))
-
-  def ERROR(self, message=None, weight=1):
-    if self.verbose > 0 and message:
-      sys.stderr.write("Error({0:d}): {1!s}\n".format(weight, message))
-
-    self.error += weight
-
-  def PUSH_STATE(self, dummy_token=None, dummy_match=None):
-    if self.verbose > 1:
-      sys.stderr.write("Storing state {0:s}\n".format(self.state))
-
-    self.state_stack.append(self.state)
-
-  def POP_STATE(self, dummy_token=None, dummy_match=None):
-    try:
-      state = self.state_stack.pop()
-      if self.verbose > 1:
-        sys.stderr.write("Returned state to {0:s}\n".format(state))
-    except IndexError:
-      sys.stderr.write("Tried to pop the state but failed - possible recursion error\n")
-      state = None
-    return state
-
-  def close(self):
-    """Just a conveniece function to force us to parse all the data."""
-    while self.next_token():
-      pass
+    def close(self):
+        """Just a conveniece function to force us to parse all the data."""
+        while self.next_token():
+            pass
 
 
 class SelfFeederMixIn(Lexer):
-  """This mixin is used to make a lexer which feeds itself one
-     sector at the time.
+    """This mixin is used to make a lexer which feeds itself one
+    sector at the time.
 
-     Note that self.fd must be the fd we read from.
-  """
-  def parse_fd(self, fd):
-    self.feed(fd.read())
-    while self.next_token():
-      pass
+    Note that self.fd must be the fd we read from.
+    """
+
+    def parse_fd(self, fd):
+        self.feed(fd.read())
+        while self.next_token():
+            pass

@@ -79,9 +79,9 @@ class SourceUpdater:
             "tsk3.h",
         ]
         if self.verbose:
-          verbose = 1
+            verbose = 1
         else:
-          verbose = 0
+            verbose = 0
 
         class_parser.FREE = "talloc_free"
         parser = class_parser.HeaderParser("pytsk3", verbose=verbose)
@@ -257,9 +257,7 @@ def Main():
         dest="verbose",
         action="store_true",
         default=False,
-        help=(
-            "Verbose output"
-        ),
+        help=("Verbose output"),
     )
     options = argument_parser.parse_args()
 

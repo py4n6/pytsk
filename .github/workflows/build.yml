@@ -31,7 +31,7 @@ jobs:
       run: |
         python ./utils/update_source.py
         export CXXFLAGS="-std=c++14"
-        tox -e${{ matrix.toxenv }}
+        tox -e ${{ matrix.toxenv }}
   build_ubuntu:
     runs-on: ubuntu-latest
     strategy:
@@ -52,7 +52,6 @@ jobs:
           toxenv: 'py314t'
     steps:
     - uses: actions/checkout@v6
-    # deadsnakes ships python3.14-nogil without Python.h; setup-python includes headers.
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v6
       with:
@@ -67,7 +66,7 @@ jobs:
     - name: Build and test Python module
       run: |
         python ./utils/update_source.py
-        tox -e${{ matrix.toxenv }}
+        tox -e ${{ matrix.toxenv }}
   build_windows:
     runs-on: windows-latest
     strategy:
