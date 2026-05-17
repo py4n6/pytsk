@@ -18,7 +18,6 @@ import glob
 import os
 import shlex
 import subprocess
-import sys
 
 from setuptools import Extension
 from setuptools import errors
@@ -146,7 +145,7 @@ class custom_build_ext(build_ext):
         """Builds the extension."""
         sources = extension.sources
         if sources is None or not isinstance(sources, (list, tuple)):
-            raise SetupError(
+            raise errors.SetupError(
                 f"in 'ext_modules' option (extension '{extension.name:s}'), 'sources' "
                 f"must be present and must be a list of source filenames"
             )

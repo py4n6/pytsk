@@ -1,5 +1,4 @@
-#!/usr/bin/python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 """Thread-safety and free-threaded Python regression tests for pytsk3.
 
 These exercise patterns that can crash or scramble state when:
@@ -555,6 +554,8 @@ class GilStaysOffTest(unittest.TestCase):
     stays off the entire time.
     """
 
+    # pylint: disable=protected-access
+
     @unittest.skipUnless(_is_free_threaded(), "requires a free-threaded Python build")
     def testGilStaysOffAcrossOperations(self):
         self.assertFalse(sys._is_gil_enabled())
@@ -859,6 +860,8 @@ class CycleCollectionTest(unittest.TestCase):
     tp_traverse / tp_clear / Py_TPFLAGS_HAVE_GC the libtsk handle (plus
     any user payload) leaks for the process lifetime.
     """
+
+    # pylint: disable=protected-access
 
     def testCycleIsCollected(self):
         sentinel_alive = [True]

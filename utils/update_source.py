@@ -27,7 +27,7 @@ import time
 # Update PYTHONPATH.
 sys.path.insert(0, ".")
 
-import class_parser
+import class_parser  # pylint: disable=wrong-import-position
 
 
 class SourceUpdater:
@@ -88,7 +88,7 @@ class SourceUpdater:
         parser.module.init_string = "tsk_init();"
         parser.parse_filenames(header_files)
 
-        with open("pytsk3.cpp", "w") as file_object:
+        with open("pytsk3.cpp", "w", encoding="utf8") as file_object:
             parser.write(file_object)
 
     def _print_configure_summary(self, output):
@@ -126,9 +126,10 @@ class SourceUpdater:
         # If timezone_hours is -1 %02d will format as -1 instead of -01
         # hence we detect the sign and force a leading zero.
         if timezone_hours < 0:
-            timezone_string = "-%02d%02d" % (-timezone_hours, timezone_minutes)
+            timezone_hours *= -1
+            timezone_string = "-{timezone_hours:02d}{timezone_minutes:02d}"
         else:
-            timezone_string = "+%02d%02d" % (timezone_hours, timezone_minutes)
+            timezone_string = "+{timezone_hours:02d}{timezone_minutes:02d}"
 
         files = {
             "class_parser.py": [
@@ -145,16 +146,16 @@ class SourceUpdater:
         for filename, rules in files.items():
             filename = os.path.join(*filename.split("/"))
 
-            with open(filename, "r") as file_object:
+            with open(filename, encoding="utf8") as file_object:
                 data = file_object.read()
 
             for search, replace in rules:
                 data = re.sub(search, replace, data)
 
-            with open(filename, "w") as file_object:
+            with open(filename, "w", encoding="utf8") as file_object:
                 file_object.write(data)
 
-    def run(self):
+    def Run(self):
         """Updates the source."""
         subprocess.check_call(["git", "stash"], cwd="sleuthkit")
 
@@ -189,7 +190,7 @@ class SourceUpdater:
                 shutil.copy(f"{path:s}.in", path)
 
             path = os.path.join("sleuthkit", "tsk", "tsk_incs.h")
-            with open(path, "w") as file_object:
+            with open(path, "w", encoding="utf8") as file_object:
                 file_object.write(
                     "\n".join(
                         [
@@ -238,7 +239,7 @@ def Main():
     Returns:
       int: exit code that is provided to sys.exit().
     """
-    argument_parser = argparse.ArgumentParser(description=("Updates the source."))
+    argument_parser = argparse.ArgumentParser(description="Updates the source.")
 
     argument_parser.add_argument(
         "--use-head",
@@ -263,7 +264,7 @@ def Main():
 
     updater = SourceUpdater(use_head=options.use_head, verbose=options.verbose)
 
-    updater.run()
+    updater.Run()
 
     return 0
 

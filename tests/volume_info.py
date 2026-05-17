@@ -6,7 +6,7 @@ import unittest
 
 import pytsk3
 
-import test_lib
+from tests import test_lib
 
 # mmls ../test_data/tsk_volume_system.raw
 # DOS Partition Table
@@ -50,14 +50,12 @@ class TSKVolumeInfoTestCase(unittest.TestCase):
         parts = []
 
         for part in volume_info:
-            part_string = ("{0:02d}:  {1:010d}   {2:010d}   {3:010d}   {4:s}\n").format(
-                part.addr,
-                part.start,
-                part.start + part.len - 1,
-                part.len,
-                part.desc.decode("utf-8"),
+            part_end = part.start + part.len - 1
+            part_desc = part.desc.decode("utf-8")
+            parts.append(
+                f"{part.addr:02d}:  {part.start:010d}   {part_end:010d}   "
+                f"{part.len:010d}   {part_desc:s}\n"
             )
-            parts.append(part_string)
 
         self.assertEqual(len(parts), 7)
 
@@ -70,7 +68,6 @@ class TSKVolumeInfoTestCase(unittest.TestCase):
             "05:  0000000351   0000000351   0000000001   Unallocated\n"
             "06:  0000000352   0000002879   0000002528   Linux (0x83)\n"
         )
-
         self.assertEqual("".join(parts), expected_parts_string)
 
 
@@ -102,14 +99,17 @@ class TSKVolumeInfoTest(TSKVolumeInfoTestCase):
         volume_info = pytsk3.Volume_Info(self._img_info)
         allocated = [p for p in volume_info if p.flags & pytsk3.TSK_VS_PART_FLAG_ALLOC]
         self.assertGreater(len(allocated), 0)
+
         mounted = 0
         for part in allocated:
             try:
                 fs_info = pytsk3.FS_Info(self._img_info, offset=part.start * 512)
-            except (IOError, OSError):
+            except OSError:
                 continue
+
             mounted += 1
             list(fs_info.open_dir("/"))
+
         self.assertGreater(mounted, 0)
 
 
@@ -123,7 +123,7 @@ class TSKVolumeInfoBogusTest(TSKVolumeInfoTestCase):
 
     def testInitialize(self):
         """Test the initialize functionality."""
-        with self.assertRaises(IOError):
+        with self.assertRaises(OSError):
             pytsk3.Volume_Info(self._img_info)
 
 
@@ -133,6 +133,8 @@ class TSKVolumeInfoFileObjectTest(TSKVolumeInfoTestCase):
     def setUp(self):
         """Sets up the needed objects used throughout the test."""
         test_file = os.path.join("test_data", "tsk_volume_system.raw")
+
+        # pylint: disable=consider-using-with
         self._file_object = open(test_file, "rb")
 
         stat_info = os.stat(test_file)
@@ -158,6 +160,8 @@ class TSKVolumeInfoFileObjectWithDetectTest(TSKVolumeInfoTestCase):
     def setUp(self):
         """Sets up the needed objects used throughout the test."""
         test_file = os.path.join("test_data", "tsk_volume_system.raw")
+
+        # pylint: disable=consider-using-with
         self._file_object = open(test_file, "rb")
 
         stat_info = os.stat(test_file)
@@ -183,6 +187,8 @@ class TSKVolumeInfoFileObjectWithLargeSize(TSKVolumeInfoTestCase):
     def setUp(self):
         """Sets up the needed objects used throughout the test."""
         test_file = os.path.join("test_data", "tsk_volume_system.raw")
+
+        # pylint: disable=consider-using-with
         self._file_object = open(test_file, "rb")
 
         self._file_size = 1024 * 1024 * 1024 * 1024
@@ -200,21 +206,22 @@ class TSKVolumeInfoFileObjectWithLargeSize(TSKVolumeInfoTestCase):
         volume_info = pytsk3.Volume_Info(self._img_info)
 
         self.assertNotEqual(volume_info, None)
-        self.assertNotEqual(getattr(volume_info, "info", None), None)
 
-        self.assertEqual(volume_info.info.vstype, pytsk3.TSK_VS_TYPE_DOS)
+        info = getattr(volume_info, "info", None)
+        self.assertNotEqual(info, None)
+
+        vstype = getattr(info, "vstype", None)
+        self.assertEqual(vstype, pytsk3.TSK_VS_TYPE_DOS)
 
         parts = []
 
         for part in volume_info:
-            part_string = ("{0:02d}:  {1:010d}   {2:010d}   {3:010d}   {4:s}\n").format(
-                part.addr,
-                part.start,
-                part.start + part.len - 1,
-                part.len,
-                part.desc.decode("utf-8"),
+            part_end = part.start + part.len - 1
+            part_desc = part.desc.decode("utf-8")
+            parts.append(
+                f"{part.addr:02d}:  {part.start:010d}   {part_end:010d}   "
+                f"{part.len:010d}   {part_desc:s}\n"
             )
-            parts.append(part_string)
 
         # Note that due to the size the SleuthKit will add a non-existing part:
         # 07:  0000002880   2147483647   2147480768   Unallocated
@@ -231,7 +238,6 @@ class TSKVolumeInfoFileObjectWithLargeSize(TSKVolumeInfoTestCase):
             "06:  0000000352   0000002879   0000002528   Linux (0x83)\n"
             "07:  0000002880   2147483647   2147480768   Unallocated\n"
         )
-
         self.assertEqual("".join(parts), expected_parts_string)
 
 
