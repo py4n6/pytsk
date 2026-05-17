@@ -20,13 +20,12 @@ jobs:
     - name: Install build dependencies
       run: |
         brew update -q
-        brew install -q autoconf automake gettext gnu-sed libtool pkgconfig tox
+        brew install -q autoconf automake gettext gnu-sed libtool pkgconfig tox || true
         # There currently is no brew formula for free-threaded Python, but setup-python will install it if necessary.
         if [[ "${{ matrix.python-version }}" != *t ]]; then
           brew install -q python@${{ matrix.python-version }}
         fi
         ln -s /usr/local/bin/glibtoolize /usr/local/bin/libtoolize
-        python3 -m pip install setuptools
     - name: Build and test Python module
       run: |
         python ./utils/update_source.py
