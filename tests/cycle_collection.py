@@ -1,5 +1,4 @@
-#!/usr/bin/python
-# -*- coding: utf-8 -*-
+#!/usr/bin/env python3
 """Cyclic-GC regression test for the generated pytsk3 wrappers.
 
 The wrappers participate in cycles via the C-side keepalive fields

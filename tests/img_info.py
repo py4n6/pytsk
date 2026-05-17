@@ -6,7 +6,7 @@ import unittest
 
 import pytsk3
 
-import test_lib
+from tests import test_lib
 
 
 class TSKImgInfoTestCase(unittest.TestCase):
@@ -28,7 +28,8 @@ class TSKImgInfoTestCase(unittest.TestCase):
         """
         self.assertNotEqual(img_info, None)
 
-        self.assertEqual(img_info.get_size(), self._file_size)
+        file_size = getattr(self, "_file_size")
+        self.assertEqual(img_info.get_size(), file_size)
 
     def _testRead(self, img_info):
         """Test the read functionality.
@@ -96,6 +97,8 @@ class TSKImgInfoFileObjectTest(TSKImgInfoTestCase):
     def setUp(self):
         """Sets up the needed objects used throughout the test."""
         test_file = os.path.join("test_data", "image.raw")
+
+        # pylint: disable=consider-using-with
         self._file_object = open(test_file, "rb")
 
         stat_info = os.stat(test_file)
@@ -127,6 +130,8 @@ class TSKImgInfoFileObjectWithDetectTest(TSKImgInfoTestCase):
     def setUp(self):
         """Sets up the needed objects used throughout the test."""
         test_file = os.path.join("test_data", "image.raw")
+
+        # pylint: disable=consider-using-with
         self._file_object = open(test_file, "rb")
 
         stat_info = os.stat(test_file)
@@ -164,6 +169,8 @@ class TSKImgInfoFileObjectLargeSizeTest(TSKImgInfoTestCase):
     def setUp(self):
         """Sets up the needed objects used throughout the test."""
         test_file = os.path.join("test_data", "image.raw")
+
+        # pylint: disable=consider-using-with
         self._file_object = open(test_file, "rb")
         self._file_size = 1024 * 1024 * 1024 * 1024
 

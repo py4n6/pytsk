@@ -225,8 +225,6 @@ get freed until we are finished with it.
 """
 
 import io
-import os
-import pdb
 import re
 import sys
 
@@ -2397,7 +2395,6 @@ class Method:
                         self.class_name, self.name, return_type
                     )
                 )
-                # pdb.set_trace()
             self.return_type = PVoid("func_return")
 
     def get_string(self):
@@ -2929,14 +2926,11 @@ class ConstructorMethod(Method):
             "class_name": self.class_name,
             "definition_class_name": self.definition_class_name,
         }
-
         out.write(
             ("{{\n" "    {class_name:s} result_constructor = NULL;\n").format(
                 **values_dict
             )
         )
-
-        # pdb.set_trace()
         self.write_local_vars(out)
 
         # Assign the initialise_proxies handler
@@ -4659,12 +4653,10 @@ class HeaderParser(lexer.SelfFeederMixIn):
         try:
             self.module.write(out)
         except:
-            # pdb.post_mortem()
             raise
 
     def write_headers(self):
         pass
-        # pdb.set_trace()
 
 
 if __name__ == "__main__":

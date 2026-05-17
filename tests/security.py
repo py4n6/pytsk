@@ -1,7 +1,6 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 """Security regression tests for pytsk3."""
 
-import io
 import os
 import unittest
 
@@ -95,7 +94,6 @@ class HeapOverflowOnProxiedReadTest(unittest.TestCase):
                 self.assertGreater(
                     img_info.max_overflow, 0, "subclass never overflowed"
                 )
-
                 names = sorted(
                     entry.info.name.name
                     for entry in directory
@@ -167,10 +165,9 @@ class StructWrapperPropertyBaseAccessTest(unittest.TestCase):
         """Test the property getter "self->base == NULL" guard."""
         classes = [
             candidate
-            for candidate in self._CANDIDATE_ATTRIBUTES.keys()
+            for candidate in self._CANDIDATE_ATTRIBUTES
             if hasattr(pytsk3, candidate)
         ]
-
         self.assertGreater(len(classes), 0, "no struct wrapper classes found")
 
         guard_hits = 0

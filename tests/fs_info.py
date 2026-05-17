@@ -6,34 +6,7 @@ import unittest
 
 import pytsk3
 
-import test_lib
-
-
-def walk_filesystem(directory, prefix=b"", max_depth=8, _depth=0):
-    """Recursive directory walk yielding (path, entry) pairs.
-
-    Mirrors samples/fls.py and dfvfs's TSKFileSystem traversal: skip
-    '.', '..', and the synthetic '$OrphanFiles' node; recurse via
-    File.as_directory(); cap depth to avoid runaway loops on
-    pathological inputs (e.g. cyclic symlinks).
-    """
-    if _depth > max_depth:
-        return
-    for entry in directory:
-        if not entry.info or not entry.info.name:
-            continue
-        name = entry.info.name.name
-        if name in (b".", b"..", b"$OrphanFiles"):
-            continue
-        yield prefix + b"/" + name, entry
-        meta = entry.info.meta
-        if meta is not None and meta.type == pytsk3.TSK_FS_META_TYPE_DIR:
-            try:
-                sub = entry.as_directory()
-            except (IOError, OSError):
-                continue
-            yield from walk_filesystem(sub, prefix + b"/" + name, max_depth, _depth + 1)
-
+from tests import test_lib
 
 # fls -l ./test_data/image.raw
 # d/d 11:	lost+found	2012-05-25 17:55:50 (CEST)
@@ -76,7 +49,7 @@ class TSKFsInfoTestCase(unittest.TestCase):
 
         self.assertNotEqual(file_object, None)
 
-        with self.assertRaises(IOError):
+        with self.assertRaises(OSError):
             file_object = fs_info.open_meta(19)
 
 
@@ -149,16 +122,53 @@ class TSKFsInfoBogusTest(TSKFsInfoTestCase):
 
     def testInitialize(self):
         """Test the initialize functionality."""
-        with self.assertRaises(IOError):
+        with self.assertRaises(OSError):
             pytsk3.FS_Info(self._img_info, offset=0)
 
 
 class TSKFsInfoFileObjectTest(TSKFsInfoTestCase):
     """Tests the FS_Info object using an Img_Info file-like object."""
 
+    def _WalkFileSystem(self, directory, prefix=b"", max_depth=8, depth=0):
+        """Recursive directory walk yielding (path, entry) pairs.
+
+        Mirrors samples/fls.py and dfvfs's TSKFileSystem traversal: skip
+        '.', '..', and the synthetic '$OrphanFiles' node; recurse via
+        File.as_directory(); cap depth to avoid runaway loops on
+        pathological inputs (e.g. cyclic symlinks).
+        """
+        if depth <= max_depth:
+            for entry in directory:
+                if not entry.info or not entry.info.name:
+                    continue
+
+                name = entry.info.name.name
+                if name in (b".", b"..", b"$OrphanFiles"):
+                    continue
+
+                path = prefix + b"/" + name
+                yield path, entry
+
+                meta = entry.info.meta
+                if meta is not None and meta.type == pytsk3.TSK_FS_META_TYPE_DIR:
+                    try:
+                        sub_directory = entry.as_directory()
+                    except OSError:
+                        continue
+
+                    path = prefix + b"/" + name
+                    yield from self._WalkFileSystem(
+                        sub_directory,
+                        prefix=path,
+                        max_depth=max_depth,
+                        depth=depth + 1,
+                    )
+
     def setUp(self):
         """Sets up the needed objects used throughout the test."""
         test_file = os.path.join("test_data", "image.raw")
+
+        # pylint: disable=consider-using-with
         self._file_object = open(test_file, "rb")
 
         stat_info = os.stat(test_file)
@@ -178,21 +188,23 @@ class TSKFsInfoFileObjectTest(TSKFsInfoTestCase):
         self._testOpenMeta(fs_info)
 
     def testRecursiveWalkMatchesAcrossOpenPaths(self):
-        """Walk every file via FileObject-backed image; bytes via inode == bytes via path.
+        """Walk every file via a file-like object backed image.
 
-        Mirrors the dominant dfvfs pipeline (TSKFileSystemImage subclass
-        feeding TSKFileSystem). End-to-end exercise of the proxied read
-        callback, parent keepalive, and the open-by-inode vs open-by-path
-        paths in one walk.
+        Tests proxied read callback, parent keepalive, and the open-by-inode versus
+        open-by-path paths in a single walk.
         """
         fs_info = pytsk3.FS_Info(self._img_info, offset=0)
-        paths = dict(walk_filesystem(fs_info.open_dir("/")))
+        directory = fs_info.open_dir("/")
+
+        paths = dict(self._WalkFileSystem(directory))
         self.assertIn(b"/passwords.txt", paths)
         self.assertIn(b"/a_directory/a_file", paths)
+
         for path, entry in paths.items():
             meta = entry.info.meta
             if meta is None or meta.type != pytsk3.TSK_FS_META_TYPE_REG:
                 continue
+
             by_inode = fs_info.open_meta(meta.addr).read_random(0, meta.size)
             by_path = fs_info.open(path.decode("utf-8")).read_random(0, meta.size)
             self.assertEqual(by_inode, by_path, msg=path)
@@ -204,6 +216,8 @@ class TSKFsInfoFileObjectWithDetectTest(TSKFsInfoTestCase):
     def setUp(self):
         """Sets up the needed objects used throughout the test."""
         test_file = os.path.join("test_data", "image.raw")
+
+        # pylint: disable=consider-using-with
         self._file_object = open(test_file, "rb")
 
         stat_info = os.stat(test_file)
@@ -229,6 +243,8 @@ class TSKFsInfoFileObjectWithLargeSize(TSKFsInfoTestCase):
     def setUp(self):
         """Sets up the needed objects used throughout the test."""
         test_file = os.path.join("test_data", "image.raw")
+
+        # pylint: disable=consider-using-with
         self._file_object = open(test_file, "rb")
 
         self._file_size = 1024 * 1024 * 1024 * 1024
