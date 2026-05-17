@@ -25,9 +25,6 @@ jobs:
         if [[ "${{ matrix.python-version }}" != *t ]]; then
           brew install -q python@${{ matrix.python-version }}
         fi
-        # Force-link gettext to avoid an intermittent glibtoolize symlink race
-        # on macOS runners.
-        brew link --force gettext
         ln -s /usr/local/bin/glibtoolize /usr/local/bin/libtoolize
         python3 -m pip install setuptools
     - name: Build and test Python module
@@ -64,11 +61,9 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y autoconf automake autopoint autotools-dev build-essential git libtool pkg-config
-    # setup-python no longer bundles setuptools on 3.12+, so install it
-    # explicitly alongside tox.
-    - name: Install Python build tooling
+    - name: Install tox
       run: |
-        python -m pip install setuptools tox
+        python -m pip install tox
     - name: Build and test Python module
       run: |
         python ./utils/update_source.py
