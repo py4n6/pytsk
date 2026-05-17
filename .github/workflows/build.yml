@@ -28,7 +28,7 @@ jobs:
         ln -s /usr/local/bin/glibtoolize /usr/local/bin/libtoolize
     - name: Build and test Python module
       run: |
-        python ./utils/update_source.py
+        python utils/update_source.py
         export CXXFLAGS="-std=c++14"
         tox -e ${{ matrix.toxenv }}
   build_ubuntu:
@@ -64,7 +64,7 @@ jobs:
         python -m pip install tox
     - name: Build and test Python module
       run: |
-        python ./utils/update_source.py
+        python utils/update_source.py
         tox -e ${{ matrix.toxenv }}
   build_windows:
     runs-on: windows-latest
@@ -83,7 +83,7 @@ jobs:
         python3 -m pip install build setuptools wheel
     - name: Build Python module
       run: |
-        python ./utils/update_source.py
+        python utils/update_source.py
         python -m build --wheel
         python -m pip install --no-index --find-links=dist pytsk3
     - name: Test Python module
