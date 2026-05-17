@@ -23,877 +23,886 @@ import unittest
 
 import pytsk3
 
+_TEST_IMAGE = os.path.join("test_data", "image.raw")
+_TEST_VOLUME = os.path.join("test_data", "tsk_volume_system.raw")
 
-_TEST_IMAGE = os.path.join('test_data', 'image.raw')
-_TEST_VOLUME = os.path.join('test_data', 'tsk_volume_system.raw')
 
+def walk_filesystem(directory, prefix=b"", max_depth=8, _depth=0):
+    """Recursive directory walk yielding (path, entry) pairs.
 
-def walk_filesystem(directory, prefix=b'', max_depth=8, _depth=0):
-  """Recursive directory walk yielding (path, entry) pairs.
-
-  Mirrors samples/fls.py and dfvfs's TSKFileSystem traversal: skip
-  '.', '..', and the synthetic '$OrphanFiles' node; recurse via
-  File.as_directory(); cap depth to avoid runaway loops on
-  pathological inputs (e.g. cyclic symlinks).
-  """
-  if _depth > max_depth:
-    return
-  for entry in directory:
-    if not entry.info or not entry.info.name:
-      continue
-    name = entry.info.name.name
-    if name in (b'.', b'..', b'$OrphanFiles'):
-      continue
-    yield prefix + b'/' + name, entry
-    meta = entry.info.meta
-    if meta is not None and meta.type == pytsk3.TSK_FS_META_TYPE_DIR:
-      try:
-        sub = entry.as_directory()
-      except (IOError, OSError):
-        continue
-      yield from walk_filesystem(
-          sub, prefix + b'/' + name, max_depth, _depth + 1)
+    Mirrors samples/fls.py and dfvfs's TSKFileSystem traversal: skip
+    '.', '..', and the synthetic '$OrphanFiles' node; recurse via
+    File.as_directory(); cap depth to avoid runaway loops on
+    pathological inputs (e.g. cyclic symlinks).
+    """
+    if _depth > max_depth:
+        return
+    for entry in directory:
+        if not entry.info or not entry.info.name:
+            continue
+        name = entry.info.name.name
+        if name in (b".", b"..", b"$OrphanFiles"):
+            continue
+        yield prefix + b"/" + name, entry
+        meta = entry.info.meta
+        if meta is not None and meta.type == pytsk3.TSK_FS_META_TYPE_DIR:
+            try:
+                sub = entry.as_directory()
+            except (IOError, OSError):
+                continue
+            yield from walk_filesystem(sub, prefix + b"/" + name, max_depth, _depth + 1)
 
 
 def _is_free_threaded():
-  """True when running on a free-threaded Python build."""
-  return hasattr(sys, '_is_gil_enabled') and not sys._is_gil_enabled()
+    """True when running on a free-threaded Python build."""
+    return hasattr(sys, "_is_gil_enabled") and not sys._is_gil_enabled()
 
 
 def _run_concurrently(target, count, *args, **kwargs):
-  """Run target in count threads released by a shared barrier.
+    """Run target in count threads released by a shared barrier.
 
-  Returns the list of per-thread results (or the raised exception) in
-  thread-start order. Re-raises the first exception seen so the test
-  framework reports it.
-  """
-  barrier = threading.Barrier(count)
-  results = [None] * count
-  errors = [None] * count
+    Returns the list of per-thread results (or the raised exception) in
+    thread-start order. Re-raises the first exception seen so the test
+    framework reports it.
+    """
+    barrier = threading.Barrier(count)
+    results = [None] * count
+    errors = [None] * count
 
-  def runner(index):
-    try:
-      barrier.wait()
-      results[index] = target(index, *args, **kwargs)
-    except BaseException as exc:  # pylint: disable=broad-except
-      errors[index] = exc
+    def runner(index):
+        try:
+            barrier.wait()
+            results[index] = target(index, *args, **kwargs)
+        except BaseException as exc:  # pylint: disable=broad-except
+            errors[index] = exc
 
-  threads = [threading.Thread(target=runner, args=(i,)) for i in range(count)]
-  for thread in threads:
-    thread.start()
-  for thread in threads:
-    thread.join()
+    threads = [threading.Thread(target=runner, args=(i,)) for i in range(count)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
 
-  for exc in errors:
-    if exc is not None:
-      raise exc
-  return results
+    for exc in errors:
+        if exc is not None:
+            raise exc
+    return results
 
 
 class ModuleFreeThreadingTest(unittest.TestCase):
-  """Verifies the module's free-threaded compatibility declaration."""
+    """Verifies the module's free-threaded compatibility declaration."""
 
-  def testImportSucceeds(self):
-    """The module must import without forcing the GIL back on."""
-    self.assertTrue(hasattr(pytsk3, 'Img_Info'))
+    def testImportSucceeds(self):
+        """The module must import without forcing the GIL back on."""
+        self.assertTrue(hasattr(pytsk3, "Img_Info"))
 
-  @unittest.skipUnless(
-      _is_free_threaded(),
-      'requires a free-threaded Python build')
-  def testModuleDoesNotForceGil(self):
-    """Importing pytsk3 must not flip the interpreter back to GIL mode.
+    @unittest.skipUnless(_is_free_threaded(), "requires a free-threaded Python build")
+    def testModuleDoesNotForceGil(self):
+        """Importing pytsk3 must not flip the interpreter back to GIL mode.
 
-    PyUnstable_Module_SetGIL(module, Py_MOD_GIL_NOT_USED) is the
-    declaration that prevents this; if it is missing the runtime would
-    re-enable the GIL at import time and sys._is_gil_enabled() would
-    return True.
-    """
-    self.assertFalse(sys._is_gil_enabled())
+        PyUnstable_Module_SetGIL(module, Py_MOD_GIL_NOT_USED) is the
+        declaration that prevents this; if it is missing the runtime would
+        re-enable the GIL at import time and sys._is_gil_enabled() would
+        return True.
+        """
+        self.assertFalse(sys._is_gil_enabled())
 
 
 class ConcurrentImgInfoTest(unittest.TestCase):
-  """Threads each operating on independent Img_Info instances."""
+    """Threads each operating on independent Img_Info instances."""
 
-  def setUp(self):
-    self._test_file = _TEST_IMAGE
-    self._file_size = os.stat(self._test_file).st_size
+    def setUp(self):
+        self._test_file = _TEST_IMAGE
+        self._file_size = os.stat(self._test_file).st_size
 
-  def testIndependentImgInfoReads(self):
-    """Each thread builds its own Img_Info and reads concurrently.
+    def testIndependentImgInfoReads(self):
+        """Each thread builds its own Img_Info and reads concurrently.
 
-    Validates that libtsk's per-thread error reporting and
-    cache_lock primitives behave correctly under independent use --
-    if TSK_MULTITHREAD_LIB is missing this can scramble error state
-    between threads.
-    """
-    expected = {
-        0x5800: b'place,user,passw',
-        0x7c00: b'This is another ',
-    }
+        Validates that libtsk's per-thread error reporting and
+        cache_lock primitives behave correctly under independent use --
+        if TSK_MULTITHREAD_LIB is missing this can scramble error state
+        between threads.
+        """
+        expected = {
+            0x5800: b"place,user,passw",
+            0x7C00: b"This is another ",
+        }
 
-    def worker(_index):
-      img = pytsk3.Img_Info(url=self._test_file)
-      try:
-        for _ in range(50):
-          for offset, value in expected.items():
-            self.assertEqual(img.read(offset, len(value)), value)
-      finally:
-        img.close()
+        def worker(_index):
+            img = pytsk3.Img_Info(url=self._test_file)
+            try:
+                for _ in range(50):
+                    for offset, value in expected.items():
+                        self.assertEqual(img.read(offset, len(value)), value)
+            finally:
+                img.close()
 
-    _run_concurrently(worker, 8)
+        _run_concurrently(worker, 8)
 
-  def testSharedImgInfoConcurrentRead(self):
-    """Many threads share one Img_Info and call read() concurrently."""
-    img = pytsk3.Img_Info(url=self._test_file)
-    try:
+    def testSharedImgInfoConcurrentRead(self):
+        """Many threads share one Img_Info and call read() concurrently."""
+        img = pytsk3.Img_Info(url=self._test_file)
+        try:
 
-      def worker(_index):
-        for _ in range(100):
-          self.assertEqual(
-              img.read(0x5800, 16), b'place,user,passw')
+            def worker(_index):
+                for _ in range(100):
+                    self.assertEqual(img.read(0x5800, 16), b"place,user,passw")
 
-      _run_concurrently(worker, 8)
-    finally:
-      img.close()
+            _run_concurrently(worker, 8)
+        finally:
+            img.close()
 
 
 class ConcurrentFsInfoTest(unittest.TestCase):
-  """Threads operating concurrently against FS_Info objects."""
+    """Threads operating concurrently against FS_Info objects."""
 
-  def setUp(self):
-    self._test_file = _TEST_IMAGE
+    def setUp(self):
+        self._test_file = _TEST_IMAGE
 
-  def testIndependentFsInfos(self):
-    """Each thread builds its own Img_Info+FS_Info and walks /.
+    def testIndependentFsInfos(self):
+        """Each thread builds its own Img_Info+FS_Info and walks /.
 
-    This is the supported "one libtsk handle per thread" pattern.
-    """
+        This is the supported "one libtsk handle per thread" pattern.
+        """
 
-    def worker(_index):
-      img = pytsk3.Img_Info(url=self._test_file)
-      fs = pytsk3.FS_Info(img, offset=0)
-      directory = fs.open_dir('/')
-      names = []
-      for entry in directory:
-        if entry.info and entry.info.name:
-          names.append(entry.info.name.name)
-      return names
+        def worker(_index):
+            img = pytsk3.Img_Info(url=self._test_file)
+            fs = pytsk3.FS_Info(img, offset=0)
+            directory = fs.open_dir("/")
+            names = []
+            for entry in directory:
+                if entry.info and entry.info.name:
+                    names.append(entry.info.name.name)
+            return names
 
-    results = _run_concurrently(worker, 8)
-    # Every thread must have observed the same root listing.
-    self.assertTrue(all(r == results[0] for r in results))
-    self.assertIn(b'passwords.txt', results[0])
+        results = _run_concurrently(worker, 8)
+        # Every thread must have observed the same root listing.
+        self.assertTrue(all(r == results[0] for r in results))
+        self.assertIn(b"passwords.txt", results[0])
 
-  def testSharedFsInfoConcurrentOpenMeta(self):
-    """Threads share an FS_Info and open files by inode in parallel.
+    def testSharedFsInfoConcurrentOpenMeta(self):
+        """Threads share an FS_Info and open files by inode in parallel.
 
-    libtsk's inode/block caches are accessed under cache_lock when
-    TSK_MULTITHREAD_LIB is enabled; this is the test that breaks when
-    that flag was disabled at build time.
-    """
-    img = pytsk3.Img_Info(url=self._test_file)
-    fs = pytsk3.FS_Info(img, offset=0)
+        libtsk's inode/block caches are accessed under cache_lock when
+        TSK_MULTITHREAD_LIB is enabled; this is the test that breaks when
+        that flag was disabled at build time.
+        """
+        img = pytsk3.Img_Info(url=self._test_file)
+        fs = pytsk3.FS_Info(img, offset=0)
 
-    def worker(_index):
-      for _ in range(50):
-        file_object = fs.open_meta(15)
-        self.assertEqual(file_object.info.meta.size, 116)
-        # Read the file content fully -- this hits the FS cache.
-        data = file_object.read_random(0, 116)
-        self.assertEqual(len(data), 116)
+        def worker(_index):
+            for _ in range(50):
+                file_object = fs.open_meta(15)
+                self.assertEqual(file_object.info.meta.size, 116)
+                # Read the file content fully -- this hits the FS cache.
+                data = file_object.read_random(0, 116)
+                self.assertEqual(len(data), 116)
 
-    _run_concurrently(worker, 8)
+        _run_concurrently(worker, 8)
 
 
 class ParentKeepaliveTest(unittest.TestCase):
-  """Children yielded from iteration / properties keep their parent alive.
+    """Children yielded from iteration / properties keep their parent alive.
 
-  Without parent keepalive the underlying libtsk handle can be freed
-  while a yielded child is still in use, producing a use-after-free.
-  These tests drop every visible reference to the parent and force a
-  GC pass before touching the child.
-  """
-
-  def setUp(self):
-    self._test_file = _TEST_IMAGE
-
-  def _yield_first_file(self):
-    """Return a File yielded from iteration, with no caller-visible parent."""
-    img = pytsk3.Img_Info(url=self._test_file)
-    fs = pytsk3.FS_Info(img, offset=0)
-    directory = fs.open_dir('/')
-    iterator = iter(directory)
-    first = next(iterator)
-    # Caller does not receive img / fs / directory / iterator; only the
-    # File. The C-level keepalive must hold them alive.
-    return first
-
-  def testIteratedFileSurvivesParentDrop(self):
-    """A File yielded by Directory iteration must outlive its FS_Info."""
-    file_object = self._yield_first_file()
-    # Force any cyclic collection now -- if our keepalive is wrong the
-    # FS_Info / Img_Info would be reclaimed here.
-    gc.collect()
-    self.assertIsNotNone(file_object.info)
-    if file_object.info.name:
-      # Touching the borrowed name buffer reaches into FS-owned memory.
-      self.assertIsNotNone(file_object.info.name.name)
-
-  def testOpenedFileSurvivesParentDrop(self):
-    """A File from FS_Info.open_meta must outlive its FS_Info."""
-    img = pytsk3.Img_Info(url=self._test_file)
-    fs = pytsk3.FS_Info(img, offset=0)
-    file_object = fs.open_meta(15)
-    del fs
-    del img
-    gc.collect()
-    # passwords.txt is 116 bytes at inode 15 in the fixture image.
-    self.assertEqual(file_object.read_random(0, 16), b'place,user,passw')
-
-  def testDirectoryFromOpenDirSurvivesParentDrop(self):
-    """A Directory from FS_Info.open_dir must outlive its FS_Info."""
-    img = pytsk3.Img_Info(url=self._test_file)
-    fs = pytsk3.FS_Info(img, offset=0)
-    directory = fs.open_dir('/')
-    del fs
-    del img
-    gc.collect()
-    names = [entry.info.name.name
-             for entry in directory if entry.info and entry.info.name]
-    self.assertIn(b'passwords.txt', names)
-
-  def testStructGetterSurvivesParentDrop(self):
-    """A borrowed struct from a property getter must outlive its parent.
-
-    file.info is a borrowed pyTSK_FS_FILE pointer into FS-owned memory.
-    Releasing the File wrapper must not invalidate the borrowed view.
+    Without parent keepalive the underlying libtsk handle can be freed
+    while a yielded child is still in use, producing a use-after-free.
+    These tests drop every visible reference to the parent and force a
+    GC pass before touching the child.
     """
-    img = pytsk3.Img_Info(url=self._test_file)
-    fs = pytsk3.FS_Info(img, offset=0)
-    file_object = fs.open_meta(15)
-    info = file_object.info
-    meta = info.meta
-    del file_object
-    del fs
-    del img
-    gc.collect()
-    self.assertEqual(meta.size, 116)
+
+    def setUp(self):
+        self._test_file = _TEST_IMAGE
+
+    def _yield_first_file(self):
+        """Return a File yielded from iteration, with no caller-visible parent."""
+        img = pytsk3.Img_Info(url=self._test_file)
+        fs = pytsk3.FS_Info(img, offset=0)
+        directory = fs.open_dir("/")
+        iterator = iter(directory)
+        first = next(iterator)
+        # Caller does not receive img / fs / directory / iterator; only the
+        # File. The C-level keepalive must hold them alive.
+        return first
+
+    def testIteratedFileSurvivesParentDrop(self):
+        """A File yielded by Directory iteration must outlive its FS_Info."""
+        file_object = self._yield_first_file()
+        # Force any cyclic collection now -- if our keepalive is wrong the
+        # FS_Info / Img_Info would be reclaimed here.
+        gc.collect()
+        self.assertIsNotNone(file_object.info)
+        if file_object.info.name:
+            # Touching the borrowed name buffer reaches into FS-owned memory.
+            self.assertIsNotNone(file_object.info.name.name)
+
+    def testOpenedFileSurvivesParentDrop(self):
+        """A File from FS_Info.open_meta must outlive its FS_Info."""
+        img = pytsk3.Img_Info(url=self._test_file)
+        fs = pytsk3.FS_Info(img, offset=0)
+        file_object = fs.open_meta(15)
+        del fs
+        del img
+        gc.collect()
+        # passwords.txt is 116 bytes at inode 15 in the fixture image.
+        self.assertEqual(file_object.read_random(0, 16), b"place,user,passw")
+
+    def testDirectoryFromOpenDirSurvivesParentDrop(self):
+        """A Directory from FS_Info.open_dir must outlive its FS_Info."""
+        img = pytsk3.Img_Info(url=self._test_file)
+        fs = pytsk3.FS_Info(img, offset=0)
+        directory = fs.open_dir("/")
+        del fs
+        del img
+        gc.collect()
+        names = [
+            entry.info.name.name
+            for entry in directory
+            if entry.info and entry.info.name
+        ]
+        self.assertIn(b"passwords.txt", names)
+
+    def testStructGetterSurvivesParentDrop(self):
+        """A borrowed struct from a property getter must outlive its parent.
+
+        file.info is a borrowed pyTSK_FS_FILE pointer into FS-owned memory.
+        Releasing the File wrapper must not invalidate the borrowed view.
+        """
+        img = pytsk3.Img_Info(url=self._test_file)
+        fs = pytsk3.FS_Info(img, offset=0)
+        file_object = fs.open_meta(15)
+        info = file_object.info
+        meta = info.meta
+        del file_object
+        del fs
+        del img
+        gc.collect()
+        self.assertEqual(meta.size, 116)
 
 
 class ConcurrentParentDropTest(unittest.TestCase):
-  """One thread iterates while another drops the parent reference.
+    """One thread iterates while another drops the parent reference.
 
-  This is the multi-threaded version of ParentKeepaliveTest. It only
-  meaningfully races on free-threaded builds, but is harmless on the
-  GIL build (just exercises the keepalive path under thread switches).
-  """
+    This is the multi-threaded version of ParentKeepaliveTest. It only
+    meaningfully races on free-threaded builds, but is harmless on the
+    GIL build (just exercises the keepalive path under thread switches).
+    """
 
-  def setUp(self):
-    self._test_file = _TEST_IMAGE
+    def setUp(self):
+        self._test_file = _TEST_IMAGE
 
-  def testReadAfterParentDroppedOnOtherThread(self):
-    img = pytsk3.Img_Info(url=self._test_file)
-    fs = pytsk3.FS_Info(img, offset=0)
-    file_object = fs.open_meta(15)
+    def testReadAfterParentDroppedOnOtherThread(self):
+        img = pytsk3.Img_Info(url=self._test_file)
+        fs = pytsk3.FS_Info(img, offset=0)
+        file_object = fs.open_meta(15)
 
-    holder = {'fs': fs, 'img': img}
+        holder = {"fs": fs, "img": img}
 
-    def reader(_index):
-      for _ in range(100):
-        self.assertEqual(
-            file_object.read_random(0, 16), b'place,user,passw')
+        def reader(_index):
+            for _ in range(100):
+                self.assertEqual(file_object.read_random(0, 16), b"place,user,passw")
 
-    def dropper(_index):
-      # Drop visible parents while the reader is mid-flight; the
-      # file_object's python_object1 keepalive must keep the libtsk
-      # handle alive until the file_object itself is released.
-      holder.clear()
-      gc.collect()
+        def dropper(_index):
+            # Drop visible parents while the reader is mid-flight; the
+            # file_object's python_object1 keepalive must keep the libtsk
+            # handle alive until the file_object itself is released.
+            holder.clear()
+            gc.collect()
 
-    barrier = threading.Barrier(2)
-    errors = []
+        barrier = threading.Barrier(2)
+        errors = []
 
-    def runner(target, index):
-      try:
-        barrier.wait()
-        target(index)
-      except BaseException as exc:  # pylint: disable=broad-except
-        errors.append(exc)
+        def runner(target, index):
+            try:
+                barrier.wait()
+                target(index)
+            except BaseException as exc:  # pylint: disable=broad-except
+                errors.append(exc)
 
-    threads = [
-        threading.Thread(target=runner, args=(reader, 0)),
-        threading.Thread(target=runner, args=(dropper, 1)),
-    ]
-    for thread in threads:
-      thread.start()
-    for thread in threads:
-      thread.join()
-    if errors:
-      raise errors[0]
+        threads = [
+            threading.Thread(target=runner, args=(reader, 0)),
+            threading.Thread(target=runner, args=(dropper, 1)),
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        if errors:
+            raise errors[0]
 
 
 class ConcurrentErrorPathTest(unittest.TestCase):
-  """tsk_error_get must be per-thread under concurrent failures.
+    """tsk_error_get must be per-thread under concurrent failures.
 
-  When TSK_MULTITHREAD_LIB is missing libtsk falls back to a single
-  global TSK_ERROR_INFO; concurrent failing calls then scramble each
-  other's errno + errstr buffers. We trigger a known-bogus open in
-  many threads at once and assert the resulting Python exception
-  message is well-formed every time.
-  """
+    When TSK_MULTITHREAD_LIB is missing libtsk falls back to a single
+    global TSK_ERROR_INFO; concurrent failing calls then scramble each
+    other's errno + errstr buffers. We trigger a known-bogus open in
+    many threads at once and assert the resulting Python exception
+    message is well-formed every time.
+    """
 
-  def testConcurrentInvalidOpens(self):
-    img = pytsk3.Img_Info(url=_TEST_IMAGE)
+    def testConcurrentInvalidOpens(self):
+        img = pytsk3.Img_Info(url=_TEST_IMAGE)
 
-    def worker(index):
-      seen_errors = 0
-      for _ in range(50):
-        try:
-          # Inode 19 does not exist in the fixture; this consistently
-          # raises IOError and writes to libtsk's error buffer.
-          fs = pytsk3.FS_Info(img, offset=0)
-          fs.open_meta(19)
-        except IOError as exc:
-          seen_errors += 1
-          # The string must be intact (no NUL truncation, no garbage)
-          # even when other threads are racing the same error path.
-          message = str(exc)
-          self.assertTrue(message)
-          self.assertNotIn('\x00', message)
-      self.assertEqual(seen_errors, 50, f'thread {index} lost errors')
+        def worker(index):
+            seen_errors = 0
+            for _ in range(50):
+                try:
+                    # Inode 19 does not exist in the fixture; this consistently
+                    # raises IOError and writes to libtsk's error buffer.
+                    fs = pytsk3.FS_Info(img, offset=0)
+                    fs.open_meta(19)
+                except IOError as exc:
+                    seen_errors += 1
+                    # The string must be intact (no NUL truncation, no garbage)
+                    # even when other threads are racing the same error path.
+                    message = str(exc)
+                    self.assertTrue(message)
+                    self.assertNotIn("\x00", message)
+            self.assertEqual(seen_errors, 50, f"thread {index} lost errors")
 
-    _run_concurrently(worker, 8)
+        _run_concurrently(worker, 8)
 
 
 class ConcurrentVolumeInfoTest(unittest.TestCase):
-  """Iterating Volume_Info from per-thread instances."""
+    """Iterating Volume_Info from per-thread instances."""
 
-  def setUp(self):
-    self._test_file = _TEST_VOLUME
+    def setUp(self):
+        self._test_file = _TEST_VOLUME
 
-  def testIndependentVolumeInfos(self):
+    def testIndependentVolumeInfos(self):
 
-    def worker(_index):
-      img = pytsk3.Img_Info(url=self._test_file)
-      vs = pytsk3.Volume_Info(img)
-      addrs = [part.addr for part in vs]
-      return addrs
+        def worker(_index):
+            img = pytsk3.Img_Info(url=self._test_file)
+            vs = pytsk3.Volume_Info(img)
+            addrs = [part.addr for part in vs]
+            return addrs
 
-    results = _run_concurrently(worker, 8)
-    self.assertTrue(all(r == results[0] for r in results))
-    self.assertGreater(len(results[0]), 0)
+        results = _run_concurrently(worker, 8)
+        self.assertTrue(all(r == results[0] for r in results))
+        self.assertGreater(len(results[0]), 0)
 
-  def testVolumePartSurvivesParentDrop(self):
-    """Volume_Info.iternext yields TSK_VS_PART_INFO borrowed from the VS.
+    def testVolumePartSurvivesParentDrop(self):
+        """Volume_Info.iternext yields TSK_VS_PART_INFO borrowed from the VS.
 
-    With the parent keepalive, the part wrapper must remain valid
-    after Volume_Info and Img_Info go out of scope.
-    """
-    img = pytsk3.Img_Info(url=self._test_file)
-    vs = pytsk3.Volume_Info(img)
-    parts = list(vs)
-    del vs
-    del img
-    gc.collect()
-    # Touching addr / start / len / desc reaches into VS-owned memory.
-    for part in parts:
-      _ = part.addr
-      _ = part.start
-      _ = part.len
+        With the parent keepalive, the part wrapper must remain valid
+        after Volume_Info and Img_Info go out of scope.
+        """
+        img = pytsk3.Img_Info(url=self._test_file)
+        vs = pytsk3.Volume_Info(img)
+        parts = list(vs)
+        del vs
+        del img
+        gc.collect()
+        # Touching addr / start / len / desc reaches into VS-owned memory.
+        for part in parts:
+            _ = part.addr
+            _ = part.start
+            _ = part.len
 
 
 class CloseDuringReadTest(unittest.TestCase):
-  """Img_Info.close() while another thread is mid-read.
+    """Img_Info.close() while another thread is mid-read.
 
-  Img_Info_read takes the per-instance state_lock around the
-  img_is_open check and the actual tsk_img_read call; Img_Info_close
-  takes the same lock while flipping img_is_open. As a result a
-  close() call cannot tear state down mid-read, and any read started
-  after close has flipped the flag observes a clean IOError.
-  """
+    Img_Info_read takes the per-instance state_lock around the
+    img_is_open check and the actual tsk_img_read call; Img_Info_close
+    takes the same lock while flipping img_is_open. As a result a
+    close() call cannot tear state down mid-read, and any read started
+    after close has flipped the flag observes a clean IOError.
+    """
 
-  def setUp(self):
-    self._test_file = _TEST_IMAGE
+    def setUp(self):
+        self._test_file = _TEST_IMAGE
 
-  def testCloseConcurrentWithReader(self):
-    img = pytsk3.Img_Info(url=self._test_file)
-    stop = threading.Event()
-    errors = []
+    def testCloseConcurrentWithReader(self):
+        img = pytsk3.Img_Info(url=self._test_file)
+        stop = threading.Event()
+        errors = []
 
-    def reader():
-      while not stop.is_set():
-        try:
-          # Either succeeds with the right bytes, or raises a clean
-          # IOError once close() lands. Anything else (segfault,
-          # garbage bytes) is a bug.
-          data = img.read(0x5800, 16)
-          if data:
-            self.assertEqual(data, b'place,user,passw')
-        except IOError:
-          return  # post-close path
-        except BaseException as exc:  # pylint: disable=broad-except
-          errors.append(exc)
-          return
+        def reader():
+            while not stop.is_set():
+                try:
+                    # Either succeeds with the right bytes, or raises a clean
+                    # IOError once close() lands. Anything else (segfault,
+                    # garbage bytes) is a bug.
+                    data = img.read(0x5800, 16)
+                    if data:
+                        self.assertEqual(data, b"place,user,passw")
+                except IOError:
+                    return  # post-close path
+                except BaseException as exc:  # pylint: disable=broad-except
+                    errors.append(exc)
+                    return
 
-    threads = [threading.Thread(target=reader) for _ in range(4)]
-    for thread in threads:
-      thread.start()
-    # Let readers spin up briefly, then close from this thread.
-    threading.Event().wait(0.05)
-    img.close()
-    stop.set()
-    for thread in threads:
-      thread.join()
-    if errors:
-      raise errors[0]
+        threads = [threading.Thread(target=reader) for _ in range(4)]
+        for thread in threads:
+            thread.start()
+        # Let readers spin up briefly, then close from this thread.
+        threading.Event().wait(0.05)
+        img.close()
+        stop.set()
+        for thread in threads:
+            thread.join()
+        if errors:
+            raise errors[0]
 
 
 class SharedFileConcurrentReadTest(unittest.TestCase):
-  """One File handle hammered from many threads at different offsets.
+    """One File handle hammered from many threads at different offsets.
 
-  pytsk3 does not synchronize File.read_random itself; libtsk's FS
-  cache_lock is what serializes the underlying read. This test
-  exercises that path -- if libtsk's cache_lock were a no-op (the
-  pre-fix state) the resulting bytes would scramble across threads.
-  """
+    pytsk3 does not synchronize File.read_random itself; libtsk's FS
+    cache_lock is what serializes the underlying read. This test
+    exercises that path -- if libtsk's cache_lock were a no-op (the
+    pre-fix state) the resulting bytes would scramble across threads.
+    """
 
-  def setUp(self):
-    self._test_file = _TEST_IMAGE
+    def setUp(self):
+        self._test_file = _TEST_IMAGE
 
-  def testSharedFileReadRandom(self):
-    img = pytsk3.Img_Info(url=self._test_file)
-    fs = pytsk3.FS_Info(img, offset=0)
-    file_object = fs.open_meta(15)
-    # Snapshot the full file once (uncontended) and use it as the
-    # ground truth for every concurrent read below.
-    expected = file_object.read_random(0, 116)
-    self.assertEqual(len(expected), 116)
+    def testSharedFileReadRandom(self):
+        img = pytsk3.Img_Info(url=self._test_file)
+        fs = pytsk3.FS_Info(img, offset=0)
+        file_object = fs.open_meta(15)
+        # Snapshot the full file once (uncontended) and use it as the
+        # ground truth for every concurrent read below.
+        expected = file_object.read_random(0, 116)
+        self.assertEqual(len(expected), 116)
 
-    def worker(_index):
-      for _ in range(200):
-        for off in (0, 16, 32, 48, 64, 80):
-          chunk = file_object.read_random(off, 16)
-          self.assertEqual(chunk, expected[off:off + 16])
+        def worker(_index):
+            for _ in range(200):
+                for off in (0, 16, 32, 48, 64, 80):
+                    chunk = file_object.read_random(off, 16)
+                    self.assertEqual(chunk, expected[off : off + 16])
 
-    _run_concurrently(worker, 8)
+        _run_concurrently(worker, 8)
 
 
 class RecursiveWalkStressTest(unittest.TestCase):
-  """Per-thread Img_Info + recursive walk soak test.
+    """Per-thread Img_Info + recursive walk soak test.
 
-  Long-running concurrent allocation churn exercises every yield path
-  through new_class_wrapper, StructWrapper.assign, and dealloc. A
-  parent-keepalive imbalance surfaces as a leak or immediate crash.
-  """
+    Long-running concurrent allocation churn exercises every yield path
+    through new_class_wrapper, StructWrapper.assign, and dealloc. A
+    parent-keepalive imbalance surfaces as a leak or immediate crash.
+    """
 
-  def testRecursiveWalkStress(self):
-    def worker(_index):
-      img = pytsk3.Img_Info(url=_TEST_IMAGE)
-      fs = pytsk3.FS_Info(img, offset=0)
-      total = 0
-      for _ in range(20):
-        total += sum(1 for _ in walk_filesystem(fs.open_dir('/')))
-      return total
+    def testRecursiveWalkStress(self):
+        def worker(_index):
+            img = pytsk3.Img_Info(url=_TEST_IMAGE)
+            fs = pytsk3.FS_Info(img, offset=0)
+            total = 0
+            for _ in range(20):
+                total += sum(1 for _ in walk_filesystem(fs.open_dir("/")))
+            return total
 
-    results = _run_concurrently(worker, 8)
-    # Same entry count across all threads -- mismatch implies a
-    # cursor / lock bug in iteration.
-    self.assertTrue(all(r == results[0] for r in results), results)
-    self.assertGreater(results[0], 0)
+        results = _run_concurrently(worker, 8)
+        # Same entry count across all threads -- mismatch implies a
+        # cursor / lock bug in iteration.
+        self.assertTrue(all(r == results[0] for r in results), results)
+        self.assertGreater(results[0], 0)
 
 
 class GcUnderLoadTest(unittest.TestCase):
-  """Force GC in a hot loop while workers iterate.
+    """Force GC in a hot loop while workers iterate.
 
-  Cyclic GC visits all tracked objects and may run __del__ /
-  tp_dealloc on things that became unreachable since the last
-  collection. A bug in our parent keepalive (e.g. forgetting to
-  Py_IncRef in new_class_wrapper) would surface here as a UAF when
-  GC reaps a parent the worker is still using.
-  """
+    Cyclic GC visits all tracked objects and may run __del__ /
+    tp_dealloc on things that became unreachable since the last
+    collection. A bug in our parent keepalive (e.g. forgetting to
+    Py_IncRef in new_class_wrapper) would surface here as a UAF when
+    GC reaps a parent the worker is still using.
+    """
 
-  def setUp(self):
-    self._test_file = _TEST_IMAGE
+    def setUp(self):
+        self._test_file = _TEST_IMAGE
 
-  def testGcConcurrentWithIteration(self):
-    img = pytsk3.Img_Info(url=self._test_file)
-    fs = pytsk3.FS_Info(img, offset=0)
-    stop = threading.Event()
-    errors = []
+    def testGcConcurrentWithIteration(self):
+        img = pytsk3.Img_Info(url=self._test_file)
+        fs = pytsk3.FS_Info(img, offset=0)
+        stop = threading.Event()
+        errors = []
 
-    def gc_worker():
-      while not stop.is_set():
-        gc.collect()
+        def gc_worker():
+            while not stop.is_set():
+                gc.collect()
 
-    def iter_worker(_index):
-      try:
-        for _ in range(100):
-          directory = fs.open_dir('/')
-          names = []
-          for entry in directory:
-            if entry.info and entry.info.name:
-              names.append(entry.info.name.name)
-          self.assertIn(b'passwords.txt', names)
-      except BaseException as exc:  # pylint: disable=broad-except
-        errors.append(exc)
+        def iter_worker(_index):
+            try:
+                for _ in range(100):
+                    directory = fs.open_dir("/")
+                    names = []
+                    for entry in directory:
+                        if entry.info and entry.info.name:
+                            names.append(entry.info.name.name)
+                    self.assertIn(b"passwords.txt", names)
+            except BaseException as exc:  # pylint: disable=broad-except
+                errors.append(exc)
 
-    gc_thread = threading.Thread(target=gc_worker)
-    gc_thread.start()
-    try:
-      _run_concurrently(iter_worker, 4)
-    finally:
-      stop.set()
-      gc_thread.join()
-    if errors:
-      raise errors[0]
+        gc_thread = threading.Thread(target=gc_worker)
+        gc_thread.start()
+        try:
+            _run_concurrently(iter_worker, 4)
+        finally:
+            stop.set()
+            gc_thread.join()
+        if errors:
+            raise errors[0]
 
 
 class GilStaysOffTest(unittest.TestCase):
-  """sys._is_gil_enabled() must remain False across pytsk3 operations.
+    """sys._is_gil_enabled() must remain False across pytsk3 operations.
 
-  testModuleDoesNotForceGil only checks the post-import state. A
-  bug that re-enables the GIL on a specific code path (e.g. an
-  unguarded private API call) wouldn't be caught there. Hammer a
-  representative mix of pytsk3 operations and confirm the GIL
-  stays off the entire time.
-  """
+    testModuleDoesNotForceGil only checks the post-import state. A
+    bug that re-enables the GIL on a specific code path (e.g. an
+    unguarded private API call) wouldn't be caught there. Hammer a
+    representative mix of pytsk3 operations and confirm the GIL
+    stays off the entire time.
+    """
 
-  @unittest.skipUnless(
-      _is_free_threaded(),
-      'requires a free-threaded Python build')
-  def testGilStaysOffAcrossOperations(self):
-    self.assertFalse(sys._is_gil_enabled())
-    img = pytsk3.Img_Info(url=_TEST_IMAGE)
-    self.assertFalse(sys._is_gil_enabled())
-    fs = pytsk3.FS_Info(img, offset=0)
-    self.assertFalse(sys._is_gil_enabled())
-    directory = fs.open_dir('/')
-    self.assertFalse(sys._is_gil_enabled())
-    for entry in directory:
-      if entry.info and entry.info.meta:
-        _ = entry.info.meta.size
-    self.assertFalse(sys._is_gil_enabled())
-    file_object = fs.open_meta(15)
-    self.assertEqual(file_object.read_random(0, 16), b'place,user,passw')
-    self.assertFalse(sys._is_gil_enabled())
-    img.close()
-    self.assertFalse(sys._is_gil_enabled())
+    @unittest.skipUnless(_is_free_threaded(), "requires a free-threaded Python build")
+    def testGilStaysOffAcrossOperations(self):
+        self.assertFalse(sys._is_gil_enabled())
+        img = pytsk3.Img_Info(url=_TEST_IMAGE)
+        self.assertFalse(sys._is_gil_enabled())
+        fs = pytsk3.FS_Info(img, offset=0)
+        self.assertFalse(sys._is_gil_enabled())
+        directory = fs.open_dir("/")
+        self.assertFalse(sys._is_gil_enabled())
+        for entry in directory:
+            if entry.info and entry.info.meta:
+                _ = entry.info.meta.size
+        self.assertFalse(sys._is_gil_enabled())
+        file_object = fs.open_meta(15)
+        self.assertEqual(file_object.read_random(0, 16), b"place,user,passw")
+        self.assertFalse(sys._is_gil_enabled())
+        img.close()
+        self.assertFalse(sys._is_gil_enabled())
 
 
 class IteratorCursorThreadSafetyTest(unittest.TestCase):
-  """Sharing one Directory iterator across threads should be safe.
+    """Sharing one Directory iterator across threads should be safe.
 
-  Before the per-instance iter_lock was introduced, two threads
-  iterating the same Directory would race on self->current and
-  produce skipped/duplicated entries. With iter_lock each entry
-  index is consumed exactly once across all threads, so the union
-  of yields is the full directory listing.
-  """
+    Before the per-instance iter_lock was introduced, two threads
+    iterating the same Directory would race on self->current and
+    produce skipped/duplicated entries. With iter_lock each entry
+    index is consumed exactly once across all threads, so the union
+    of yields is the full directory listing.
+    """
 
-  def setUp(self):
-    self._test_file = _TEST_IMAGE
+    def setUp(self):
+        self._test_file = _TEST_IMAGE
 
-  def testSharedDirectoryIterator(self):
-    img = pytsk3.Img_Info(url=self._test_file)
-    fs = pytsk3.FS_Info(img, offset=0)
-    directory = fs.open_dir('/')
+    def testSharedDirectoryIterator(self):
+        img = pytsk3.Img_Info(url=self._test_file)
+        fs = pytsk3.FS_Info(img, offset=0)
+        directory = fs.open_dir("/")
 
-    # Build a baseline: how many entries are in /. Use a fresh
-    # Directory so the shared one below starts at cursor 0 (the C
-    # constructor sets current = 0; we deliberately do not call iter()
-    # here because that would also reset).
-    baseline = sum(1 for _ in fs.open_dir('/'))
+        # Build a baseline: how many entries are in /. Use a fresh
+        # Directory so the shared one below starts at cursor 0 (the C
+        # constructor sets current = 0; we deliberately do not call iter()
+        # here because that would also reset).
+        baseline = sum(1 for _ in fs.open_dir("/"))
 
-    yielded = []
-    yielded_lock = threading.Lock()
+        yielded = []
+        yielded_lock = threading.Lock()
 
-    def worker(_index):
-      # Note: do NOT call iter(directory) here. Directory is its own
-      # iterator and __iter__ resets the cursor under iter_lock --
-      # which is correct behavior for "for x in d:" in a single
-      # thread, but would defeat the test that all workers consume
-      # from the same cursor sequence.
-      while True:
-        try:
-          entry = directory.__next__()
-        except StopIteration:
-          return
-        with yielded_lock:
-          yielded.append(entry)
+        def worker(_index):
+            # Note: do NOT call iter(directory) here. Directory is its own
+            # iterator and __iter__ resets the cursor under iter_lock --
+            # which is correct behavior for "for x in d:" in a single
+            # thread, but would defeat the test that all workers consume
+            # from the same cursor sequence.
+            while True:
+                try:
+                    entry = directory.__next__()
+                except StopIteration:
+                    return
+                with yielded_lock:
+                    yielded.append(entry)
 
-    _run_concurrently(worker, 4)
-    # Cursor was advanced exactly baseline times across all workers.
-    # An off-by-one (missed lock release, double-advance) would change
-    # this count; a true race (skipping the cap-at-INT_MAX check)
-    # could overshoot indefinitely.
-    self.assertEqual(len(yielded), baseline)
+        _run_concurrently(worker, 4)
+        # Cursor was advanced exactly baseline times across all workers.
+        # An off-by-one (missed lock release, double-advance) would change
+        # this count; a true race (skipping the cap-at-INT_MAX check)
+        # could overshoot indefinitely.
+        self.assertEqual(len(yielded), baseline)
 
 
 def _have_subinterpreters():
-  """True when the public test_support.interpreters API is available."""
-  try:
-    import test.support.interpreters  # noqa: F401
-    return True
-  except ImportError:
-    pass
-  try:
-    import _interpreters  # noqa: F401
-    return True
-  except ImportError:
-    return False
+    """True when the public test_support.interpreters API is available."""
+    try:
+        import test.support.interpreters  # noqa: F401
+
+        return True
+    except ImportError:
+        pass
+    try:
+        import _interpreters  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
 
 
 _SUBINTERP_SCRIPT = (
-    'import pytsk3\n'
-    'img = pytsk3.Img_Info(url=' + repr(_TEST_IMAGE) + ')\n'
-    'assert img.get_size() == 102400\n'
-    'fs = pytsk3.FS_Info(img, offset=0)\n'
-    'f = fs.open_meta(15)\n'
-    "assert f.read_random(0, 16) == b'place,user,passw'\n")
+    "import pytsk3\n"
+    "img = pytsk3.Img_Info(url=" + repr(_TEST_IMAGE) + ")\n"
+    "assert img.get_size() == 102400\n"
+    "fs = pytsk3.FS_Info(img, offset=0)\n"
+    "f = fs.open_meta(15)\n"
+    "assert f.read_random(0, 16) == b'place,user,passw'\n"
+)
 
 
 def _is_subinterpreter_load_unsupported(exc):
-  """Detect 'module does not support loading in subinterpreters'.
+    """Detect 'module does not support loading in subinterpreters'.
 
-  Python 3.12+ refuses to load single-phase-init C extension modules
-  into a subinterpreter unless they declare the
-  Py_mod_multiple_interpreters slot. pytsk3 still uses single-phase
-  init, so this ImportError is expected on 3.12 / 3.13. The message
-  bubbles up wrapped (e.g. as _xxsubinterpreters.RunFailedError) so
-  we have to match on the inner ImportError text.
-  """
-  text = str(exc)
-  return ('does not support loading in subinterpreters' in text
-          or 'is not allowed in subinterpreters' in text)
+    Python 3.12+ refuses to load single-phase-init C extension modules
+    into a subinterpreter unless they declare the
+    Py_mod_multiple_interpreters slot. pytsk3 still uses single-phase
+    init, so this ImportError is expected on 3.12 / 3.13. The message
+    bubbles up wrapped (e.g. as _xxsubinterpreters.RunFailedError) so
+    we have to match on the inner ImportError text.
+    """
+    text = str(exc)
+    return (
+        "does not support loading in subinterpreters" in text
+        or "is not allowed in subinterpreters" in text
+    )
 
 
 class SubinterpreterImportTest(unittest.TestCase):
-  """pytsk3 must initialize cleanly inside a subinterpreter.
+    """pytsk3 must initialize cleanly inside a subinterpreter.
 
-  tsk_init() is wrapped in std::call_once so the C class templates
-  are only initialized once across all interpreters. Importing
-  pytsk3 in a fresh subinterpreter exercises that path and surfaces
-  any cross-subinterpreter state leak.
+    tsk_init() is wrapped in std::call_once so the C class templates
+    are only initialized once across all interpreters. Importing
+    pytsk3 in a fresh subinterpreter exercises that path and surfaces
+    any cross-subinterpreter state leak.
 
-  The subinterpreter API has shifted across Python versions:
-    * 3.11: only the private `_xxsubinterpreters` module, with a
-      `.run_string(id, script)` signature.
-    * 3.12-3.13: `test.support.interpreters` available but the
-      Interpreter object exposes `.run(script)`, not `.exec(...)`.
-      These versions also enforce PEP 489: single-phase-init C
-      modules (which pytsk3 still is) cannot load into a
-      subinterpreter, so this test is a no-op skip there.
-    * 3.14+: `interp.exec(script)` is the documented method, and the
-      default policy here permits the load.
-  This test probes each API in turn and skips when none works.
-  """
+    The subinterpreter API has shifted across Python versions:
+      * 3.11: only the private `_xxsubinterpreters` module, with a
+        `.run_string(id, script)` signature.
+      * 3.12-3.13: `test.support.interpreters` available but the
+        Interpreter object exposes `.run(script)`, not `.exec(...)`.
+        These versions also enforce PEP 489: single-phase-init C
+        modules (which pytsk3 still is) cannot load into a
+        subinterpreter, so this test is a no-op skip there.
+      * 3.14+: `interp.exec(script)` is the documented method, and the
+        default policy here permits the load.
+    This test probes each API in turn and skips when none works.
+    """
 
-  @unittest.skipUnless(_have_subinterpreters(),
-                       'subinterpreter API not available')
-  def testImportInSubinterpreter(self):
-    # Try the public API first.
-    try:
-      from test.support import interpreters  # type: ignore
-    except ImportError:
-      interpreters = None  # pylint: disable=invalid-name
-
-    if interpreters is not None:
-      interp = interpreters.create()
-      try:
-        runner = getattr(interp, 'exec', None) or getattr(interp, 'run', None)
-        if runner is None:
-          self.skipTest(
-              'test.support.interpreters has no exec/run on this build')
+    @unittest.skipUnless(_have_subinterpreters(), "subinterpreter API not available")
+    def testImportInSubinterpreter(self):
+        # Try the public API first.
         try:
-          runner(_SUBINTERP_SCRIPT)
-        except Exception as exc:  # pylint: disable=broad-except
-          if _is_subinterpreter_load_unsupported(exc):
-            self.skipTest(
-                'pytsk3 uses single-phase init; this Python version '
-                'forbids loading such modules in a subinterpreter')
-          raise
-        return
-      finally:
-        close = getattr(interp, 'close', None)
-        if close is not None:
-          close()
+            from test.support import interpreters  # type: ignore
+        except ImportError:
+            interpreters = None  # pylint: disable=invalid-name
 
-    # Fall back to the private API. The module name and run_string
-    # signature both vary across versions; tolerate either.
-    try:
-      import _interpreters  # type: ignore  # noqa: F401
-      private = _interpreters
-    except ImportError:
-      try:
-        import _xxsubinterpreters  # type: ignore  # noqa: F401
-        private = _xxsubinterpreters
-      except ImportError:
-        self.skipTest('no usable subinterpreter API')
+        if interpreters is not None:
+            interp = interpreters.create()
+            try:
+                runner = getattr(interp, "exec", None) or getattr(interp, "run", None)
+                if runner is None:
+                    self.skipTest(
+                        "test.support.interpreters has no exec/run on this build"
+                    )
+                try:
+                    runner(_SUBINTERP_SCRIPT)
+                except Exception as exc:  # pylint: disable=broad-except
+                    if _is_subinterpreter_load_unsupported(exc):
+                        self.skipTest(
+                            "pytsk3 uses single-phase init; this Python version "
+                            "forbids loading such modules in a subinterpreter"
+                        )
+                    raise
+                return
+            finally:
+                close = getattr(interp, "close", None)
+                if close is not None:
+                    close()
 
-    interp_id = private.create()
-    try:
-      run_string = getattr(private, 'run_string', None)
-      if run_string is None:
-        self.skipTest('private subinterpreter API has no run_string')
-      try:
-        run_string(interp_id, _SUBINTERP_SCRIPT)
-      except Exception as exc:  # pylint: disable=broad-except
-        if _is_subinterpreter_load_unsupported(exc):
-          self.skipTest(
-              'pytsk3 uses single-phase init; this Python version '
-              'forbids loading such modules in a subinterpreter')
-        raise
-    finally:
-      private.destroy(interp_id)
+        # Fall back to the private API. The module name and run_string
+        # signature both vary across versions; tolerate either.
+        try:
+            import _interpreters  # type: ignore  # noqa: F401
+
+            private = _interpreters
+        except ImportError:
+            try:
+                import _xxsubinterpreters  # type: ignore  # noqa: F401
+
+                private = _xxsubinterpreters
+            except ImportError:
+                self.skipTest("no usable subinterpreter API")
+
+        interp_id = private.create()
+        try:
+            run_string = getattr(private, "run_string", None)
+            if run_string is None:
+                self.skipTest("private subinterpreter API has no run_string")
+            try:
+                run_string(interp_id, _SUBINTERP_SCRIPT)
+            except Exception as exc:  # pylint: disable=broad-except
+                if _is_subinterpreter_load_unsupported(exc):
+                    self.skipTest(
+                        "pytsk3 uses single-phase init; this Python version "
+                        "forbids loading such modules in a subinterpreter"
+                    )
+                raise
+        finally:
+            private.destroy(interp_id)
 
 
 class ProxiedReadConcurrencyTest(unittest.TestCase):
-  """Python-backed Img_Info hammered through libtsk's proxied read path.
+    """Python-backed Img_Info hammered through libtsk's proxied read path.
 
-  Covers Img_Info_read no longer holding state_lock across tsk_img_read
-  (Python callback's own lock cannot ABBA) and the python_object2 swap
-  in proxied Wrapper-returning callbacks (critical-section-protected
-  on 3.13+ against double-decref).
-  """
+    Covers Img_Info_read no longer holding state_lock across tsk_img_read
+    (Python callback's own lock cannot ABBA) and the python_object2 swap
+    in proxied Wrapper-returning callbacks (critical-section-protected
+    on 3.13+ against double-decref).
+    """
 
-  def testConcurrentReadsThroughProxiedCallback(self):
-    """Concurrent reads + bounded join: covers correctness AND no deadlock."""
-    with open(_TEST_IMAGE, 'rb') as f:
-      img = _SharedBytesImg(f.read())
-    try:
-      def worker(_index):
-        for _ in range(20):
-          fs = pytsk3.FS_Info(img, offset=0)
-          fobj = fs.open_meta(15)
-          self.assertEqual(fobj.info.meta.size, 116)
-          self.assertEqual(len(fobj.read_random(0, 116)), 116)
-      threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]
-      for t in threads:
-        t.start()
-      # Bounded join so a deadlock fails the test instead of hanging.
-      for t in threads:
-        t.join(timeout=30)
-      for t in threads:
-        self.assertFalse(t.is_alive(), 'worker deadlocked')
-    finally:
-      img.close()
+    def testConcurrentReadsThroughProxiedCallback(self):
+        """Concurrent reads + bounded join: covers correctness AND no deadlock."""
+        with open(_TEST_IMAGE, "rb") as f:
+            img = _SharedBytesImg(f.read())
+        try:
+
+            def worker(_index):
+                for _ in range(20):
+                    fs = pytsk3.FS_Info(img, offset=0)
+                    fobj = fs.open_meta(15)
+                    self.assertEqual(fobj.info.meta.size, 116)
+                    self.assertEqual(len(fobj.read_random(0, 116)), 116)
+
+            threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]
+            for t in threads:
+                t.start()
+            # Bounded join so a deadlock fails the test instead of hanging.
+            for t in threads:
+                t.join(timeout=30)
+            for t in threads:
+                self.assertFalse(t.is_alive(), "worker deadlocked")
+        finally:
+            img.close()
 
 
 class _SharedBytesImg(pytsk3.Img_Info):
-  """Bytes-backed Img_Info; per-read lock guarantees callers reach Python."""
+    """Bytes-backed Img_Info; per-read lock guarantees callers reach Python."""
 
-  def __init__(self, payload):
-    self._payload = payload
-    self._size = len(payload)
-    self._lock = threading.Lock()
-    pytsk3.Img_Info.__init__(self, url='', type=pytsk3.TSK_IMG_TYPE_RAW)
+    def __init__(self, payload):
+        self._payload = payload
+        self._size = len(payload)
+        self._lock = threading.Lock()
+        pytsk3.Img_Info.__init__(self, url="", type=pytsk3.TSK_IMG_TYPE_RAW)
 
-  def close(self):
-    with self._lock:
-      self._payload = b''
+    def close(self):
+        with self._lock:
+            self._payload = b""
 
-  def read(self, offset, size):
-    with self._lock:
-      if offset >= len(self._payload):
-        return b''
-      return self._payload[offset:offset + size]
+    def read(self, offset, size):
+        with self._lock:
+            if offset >= len(self._payload):
+                return b""
+            return self._payload[offset : offset + size]
 
-  def get_size(self):
-    return self._size
+    def get_size(self):
+        return self._size
 
 
 class ReimportClassRegistryTest(unittest.TestCase):
-  """Concurrent class-registry lookups must not see a torn TOTAL_CCLASSES.
+    """Concurrent class-registry lookups must not see a torn TOTAL_CCLASSES.
 
-  TOTAL_CCLASSES is now std::atomic<int> (release writers / acquire
-  readers); legacy plain-int reads could observe a half-zeroed entry
-  during a re-init.
-  """
+    TOTAL_CCLASSES is now std::atomic<int> (release writers / acquire
+    readers); legacy plain-int reads could observe a half-zeroed entry
+    during a re-init.
+    """
 
-  def testRegistryStableUnderConcurrentLookups(self):
-    img = pytsk3.Img_Info(url=_TEST_IMAGE)
-    fs = pytsk3.FS_Info(img, offset=0)
-    try:
-      def worker(_index):
-        for _ in range(200):
-          fobj = fs.open_meta(15)
-          self.assertIsNotNone(fobj.info.meta)
-          # Iteration drives Wrapper construction through the registry.
-          for _attr in fobj:
-            pass
-      _run_concurrently(worker, 8)
-    finally:
-      img.close()
+    def testRegistryStableUnderConcurrentLookups(self):
+        img = pytsk3.Img_Info(url=_TEST_IMAGE)
+        fs = pytsk3.FS_Info(img, offset=0)
+        try:
+
+            def worker(_index):
+                for _ in range(200):
+                    fobj = fs.open_meta(15)
+                    self.assertIsNotNone(fobj.info.meta)
+                    # Iteration drives Wrapper construction through the registry.
+                    for _attr in fobj:
+                        pass
+
+            _run_concurrently(worker, 8)
+        finally:
+            img.close()
 
 
 class ProxiedExceptionPathTest(unittest.TestCase):
-  """Exceptions raised in a proxied Python callback must reach Python.
+    """Exceptions raised in a proxied Python callback must reach Python.
 
-  On 3.12+ pytsk_fetch_error uses PyErr_GetRaisedException /
-  SetRaisedException; the legacy Fetch/Restore triple was removed in
-  3.14. Verifies the modern path actually transports the exception.
-  """
+    On 3.12+ pytsk_fetch_error uses PyErr_GetRaisedException /
+    SetRaisedException; the legacy Fetch/Restore triple was removed in
+    3.14. Verifies the modern path actually transports the exception.
+    """
 
-  def testRaiseInPythonReadIsObserved(self):
-    img = _RaisingImg()
-    try:
-      with self.assertRaises((IOError, OSError, RuntimeError)):
-        _ = pytsk3.FS_Info(img, offset=0)
-    finally:
-      img.close()
+    def testRaiseInPythonReadIsObserved(self):
+        img = _RaisingImg()
+        try:
+            with self.assertRaises((IOError, OSError, RuntimeError)):
+                _ = pytsk3.FS_Info(img, offset=0)
+        finally:
+            img.close()
 
 
 class CycleCollectionTest(unittest.TestCase):
-  """Wrapper objects participate in cyclic GC.
+    """Wrapper objects participate in cyclic GC.
 
-  img._cycle = directory; directory.python_object1 = fs (C keepalive);
-  fs.python_object1 = img (C keepalive) is a real cycle. Without
-  tp_traverse / tp_clear / Py_TPFLAGS_HAVE_GC the libtsk handle (plus
-  any user payload) leaks for the process lifetime.
-  """
+    img._cycle = directory; directory.python_object1 = fs (C keepalive);
+    fs.python_object1 = img (C keepalive) is a real cycle. Without
+    tp_traverse / tp_clear / Py_TPFLAGS_HAVE_GC the libtsk handle (plus
+    any user payload) leaks for the process lifetime.
+    """
 
-  def testCycleIsCollected(self):
-    sentinel_alive = [True]
+    def testCycleIsCollected(self):
+        sentinel_alive = [True]
 
-    class Sentinel:
-      def __del__(self_inner):
-        sentinel_alive[0] = False
+        class Sentinel:
+            def __del__(self_inner):
+                sentinel_alive[0] = False
 
-    class CycleImg(pytsk3.Img_Info):
-      pass
+        class CycleImg(pytsk3.Img_Info):
+            pass
 
-    def build():
-      img = CycleImg(_TEST_IMAGE)
-      # Precondition: GC must track the wrapper or the cycle below
-      # is unreachable to the collector regardless of fix correctness.
-      assert gc.is_tracked(img), 'wrapper must be GC-tracked'
-      fs = pytsk3.FS_Info(img)
-      d = fs.open_dir('/')
-      img._cycle = d            # img -> d -> fs (python_object1) -> img
-      img._sentinel = Sentinel()
+        def build():
+            img = CycleImg(_TEST_IMAGE)
+            # Precondition: GC must track the wrapper or the cycle below
+            # is unreachable to the collector regardless of fix correctness.
+            assert gc.is_tracked(img), "wrapper must be GC-tracked"
+            fs = pytsk3.FS_Info(img)
+            d = fs.open_dir("/")
+            img._cycle = d  # img -> d -> fs (python_object1) -> img
+            img._sentinel = Sentinel()
 
-    build()
-    gc.collect()
-    self.assertFalse(
-        sentinel_alive[0],
-        'cycle through python_object1 keepalive was not collected')
+        build()
+        gc.collect()
+        self.assertFalse(
+            sentinel_alive[0],
+            "cycle through python_object1 keepalive was not collected",
+        )
 
 
 class _RaisingImg(pytsk3.Img_Info):
-  """Img_Info whose read() always raises, to exercise pytsk_fetch_error."""
+    """Img_Info whose read() always raises, to exercise pytsk_fetch_error."""
 
-  def __init__(self):
-    pytsk3.Img_Info.__init__(self, url='', type=pytsk3.TSK_IMG_TYPE_RAW)
+    def __init__(self):
+        pytsk3.Img_Info.__init__(self, url="", type=pytsk3.TSK_IMG_TYPE_RAW)
 
-  def close(self):
-    return None
+    def close(self):
+        return None
 
-  def read(self, offset, size):
-    raise RuntimeError('synthetic Python read failure')
+    def read(self, offset, size):
+        raise RuntimeError("synthetic Python read failure")
 
-  def get_size(self):
-    return 1 << 20
+    def get_size(self):
+        return 1 << 20
 
 
-if __name__ == '__main__':
-  unittest.main()
+if __name__ == "__main__":
+    unittest.main()

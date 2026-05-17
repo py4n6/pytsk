@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pytsk3"
-version = "20260502"
+version = "20260517"
 description = "Python bindings for the SleuthKit"
 authors = [
     { name = "Michael Cohen", email = "scudette@gmail.com" },
@@ -25,6 +25,16 @@ requires-python = ">=3.10"
 Documentation = "https://raw.githubusercontent.com/py4n6/pytsk/refs/heads/main/README"
 Homepage = "https://github.com/py4n6/pytsk"
 Repository = "https://github.com/py4n6/pytsk"
+
+[tool.black]
+line-length = 88
+target-version = ["py310"]
+include = "\\.pyi?$"
+force-exclude = """
+(
+    sleuthkit/
+)
+"""
 
 [tool.setuptools]
 py-modules = ["_build"]
