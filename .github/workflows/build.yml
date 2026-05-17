@@ -20,16 +20,15 @@ jobs:
     - name: Install build dependencies
       run: |
         brew update -q
-        brew install -q autoconf automake gettext gnu-sed libtool pkgconfig tox
+        brew install -q autoconf automake gettext gnu-sed libtool pkgconfig tox || true
         # There currently is no brew formula for free-threaded Python, but setup-python will install it if necessary.
         if [[ "${{ matrix.python-version }}" != *t ]]; then
           brew install -q python@${{ matrix.python-version }}
         fi
         ln -s /usr/local/bin/glibtoolize /usr/local/bin/libtoolize
-        python3 -m pip install setuptools
     - name: Build and test Python module
       run: |
-        python ./utils/update_source.py
+        python utils/update_source.py
         export CXXFLAGS="-std=c++14"
         tox -e ${{ matrix.toxenv }}
   build_ubuntu:
@@ -65,7 +64,7 @@ jobs:
         python -m pip install tox
     - name: Build and test Python module
       run: |
-        python ./utils/update_source.py
+        python utils/update_source.py
         tox -e ${{ matrix.toxenv }}
   build_windows:
     runs-on: windows-latest
@@ -84,7 +83,7 @@ jobs:
         python3 -m pip install build setuptools wheel
     - name: Build Python module
       run: |
-        python ./utils/update_source.py
+        python utils/update_source.py
         python -m build --wheel
         python -m pip install --no-index --find-links=dist pytsk3
     - name: Test Python module
