@@ -19,6 +19,7 @@
 import argparse
 import re
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -94,9 +95,9 @@ class SourceUpdater:
     def _print_configure_summary(self, output):
         """Prints the configure summary."""
         print_line = False
-        for line in output.split(b"\n"):
+        for line in output.split("\n"):
             line = line.rstrip()
-            if line == b"configure:":
+            if line == "configure:":
                 print_line = True
 
             if print_line:
@@ -116,6 +117,26 @@ class SourceUpdater:
             print(f"Removing: {path:s}")
             os.remove(path)
 
+    def _run_shell_command(self, command):
+        """Runs a command."""
+        arguments = shlex.split(f"sh {command:s}")
+        process = subprocess.Popen(
+            arguments,
+            cwd="sleuthkit",
+            stderr=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            universal_newlines=True,
+        )
+        if not process:
+            raise RuntimeError(f"Running: {command:s} failed.")
+
+        output, error = process.communicate()
+        if process.returncode != 0:
+            error = "\n".join(error.split("\n")[-5:])
+            raise RuntimeError(f"Running: {command:s} failed with error:\n{error:s}.")
+
+        return output
+
     def _update_files(self):
         """Updates files."""
         dpkg_version = time.strftime("%a, %d %b %Y %H:%M:%S")
@@ -127,9 +148,9 @@ class SourceUpdater:
         # hence we detect the sign and force a leading zero.
         if timezone_hours < 0:
             timezone_hours *= -1
-            timezone_string = "-{timezone_hours:02d}{timezone_minutes:02d}"
+            timezone_string = f"-{timezone_hours:02d}{timezone_minutes:02d}"
         else:
-            timezone_string = "+{timezone_hours:02d}{timezone_minutes:02d}"
+            timezone_string = f"+{timezone_hours:02d}{timezone_minutes:02d}"
 
         files = {
             "class_parser.py": [
@@ -212,7 +233,6 @@ class SourceUpdater:
 
             # We want to build as much as possible self contained Python binding.
             command = [
-                "sh",
                 "configure",
                 "--disable-java",
                 "--disable-multithreading",
@@ -224,7 +244,7 @@ class SourceUpdater:
                 "--without-libvslvm",
                 "--without-zlib",
             ]
-            output = subprocess.check_output(command, cwd="sleuthkit")
+            output = self._run_shell_command(" ".join(command))
             self._print_configure_summary(output)
 
         self._remove_files()
