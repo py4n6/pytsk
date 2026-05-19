@@ -23,4 +23,5 @@ jobs:
         python -m pip install tox
     - name: Run linter
       run: |
+        python utils/update_source.py
         tox -e pylint
