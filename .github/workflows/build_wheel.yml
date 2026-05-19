@@ -8,10 +8,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v6
-      with:
-        persist-credentials: false
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y autoconf automake autopoint autotools-dev build-essential git libtool pkg-config python3-build
     - name: Build sdist
-      run: python -m  build --sdist
+      run: |
+        python utils/update_source.py
+        python -m build --sdist
     - uses: actions/upload-artifact@v7
       with:
         name: cibw-sdist
