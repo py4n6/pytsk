@@ -173,7 +173,7 @@ class Lexer:
         if self.verbose > 1:
             self.log(f"Restoring state to offset {self.processed:s}\n")
 
-    def save_state(self, unused_token=None, match=None):
+    def save_state(self, unused_token, match):
         """Saves (preserves) the current state of the lexer.
 
         When provided to restore_state, the lexer is guaranteed to be in the same state
@@ -206,14 +206,14 @@ class Lexer:
     # The following methods are state handlers that have a calling convention.
     # pylint: disable=invalid-name,unused-argument
 
-    def ERROR(self, message=None, weight=1):
+    def ERROR(self, message, weight=1):
         """Handle an error (ERROR state)."""
         if self.verbose > 0 and message:
             self.log(f"Error({weight:d}): {message!s}\n")
 
         self.error += weight
 
-    def POP_STATE(self, unused_token=None, unused_match=None):
+    def POP_STATE(self, unused_token, unused_match):
         """Handle a POP_STATE state."""
         try:
             state = self.state_stack.pop()
@@ -224,7 +224,7 @@ class Lexer:
             state = None
         return state
 
-    def PUSH_STATE(self, unused_token=None, unused_match=None):
+    def PUSH_STATE(self, unused_token, unused_match):
         """Handle a PUSH_STATE state."""
         if self.verbose > 1:
             self.log(f"Storing state {self.state:s}\n")
