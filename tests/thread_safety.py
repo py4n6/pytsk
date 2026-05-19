@@ -25,7 +25,7 @@ import pytsk3
 
 def IsFreeThreaded():
     """True when running on a free-threaded Python build."""
-    # pylint: disable=protected-access
+    # pylint: disable=no-member,protected-access
     return hasattr(sys, "_is_gil_enabled") and not sys._is_gil_enabled()
 
 
