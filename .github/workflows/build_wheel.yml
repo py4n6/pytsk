@@ -3,6 +3,23 @@ name: build_wheels
 on: [push, pull_request]
 permissions: read-all
 jobs:
+  build_sdist:
+    name: Build sdist
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y autoconf automake autopoint autotools-dev build-essential git libtool pkg-config python3-build
+    - name: Build sdist
+      run: |
+        python utils/update_source.py
+        python -m build --sdist
+    - uses: actions/upload-artifact@v7
+      with:
+        name: cibw-sdist
+        path: dist/*.tar.gz
   build_wheels_linux:
     name: Build wheels on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -87,3 +104,17 @@ jobs:
       with:
         name: cibw-wheels-${{ matrix.os }}-${{ strategy.job-index }}
         path: dist/*.whl
+  upload_pypi:
+    needs: [build_sdist, build_wheels_linux, build_wheels_macos, build_wheels_windows]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    if: github.event_name == 'release' && github.event.action == 'published'
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: cibw-*
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
