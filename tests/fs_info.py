@@ -130,12 +130,11 @@ class TSKFsInfoFileObjectTest(TSKFsInfoTestCase):
     """Tests the FS_Info object using an Img_Info file-like object."""
 
     def _WalkFileSystem(self, directory, prefix=b"", max_depth=8, depth=0):
-        """Recursive directory walk yielding (path, entry) pairs.
+        """Recurses a directory and yields (path, entry) pairs.
 
-        Mirrors samples/fls.py and dfvfs's TSKFileSystem traversal: skip
-        '.', '..', and the synthetic '$OrphanFiles' node; recurse via
-        File.as_directory(); cap depth to avoid runaway loops on
-        pathological inputs (e.g. cyclic symlinks).
+        Skip '.', '..', and the synthetic '$OrphanFiles' node; recurse via
+        File.as_directory(); cap depth to avoid runaway loops on pathological inputs,
+        such as cyclic symlinks.
         """
         if depth <= max_depth:
             for entry in directory:
