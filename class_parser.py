@@ -240,11 +240,11 @@ DOCSTRING_RE = re.compile("[ ]*\n[ \t]+[*][ ]?")
 def dispatch(name, data_type, *args, **kwargs):
     """Retrieves a specific code generator from the type dispatcher."""
     if not data_type:
-        return PVoid(name)
+        return PVoid(name, "void *")
 
-    m = re.match("struct ([a-zA-Z0-9]+)_t *", data_type)
-    if m:
-        data_type = m.group(1)
+    match = re.match("struct ([a-zA-Z0-9]+)_t *", data_type)
+    if match:
+        data_type = match.group(1)
 
     type_components = data_type.split()
     attributes = set()
@@ -253,7 +253,7 @@ def dispatch(name, data_type, *args, **kwargs):
         attributes.add(type_components.pop(0))
 
     data_type = " ".join(type_components)
-    result = type_dispatcher[data_type](name, data_type, *args, **kwargs)
+    result = TYPE_DISPATCHER[data_type](name, data_type, *args, **kwargs)
 
     result.attributes = attributes
 
@@ -825,6 +825,7 @@ PyObject * PyInit_{module:s}(void) {{
 
     def __init__(self, name):
         """Initializes the code generator."""
+        super().__init__()
         self.active_structs = set()
         self.classes = {}
         self.constants_blacklist = CONSTANTS_BLACKLIST
@@ -842,7 +843,7 @@ PyObject * PyInit_{module:s}(void) {{
 
         # Make a wrapper in the type dispatcher so we can handle
         # passing this class from/to Python
-        type_dispatcher[cls.class_name] = handler
+        TYPE_DISPATCHER[cls.class_name] = handler
 
     def add_constant(self, constant, data_type="numeric"):
         """This will be called to add #define constant macros."""
@@ -1080,13 +1081,13 @@ if(check_error()) {
     interface = None
     buildstr = "O"
     sense = "IN"
-    error_value = "return 0;"
 
     def __init__(self, name, data_type, *unused_args, **kwargs):
         """Initializes the code generator."""
         super().__init__()
         self.additional_args = kwargs
         self.attributes = set()
+        self.error_value = "return 0;"
         self.name = name
         self.type = data_type
 
@@ -1173,6 +1174,7 @@ if(check_error()) {
         return f"return {value!s};"
 
     def returned_python_definition(self, **kwargs):
+        """Generates code to define the C/C++ type."""
         return self.definition(**kwargs)
 
 
@@ -1215,18 +1217,20 @@ class String(Type):
 
     interface = "string"
     buildstr = "s"
-    error_value = "return NULL;"
 
     def __init__(self, name, data_type, *args, **kwargs):
         """Initializes the code generator."""
         super().__init__(name, data_type, *args, **kwargs)
+        self.error_value = "return NULL;"
         self.length = f"strlen({name:s})"
 
     def byref(self):
         """Generates code to reference the C/C++ type."""
         return f"&{self.name:s}"
 
-    def from_python_object(self, source, destination, method, context="NULL"):
+    def from_python_object(
+        self, source, destination, method, context="NULL", **unused_kwargs
+    ):
         """Generates code to convert a C/C++ type into a Python object."""
         method.error_set = True
 
@@ -1294,15 +1298,15 @@ class Char_and_Length(Type):
 
     interface = "char_and_length"
     buildstr = "s#"
-    error_value = "return NULL;"
 
-    def __init__(self, data, data_type, length, length_type, *args, **kwargs):
+    def __init__(self, name, data_type, length, length_type, *args, **kwargs):
         """Initializes the code generator."""
-        super().__init__(data, data_type, *args, **kwargs)
+        super().__init__(name, data_type, *args, **kwargs)
         self.data_type = data_type
+        self.error_value = "return NULL;"
         self.length = length
         self.length_type = length_type
-        self.name = data
+        self.name = name
 
     def byref(self):
         """Generates code to reference the C/C++ type."""
@@ -1325,7 +1329,7 @@ class Char_and_Length(Type):
             f"    Py_ssize_t {self.length:s} = strlen({default:s});\n"
         )
 
-    def to_python_object(self, name=None, result="Py_result", **unused_kwargs):
+    def to_python_object(self, result="Py_result", **unused_kwargs):
         """Generates code to a Python object into a C/C++ type."""
         values_dict = {"length": self.length, "name": self.name, "result": result}
 
@@ -1349,7 +1353,7 @@ class Integer(Type):
         """Generates code with a comment about the C/C++ type."""
         return f"{self.original_type:s} {self.name:s} "
 
-    def from_python_object(self, source, destination, method, **unused_kwargs):
+    def from_python_object(self, source, destination, unused_method, **unused_kwargs):
         """Generates code to convert a C/C++ type into a Python object."""
         return (
             f"    PyErr_Clear();\n"
@@ -1384,14 +1388,16 @@ class IntegerUnsigned(Integer):
     buildstr = "I"
     int_type = "unsigned int"
 
-    def from_python_object(self, source, destination, method, **unused_kwargs):
+    def from_python_object(self, source, destination, unused_method, **unused_kwargs):
         """Generates code to convert a C/C++ type into a Python object."""
         return (
             f"    PyErr_Clear();\n"
             f"    {destination:s} = PyLong_AsUnsignedLongMask({source:s});\n"
         )
 
-    def to_python_object(self, name=None, result="Py_result", **kwargs):
+    def to_python_object(
+        self, name=None, result="Py_result", sense="in", **unused_kwargs
+    ):
         """Generates code to a Python object into a C/C++ type."""
         name = name or self.name
 
@@ -1407,7 +1413,7 @@ class IntegerUnsigned(Integer):
             f"    PyErr_Clear();\n"
             f"    {result:s} = PyLong_FromLong((long) {name:s});\n"
         )
-        if kwargs.get("sense") == "proxied":
+        if sense == "proxied":
             code += (
                 f"    if({result:s} == NULL) {{\n"
                 f"        goto on_error;\n"
@@ -1476,19 +1482,21 @@ class Integer64(Integer):
     buildstr = "L"
     int_type = "int64_t"
 
-    def from_python_object(self, source, destination, method, **unused_kwargs):
+    def from_python_object(self, source, destination, unused_method, **unused_kwargs):
         """Generates code to convert a C/C++ type into a Python object."""
         values_dict = {"destination": destination, "source": source}
 
         return self._FROM_PYTHON_OBJECT_TEMPLATE.format(**values_dict)
 
-    def to_python_object(self, name=None, result="Py_result", **kwargs):
+    def to_python_object(
+        self, name=None, result="Py_result", sense="in", **unused_kwargs
+    ):
         """Generates code to a Python object into a C/C++ type."""
         values_dict = {"name": name or self.name, "result": result}
 
         code = self._TO_PYTHON_OBJECT_TEMPLATE.format(**values_dict)
 
-        if kwargs.get("sense") == "proxied":
+        if sense == "proxied":
             code += (
                 f"    if({result:s} == NULL) {{\n"
                 f"        goto on_error;\n"
@@ -1521,7 +1529,7 @@ class Integer64Unsigned(Integer):
     buildstr = "K"
     int_type = "uint64_t"
 
-    def from_python_object(self, source, destination, method, **unused_kwargs):
+    def from_python_object(self, source, destination, unused_method, **unused_kwargs):
         """Generates code to convert a C/C++ type into a Python object."""
         values_dict = {"destination": destination, "source": source}
 
@@ -1529,13 +1537,15 @@ class Integer64Unsigned(Integer):
         # objects.
         return self._FROM_PYTHON_OBJECT_TEMPLATE.format(**values_dict)
 
-    def to_python_object(self, name=None, result="Py_result", **kwargs):
+    def to_python_object(
+        self, name=None, result="Py_result", sense="in", **unused_kwargs
+    ):
         """Generates code to a Python object into a C/C++ type."""
         values_dict = {"name": name or self.name, "result": result}
 
         code = self._TO_PYTHON_OBJECT_TEMPLATE.format(**values_dict)
 
-        if kwargs.get("sense") == "proxied":
+        if sense == "proxied":
             code += (
                 f"    if({result:s} == NULL) {{\n"
                 f"        goto on_error;\n"
@@ -1550,7 +1560,7 @@ class Long(Integer):
     buildstr = "l"
     int_type = "long"
 
-    def from_python_object(self, source, destination, method, **unused_kwargs):
+    def from_python_object(self, source, destination, unused_method, **unused_kwargs):
         """Generates code to convert a C/C++ type into a Python object."""
         values_dict = {"destination": destination, "source": source}
 
@@ -1558,17 +1568,15 @@ class Long(Integer):
             "PyErr_Clear();\n" "{destination:s} = PyLong_AsLongMask({source:s});\n"
         ).format(**values_dict)
 
-    def to_python_object(self, name=None, result="Py_result", **kwargs):
+    def to_python_object(
+        self, name=None, result="Py_result", sense="in", **unused_kwargs
+    ):
         """Generates code to a Python object into a C/C++ type."""
-        values_dict = {"name": name or self.name, "result": result}
+        name = name or self.name
 
-        code = (
-            "PyErr_Clear();\n" "{result:s} = PyLong_FromLongLong({name:s});\n"
-        ).format(**values_dict)
-        if kwargs.get("sense") == "proxied":
-            code += (
-                "if({result:s} == NULL) {{\n" "    goto on_error;\n" "}}\n"
-            ).format(**values_dict)
+        code = f"PyErr_Clear();\n" f"{result:s} = PyLong_FromLongLong({name:s});\n"
+        if sense == "proxied":
+            code += f"if({result:s} == NULL) {{\n" f"    goto on_error;\n" f"}}\n"
         return code
 
 
@@ -1578,26 +1586,22 @@ class LongUnsigned(Integer):
     buildstr = "k"
     int_type = "unsigned long"
 
-    def from_python_object(self, source, destination, method, **unused_kwargs):
+    def from_python_object(self, source, destination, unused_method, **unused_kwargs):
         """Generates code to convert a C/C++ type into a Python object."""
-        values_dict = {"destination": destination, "source": source}
-
         return (
-            "PyErr_Clear();\n"
-            "{destination:s} = PyLong_AsUnsignedLongMask({source:s});\n"
-        ).format(**values_dict)
+            f"PyErr_Clear();\n"
+            f"{destination:s} = PyLong_AsUnsignedLongMask({source:s});\n"
+        )
 
-    def to_python_object(self, name=None, result="Py_result", **kwargs):
+    def to_python_object(
+        self, name=None, result="Py_result", sense="in", **unused_kwargs
+    ):
         """Generates code to a Python object into a C/C++ type."""
-        values_dict = {"name": name or self.name, "result": result}
+        name = name or self.name
 
-        code = (
-            "PyErr_Clear();\n" "{result:s} = PyLong_FromUnsignedLong({name:s});\n"
-        ).format(**values_dict)
-        if kwargs.get("sense") == "proxied":
-            code += (
-                "if({result:s} == NULL) {{\n" "    goto on_error;\n" "}}\n"
-            ).format(**values_dict)
+        code = f"PyErr_Clear();\n" f"{result:s} = PyLong_FromUnsignedLong({name:s});\n"
+        if sense == "proxied":
+            code += f"if({result:s} == NULL) {{\n" f"    goto on_error;\n" f"}}\n"
         return code
 
 
@@ -1634,9 +1638,10 @@ class Char(Integer):
 
     def definition(self, default='"\\x0"', **unused_kwargs):
         """Generates code to define the C/C++ type."""
-        # Shut up unused warnings
-        return ("char {0:s} UNUSED = 0;\n" "char *str_{0:s} UNUSED = {1:s};\n").format(
-            self.name, default
+        # Silence unused warnings.
+        return (
+            f"char {self.name:s} UNUSED = 0;\n"
+            f"char *str_{self.name:s} UNUSED = {default:s};\n"
         )
 
     def pre_call(self, method, **unused_kwargs):
@@ -1649,9 +1654,9 @@ class Char(Integer):
 
     def to_python_object(self, name=None, result="Py_result", **unused_kwargs):
         """Generates code to a Python object into a C/C++ type."""
-        # We really want to return a string here
         values_dict = {"name": name or self.name, "result": result}
 
+        # We really want to return a string here.
         return self._TO_PYTHON_OBJECT_TEMPLATE.format(**values_dict)
 
 
@@ -1689,6 +1694,7 @@ class IntegerOut(Integer):
         return self.name
 
     def python_name(self):
+        """Retrieves the Python name of the C/C++ type."""
         return None
 
     def to_python_object(self, name=None, result="Py_result", **unused_kwargs):
@@ -1783,19 +1789,21 @@ class Char_and_Length_OUT(Char_and_Length):
         )
 
     def error_cleanup(self):
+        """Generates code for clean up after error for the C/C++ type."""
         return (
             f"    if(tmp_{self.name:s} != NULL) {{\n"
             f"        Py_DecRef(tmp_{self.name:s});\n"
             f"    }}\n"
         )
 
-    def pre_call(self, method, **unused_kwargs):
+    def pre_call(self, unused_method, **unused_kwargs):
         """Generates code needed before a function call for the C/C++ type."""
         values_dict = {"length": self.length, "name": self.name}
 
         return self._PRE_CALL_TEMPLATE.format(**values_dict)
 
     def python_name(self):
+        """Retrieves the Python name of the C/C++ type."""
         return self.length
 
     def python_proxy_post_call(self, result="Py_result"):
@@ -1803,6 +1811,7 @@ class Char_and_Length_OUT(Char_and_Length):
 
         return self._PYTHON_PROXY_POST_CALL_TEMPLATE.format(**values_dict)
 
+    # pylint: disable=arguments-renamed
     def to_python_object(self, name=None, result="Py_result", sense="in", **kwargs):
         """Generates code to a Python object into a C/C++ type."""
         if "results" in kwargs:
@@ -1855,10 +1864,6 @@ Py_DecRef({source:s});
 
     bare_type = "TDB_DATA"
 
-    def __init__(self, name, data_type, *args, **kwargs):
-        """Initializes the code generator."""
-        super().__init__(name, data_type, *args, **kwargs)
-
     def byref(self):
         """Generates code to reference the C/C++ type."""
         return f"{self.name:s}.dptr, &{self.name:s}.dsize"
@@ -1881,10 +1886,11 @@ Py_DecRef({source:s});
         }
         return self._FROM_PYTHON_OBJECT_TEMPLATE.format(**values_dict)
 
-    def pre_call(self, method, **unused_kwargs):
+    def pre_call(self, unused_method, **unused_kwargs):
         """Generates code needed before a function call for the C/C++ type."""
         return ""
 
+    # pylint: disable=arguments-differ
     def to_python_object(self, name=None, result="Py_result", **unused_kwargs):
         """Generates code to a Python object into a C/C++ type."""
         values_dict = {"name": name or self.name, "result": result}
@@ -1918,7 +1924,10 @@ Py_DecRef({source:s});
     {result:s} = PyBytes_FromStringAndSize((char *){name:s}.dptr, {name:s}.dsize);
 """
 
-    error_value = "{result:s}.dptr = NULL;\n" "return {result:s};"
+    def __init__(self, name, data_type, length, length_type, *args, **kwargs):
+        """Initializes the code generator."""
+        super().__init__(name, data_type, length, length_type, *args, **kwargs)
+        self.error_value = "{result:s}.dptr = NULL;\nreturn {result:s};"
 
     def from_python_object(self, source, destination, method, **unused_kwargs):
         """Generates code to convert a C/C++ type into a Python object."""
@@ -1938,14 +1947,14 @@ class Void(Type):
     """Void code generator."""
 
     buildstr = ""
-    error_value = "return;"
     original_type = ""
 
-    def __init__(self, name, data_type="void", *args, **kwargs):
+    def __init__(self, name, data_type, *args, **kwargs):
         """Initializes the code generator."""
         super().__init__(name, data_type, *args, **kwargs)
+        self.error_value = "return;"
 
-    def assign(self, call, method, target=None, **unused_kwargs):
+    def assign(self, call, unused_method, target=None, **unused_kwargs):
         """Generates code to assign the C/C++ type."""
         # We don't assign the result to anything.
         return (
@@ -1974,17 +1983,13 @@ class Void(Type):
         """Generates code of the C/C++ type as a return value."""
         return "return;"
 
-    def to_python_object(self, name=None, result="Py_result", **unused_kwargs):
+    def to_python_object(self, **unused_kwargs):
         """Generates code to a Python object into a C/C++ type."""
         return "Py_IncRef(Py_None);\n" "Py_result = Py_None;\n"
 
 
 class PVoid(Void):
     """Void pointer code generator."""
-
-    def __init__(self, name, data_type="void *", *args, **kwargs):
-        """Initializes the code generator."""
-        super().__init__(name, data_type, *args, **kwargs)
 
 
 class StringArray(String):
@@ -2042,7 +2047,9 @@ class StringArray(String):
             f"    }}\n"
         )
 
-    def from_python_object(self, source, destination, method, context="NULL"):
+    def from_python_object(
+        self, source, destination, method, context="NULL", **unused_kwargs
+    ):
         """Generates code to convert a C/C++ type into a Python object."""
         method.error_set = True
         values_dict = {"destination": destination, "source": source}
@@ -2139,7 +2146,12 @@ class Wrapper(Type):
 """
 
     sense = "IN"
-    error_value = "return NULL;"
+
+    def __init__(self, name, data_type, *args, **kwargs):
+        """Initializes the code generator."""
+        super().__init__(name, data_type, *args, **kwargs)
+        self.error_value = "return NULL;"
+        self.original_type = None
 
     def assign(self, call, method, target=None, **unused_kwargs):
         """Generates code to assign the C/C++ type."""
@@ -2191,13 +2203,13 @@ class Wrapper(Type):
 
         return result
 
-    def from_python_object(self, source, destination, method, **unused_kwargs):
+    def from_python_object(self, source, destination, unused_method, **unused_kwargs):
         """Generates code to convert a C/C++ type into a Python object."""
         values_dict = {"destination": destination, "source": source, "type": self.type}
 
         return self._FROM_PYTHON_OBJECT_TEMPLATE.format(**values_dict)
 
-    def pre_call(self, method, python_object_index=1, **unused_kwargs):
+    def pre_call(self, unused_method, python_object_index=1, **unused_kwargs):
         """Generates code needed before a function call for the C/C++ type."""
         if "OUT" in self.attributes or self.sense == "OUT":
             return ""
@@ -2212,7 +2224,8 @@ class Wrapper(Type):
         }
         return self._PRE_CALL_TEMPLATE.format(**values_dict)
 
-    def returned_python_definition(self, default="NULL", sense="in", **unused_kwargs):
+    def returned_python_definition(self, default="NULL", **unused_kwargs):
+        """Generates code to define the C/C++ type."""
         return f"{self.type:s} {self.name:s} = {default:s};\n"
 
     def to_python_object(
@@ -2268,7 +2281,8 @@ if(!wrapped_{name:s} || (PyObject *)wrapped_{name:s}==Py_None) {{
 
         return result
 
-    def pre_call(self, method, **unused_kwargs):
+    # pylint: disable=arguments-differ
+    def pre_call(self, unused_method, **unused_kwargs):
         """Generates code needed before a function call for the C/C++ type."""
         if "OUT" in self.attributes or self.sense == "OUT":
             return ""
@@ -2305,9 +2319,12 @@ class StructWrapper(Wrapper):
     def assign(self, call, method, target=None, borrowed=True, **unused_kwargs):
         """Generates code to assign the C/C++ type."""
         self.original_type = self.type.split()[0]
+
+        name = target or self.name
+
         values_dict = {
             "call": call.strip(),
-            "name": target or self.name,
+            "name": name,
             "type": self.original_type,
         }
         result = self._ASSIGN_START_TEMPLATE.format(**values_dict)
@@ -2349,9 +2366,7 @@ class StructWrapper(Wrapper):
             ).format(**values_dict)
 
         # All keepalive fields are wired; safe to expose to the GC.
-        result += (
-            "        PyObject_GC_Track((PyObject *) wrapped_{name:s});\n" "\n"
-        ).format(**values_dict)
+        result += f"        PyObject_GC_Track((PyObject *) wrapped_{name:s});\n" f"\n"
 
         if "NULL_OK" in self.attributes:
             result += (
@@ -2406,6 +2421,7 @@ class StructWrapper(Wrapper):
 
 
 class PointerStructWrapper(StructWrapper):
+    """Pointer a to wrapped C struct code generator."""
 
     _FROM_PYTHON_OBJECT_TEMPLATE = """\
     if({source:s} == NULL || !type_check({source:s}, &{type:s}_Type)) {{
@@ -2420,7 +2436,7 @@ class PointerStructWrapper(StructWrapper):
         """Generates code to reference the C/C++ type."""
         return f"&wrapped_{self.name:s}"
 
-    def from_python_object(self, source, destination, method, **unused_kwargs):
+    def from_python_object(self, source, destination, unused_method, **unused_kwargs):
         """Generates code to convert a C/C++ type into a Python object."""
         values_dict = {
             "destination": destination,
@@ -2446,11 +2462,11 @@ class Timeval(Type):
         result += self.local_definition(default=default, **kwargs)
         return result
 
-    def local_definition(self, default=None, **unused_kwargs):
+    def local_definition(self, **unused_kwargs):
         """Generates code to local define the C/C++ type."""
         return f"float {self.name:s}_flt;\n"
 
-    def pre_call(self, method, **unused_kwargs):
+    def pre_call(self, unused_method, **unused_kwargs):
         """Generates code needed before a function call for the C/C++ type."""
         return (
             f"{self.name:s}.tv_sec = (int){self.name:s}_flt;\n"
@@ -2474,6 +2490,11 @@ class PyObject(Type):
     interface = "opaque"
     buildstr = "O"
 
+    def __init__(self, name, data_type, *args, **kwargs):
+        """Initializes the code generator."""
+        super().__init__(name, data_type, *args, **kwargs)
+        self.default = None
+
     def byref(self):
         """Generates code to reference the C/C++ type."""
         return f"&{self.name:s}"
@@ -2484,55 +2505,57 @@ class PyObject(Type):
         return f"PyObject *{self.name:s} = {self.default:s};\n"
 
 
-type_dispatcher = {
-    "IN unsigned char *": String,
-    "IN char *": String,
-    "unsigned char *": String,
+TYPE_DISPATCHER = {
+    "char": Char,
     "char *": String,
-    "ZString": ZString,
-    "OUT unsigned char *": StringOut,
-    "OUT char *": StringOut,
-    "OUT uint64_t *": PInteger64UnsignedOut,
-    "OUT uint32_t *": PInteger32UnsignedOut,
-    "void *": PVoid,
-    "void": Void,
-    "TDB_DATA *": TDB_DATA_P,
-    "TDB_DATA": TDB_DATA,
-    "TSK_INUM_T": Integer,
+    "char **": StringArray,
+    "IN char *": String,
+    "int16_t": Integer16,
+    "int32_t": Integer32,
+    "int64_t": Integer64,
+    "int8_t": Integer8,
+    "int": Integer,
+    "IN unsigned char *": String,
+    "long int": Integer,
+    "long": Long,
     "off_t": Integer64,
+    "OUT char *": StringOut,
+    "OUT uint32_t *": PInteger32UnsignedOut,
+    "OUT uint64_t *": PInteger64UnsignedOut,
+    "OUT unsigned char *": StringOut,
+    "PyObject *": PyObject,
     "size_t": Integer64Unsigned,
     "ssize_t": Integer64,
-    "time_t": Integer64,
-    "unsigned long": LongUnsigned,
-    "long": Long,
-    "unsigned long int": LongUnsigned,
-    "long int": Integer,
-    "unsigned int": Integer,
-    "int": Integer,
-    "uint64_t": Integer64Unsigned,
-    "uint32_t": Integer32Unsigned,
-    "uint16_t": Integer16Unsigned,
-    "uint8_t": Integer8Unsigned,
-    "int64_t": Integer64,
-    "int32_t": Integer32,
-    "int16_t": Integer16,
-    "int8_t": Integer8,
-    "char": Char,
     "struct timeval": Timeval,
-    "char **": StringArray,
-    "PyObject *": PyObject,
+    "TDB_DATA": TDB_DATA,
+    "TDB_DATA *": TDB_DATA_P,
+    "time_t": Integer64,
+    "TSK_INUM_T": Integer,
+    "uint16_t": Integer16Unsigned,
+    "uint32_t": Integer32Unsigned,
+    "uint64_t": Integer64Unsigned,
+    "uint8_t": Integer8Unsigned,
+    "unsigned char *": String,
+    "unsigned int": Integer,
+    "unsigned long int": LongUnsigned,
+    "unsigned long": LongUnsigned,
+    "void *": PVoid,
+    "void": Void,
+    "ZString": ZString,
 }
 
 method_attributes = ["BORROWED", "DESTRUCTOR", "IGNORE"]
 
 
 class ResultException(BaseCodeGenerator):
+    """Result exception code generator."""
 
     value = 0
     exception = "PyExc_IOError"
 
     def __init__(self, check, exception, message):
         """Initializes the code generator."""
+        super().__init__()
         self.check = check
         self.exception = exception
         self.message = message
@@ -2551,6 +2574,7 @@ class ResultException(BaseCodeGenerator):
 
 
 class Method(BaseCodeGenerator):
+    """Method code generator."""
 
     _DEFINITION_BASE_GUARD_TEMPLATE = """
     // Make sure that we have something valid to wrap
@@ -2583,8 +2607,9 @@ class Method(BaseCodeGenerator):
     ):
         """Initializes the code generator."""
         if not isinstance(myclass, ClassGenerator):
-            raise RuntimeError("myclass must be a class generator")
+            raise RuntimeError("myclass not an instance of ClassGenerator")
 
+        super().__init__()
         self.args = []
         self.base_class_name = base_class_name
         self.class_name = class_name
@@ -2593,11 +2618,11 @@ class Method(BaseCodeGenerator):
         self.docstring = ""
         self.error_set = False
         self.exception = None
-        self.name = name
         self.myclass = myclass
+        self.name = name
 
-        for data_type, name in args:
-            self.add_arg(data_type, name)
+        for arg_type, arg_name in args:
+            self.add_arg(arg_type, arg_name)
 
         try:
             self.return_type = dispatch("func_return", return_type)
@@ -2610,17 +2635,19 @@ class Method(BaseCodeGenerator):
                     f"Unable to handle return type {self.class_name:s}.{self.name:s} "
                     f"{return_type:s}"
                 )
-            self.return_type = PVoid("func_return")
+            self.return_type = PVoid("func_return", "void *")
 
     def _prototype(self, out):
+        """Generates code with a prototype of the C/C++ type."""
         out.write(
             f"static PyObject *py{self.class_name:s}_{self.name:s}("
             f"py{self.class_name:s} *self, PyObject *args, PyObject *kwds)"
         )
 
     def add_arg(self, data_type, name):
+        """Add an argument and register it with the type dispatcher."""
         try:
-            t = type_dispatcher[data_type](name, data_type)
+            t = TYPE_DISPATCHER[data_type](name, data_type)
         except KeyError:
             # Sometimes types must be typedefed in advance
             try:
@@ -2628,7 +2655,7 @@ class Method(BaseCodeGenerator):
                 original_type = m.group(0)
                 data_type = m.group(1)
                 self.log(f"Trying {data_type:s} for {original_type:s}")
-                t = type_dispatcher[data_type](name, data_type)
+                t = TYPE_DISPATCHER[data_type](name, data_type)
             except (KeyError, AttributeError):
                 self.log(
                     f"Unable to handle type {self.class_name:s}.{self.name:s} "
@@ -2660,6 +2687,7 @@ class Method(BaseCodeGenerator):
         self.args.append(t)
 
     def clone(self, new_class_name):
+        """Clone the code generator."""
         self.find_optional_vars()
 
         result = self.__class__(
@@ -2681,11 +2709,14 @@ class Method(BaseCodeGenerator):
     def comment(self):
         """Generates code with a comment about the C/C++ type."""
         args = []
-        for type in self.args:
-            args.append(type.comment())
+        for argument in self.args:
+            args.append(argument.comment())
 
-        return "{0:s} {1:s}.{2:s}({3:s});\n".format(
-            self.return_type.original_type, self.class_name, self.name, ", ".join(args)
+        args_string = ", ".join(args)
+
+        return (
+            f"{self.return_type.original_type:s} {self.class_name:s}.{self.name:s}("
+            f"{args_string:s});\n"
         )
 
     def error_condition(self):
@@ -2708,14 +2739,15 @@ class Method(BaseCodeGenerator):
             )
 
         if hasattr(self, "args"):
-            for type in self.args:
-                if hasattr(type, "error_cleanup"):
-                    result += type.error_cleanup()
+            for argument in self.args:
+                if hasattr(argument, "error_cleanup"):
+                    result += argument.error_cleanup()
 
         result += "    return NULL;\n"
         return result
 
     def find_optional_vars(self):
+        """Find optional variables."""
         for line in self.docstring.splitlines():
             m = self.default_re.search(line)
             if m:
@@ -2731,11 +2763,12 @@ class Method(BaseCodeGenerator):
 
     def get_string(self):
         """Retrieves a string representation."""
-        args = " , ".join([arg.get_string() for arg in self.args])
+        args = " , ".join([argument.get_string() for argument in self.args])
         return_type = self.return_type.get_string()
         return f"def {return_type:s} {self.name:s}({args:s}):"
 
     def prototype(self, out):
+        """Generates code with a prototype of the C/C++ type."""
         self._prototype(out)
         out.write(";\n")
 
@@ -2771,8 +2804,8 @@ class Method(BaseCodeGenerator):
         # Precall preparations
         out.write("    // Precall preparations\n")
         out.write(self.return_type.pre_call(self))
-        for type in self.args:
-            out.write(type.pre_call(self))
+        for argument in self.args:
+            out.write(argument.pre_call(self))
 
         values_dict = {
             "class_name": self.class_name,
@@ -2801,7 +2834,11 @@ class Method(BaseCodeGenerator):
 
         self.error_set = True
 
-        out.write("    };\n" "\n" "    // Postcall preparations\n")
+        out.write("""\
+    };
+
+    // Postcall preparations
+""")
         # Postcall preparations
         post_calls = []
 
@@ -2809,24 +2846,26 @@ class Method(BaseCodeGenerator):
         post_calls.append(post_call)
         out.write(f"    {post_call:s}")
 
-        for type in self.args:
-            post_call = type.post_call(self)
+        for argument in self.args:
+            post_call = argument.post_call(self)
             if post_call not in post_calls:
                 post_calls.append(post_call)
                 out.write(f"    {post_call:s}")
 
         # Now assemble the results
         results = [self.return_type.to_python_object()]
-        for type in self.args:
-            if type.sense == "OUT_DONE":
-                results.append(type.to_python_object(results=results))
+        for argument in self.args:
+            if argument.sense == "OUT_DONE":
+                # TODO: to_python_object has no results kwarg
+                code = argument.to_python_object(results=results)
+                results.append(code)
 
         # If all the results are returned by reference we dont need
         # to prepend the void return value at all.
         if isinstance(self.return_type, Void) and len(results) > 1:
             results.pop(0)
 
-        out.write("\n" "    // prepare results\n")
+        out.write("\n    // prepare results\n")
         # Make a tuple of results and pass them back
         if len(results) > 1:
             out.write("returned_result = PyList_New(0);\n")
@@ -2840,9 +2879,10 @@ class Method(BaseCodeGenerator):
         else:
             out.write(results[0])
             # This useless code removes compiler warnings
-            out.write(
-                "    returned_result = Py_result;\n" "    return returned_result;\n"
-            )
+            out.write("""\
+    returned_result = Py_result;
+    return returned_result;
+""")
 
         # Write the error part of the function
         if self.error_set:
@@ -2858,39 +2898,41 @@ class Method(BaseCodeGenerator):
         # We do it in two passes - first mandatory then optional
         kwlist = "    const char *kwlist[] = {"
         # Mandatory
-        for type in self.args:
-            python_name = type.python_name()
+        for argument in self.args:
+            python_name = argument.python_name()
             if python_name and python_name not in self.defaults:
                 kwlist += f'"{python_name:s}", '
 
-        for type in self.args:
-            python_name = type.python_name()
+        for argument in self.args:
+            python_name = argument.python_name()
             if python_name and python_name in self.defaults:
                 kwlist += f'"{python_name:s}", '
 
         kwlist += " NULL};\n"
 
-        for type in self.args:
-            out.write(f"    // DEBUG: local arg type: {type.__class__.__name__:s}\n")
-            python_name = type.python_name()
+        for argument in self.args:
+            out.write(
+                f"    // DEBUG: local arg type: {argument.__class__.__name__:s}\n"
+            )
+            python_name = argument.python_name()
 
             try:
-                out.write(type.definition(default=self.defaults[python_name]))
+                out.write(argument.definition(default=self.defaults[python_name]))
             except KeyError:
-                out.write(type.definition())
+                out.write(argument.definition())
 
         # Make up the format string for the parse args in two pases
         parse_line = ""
-        for type in self.args:
-            python_name = type.python_name()
-            if type.buildstr and python_name not in self.defaults:
-                parse_line += type.buildstr
+        for argument in self.args:
+            python_name = argument.python_name()
+            if argument.buildstr and python_name not in self.defaults:
+                parse_line += argument.buildstr
 
         optional_args = ""
-        for type in self.args:
-            python_name = type.python_name()
-            if type.buildstr and python_name in self.defaults:
-                optional_args += type.buildstr
+        for argument in self.args:
+            python_name = argument.python_name()
+            if argument.buildstr and python_name in self.defaults:
+                optional_args += argument.buildstr
 
         if optional_args:
             parse_line += "|" + optional_args
@@ -2905,16 +2947,21 @@ class Method(BaseCodeGenerator):
                 f'    if(!PyArg_ParseTupleAndKeywords(args, kwds, "{parse_line:s}", '
             )
             tmp = ["(char **) kwlist"]
-            for type in self.args:
-                ref = type.byref()
+            for argument in self.args:
+                ref = argument.byref()
                 if ref:
                     tmp.append(ref)
 
             out.write(", ".join(tmp))
             self.error_set = True
-            out.write(")) {\n" "        goto on_error;\n" "    }\n")
+            out.write("""\
+)) {
+        goto on_error;
+    }
+""")
 
     def PyMethodDef(self, out):
+        """Generates code of PyMethodDef for the C/C++ type."""
         docstring = self.comment() + "\n\n" + self.docstring.strip()
         values_dict = {
             "class_name": self.class_name,
@@ -2934,7 +2981,7 @@ class Method(BaseCodeGenerator):
 
 
 class IteratorMethod(Method):
-    """A method which implements an iterator."""
+    """Method that implements an iterator code generator."""
 
     def __init__(self, *args, **kwargs):
         """Initializes the code generator."""
@@ -2944,6 +2991,7 @@ class IteratorMethod(Method):
         self.return_type.attributes.add("NULL_OK")
 
     def _prototype(self, out):
+        """Generates code with a prototype of the C/C++ type."""
         method_name = f"py{self.class_name:s}_{self.name:s}"
         out.write(f"static PyObject *{method_name:s}(py{self.class_name:s} *self)")
 
@@ -2953,12 +3001,12 @@ class IteratorMethod(Method):
         return f"Iterator returning {return_type:s}."
 
     def PyMethodDef(self, out):
-        # This method should not go in the method table as its linked
-        # in directly.
-        pass
+        """Generates code of PyMethodDef for the C/C++ type."""
+        # This method should not go in the method table as its linked in directly.
 
 
 class SelfIteratorMethod(IteratorMethod):
+    """Method that implements a self iterator code generator."""
 
     _DEFINITION_TEMPLATE = """\
 {{
@@ -2989,7 +3037,7 @@ class SelfIteratorMethod(IteratorMethod):
 
 
 class ConstructorMethod(Method):
-    # Python constructors are a bit different than regular methods
+    """Constructor method code generator."""
 
     _DEFINITION_END_TEMPLATE = """\
 );
@@ -3130,6 +3178,7 @@ static void py{class_name:s}_initialize_proxies(py{class_name:s} *self, void *it
 """
 
     def _prototype(self, out):
+        """Generates code with a prototype of the C/C++ type."""
         out.write(
             f"static int py{self.class_name:s}_init(py{self.class_name:s} *self, "
             f"PyObject *args, PyObject *kwds)\n"
@@ -3140,6 +3189,7 @@ static void py{class_name:s}_initialize_proxies(py{class_name:s} *self, void *it
         return "    return -1;"
 
     def initialize_proxies(self, out):
+        """Generates code to initialize proxies for the C/C++ type."""
         self.myclass.module.function_definitions.add(
             f"py{self.class_name:s}_initialize_proxies"
         )
@@ -3171,6 +3221,7 @@ static void py{class_name:s}_initialize_proxies(py{class_name:s} *self, void *it
         out.write("}\n\n")
 
     def prototype(self, out):
+        """Generates code with a prototype of the C/C++ type."""
         self._prototype(out)
 
         out.write(
@@ -3196,8 +3247,8 @@ static void py{class_name:s}_initialize_proxies(py{class_name:s} *self, void *it
 
         # Precall preparations
         python_object_index = 1
-        for type in self.args:
-            out.write(type.pre_call(self, python_object_index=python_object_index))
+        for argument in self.args:
+            out.write(argument.pre_call(self, python_object_index=python_object_index))
             python_object_index += 1
 
         # Now call the wrapped function
@@ -3235,6 +3286,7 @@ static void py{class_name:s}_initialize_proxies(py{class_name:s} *self, void *it
 
 
 class GetattrMethod(Method):
+    """Getattr method code generator."""
 
     _BUILT_INS_ATTRIBUTE_TEMPLATE = """
         string_object = PyUnicode_FromString("{name:s}");
@@ -3339,18 +3391,14 @@ static PyObject *py{class_name:s}_getattr(py{class_name:s} *self, PyObject *pyna
 
     def __init__(self, class_name, base_class_name, myclass):
         """Initializes the code generator."""
-        # Cannot use super here due to logic in Method.__init__().
+        super().__init__(class_name, base_class_name, "", [], "void", myclass=myclass)
         self._attributes = []
-        self.base_class_name = base_class_name
-        self.class_name = class_name
         self.error_set = True
-        self.myclass = myclass
-        self.name = ""
-        self.return_type = Void("")
 
         self.rename_class_name(class_name)
 
     def add_attribute(self, attr):
+        """Add an attribute and register it with the type dispatcher."""
         if attr.name:
             self._attributes.append([self.class_name, attr])
 
@@ -3358,25 +3406,29 @@ static PyObject *py{class_name:s}_getattr(py{class_name:s} *self, PyObject *pyna
         """Check if there are built-in attributes we need to support."""
         out.write(self._BUILT_INS_START_TEMPLATE)
 
-        for class_name, attr in self.get_attributes():
+        for _, attr in self.get_attributes():
             values_dict = {"name": attr.name}
             out.write(self._BUILT_INS_ATTRIBUTE_TEMPLATE.format(**values_dict))
 
         values_dict = {"class_name": self.class_name}
         out.write(self._BUILT_INS_METHODS_TEMPLATE.format(**values_dict))
 
-    def clone(self, class_name):
-        result = self.__class__(class_name, self.base_class_name, self.myclass)
+    def clone(self, new_class_name):
+        """Clone the code generator."""
+        result = self.__class__(new_class_name, self.base_class_name, self.myclass)
+
+        # pylint: disable=protected-access
         result._attributes = self._attributes[:]
 
         return result
 
     def get_attributes(self):
+        """Retrieves the attributes."""
         for class_name, attr in self._attributes:
             try:
                 # If its not an active struct, skip it
                 if (
-                    not type_dispatcher[attr.type].active
+                    not TYPE_DISPATCHER[attr.type].active
                     and not attr.type in self.myclass.module.active_structs
                 ):
                     continue
@@ -3389,7 +3441,7 @@ static PyObject *py{class_name:s}_getattr(py{class_name:s} *self, PyObject *pyna
     def get_string(self):
         """Retrieves a string representation."""
         result = ""
-        for class_name, attr in self.get_attributes():
+        for _, attr in self.get_attributes():
             attr_string = attr.get_string()
             result += f"    {attr_string:s}\n"
 
@@ -3413,6 +3465,7 @@ static PyObject *py{class_name:s}_getattr(py{class_name:s} *self, PyObject *pyna
             attribure[0] = new_name
 
     def prototype(self, out):
+        """Generates code with a prototype of the C/C++ type."""
         if not self.name:
             return
 
@@ -3429,6 +3482,7 @@ static PyObject *py{class_name:s}_getattr(py{class_name:s} *self, PyObject *pyna
             )
 
     def PyGetSetDef(self, out):
+        """Generates code of PyGetSetDef for the C/C++ type."""
         for _, attr in self.get_attributes():
             # TODO: improve docstring.
             docstring = f"{attr.name:s}."
@@ -3505,6 +3559,7 @@ static PyObject *py{class_name:s}_getattr(py{class_name:s} *self, PyObject *pyna
 
 
 class ProxiedMethod(Method):
+    """Proxied method code generator."""
 
     _DEFINITION_CRITICAL_SECTION_TEMPLATE = """\
     if(Py_result != NULL) {
@@ -3561,28 +3616,30 @@ class ProxiedMethod(Method):
 
     def __init__(self, method, myclass):
         """Initializes the code generator."""
-        # Cannot use super here due to certain logic in Method.__init__().
+        super().__init__(
+            method.class_name,
+            method.base_class_name,
+            method.name,
+            [],
+            "void",
+            myclass=myclass,
+        )
         self.args = method.args
-        self.base_class_name = method.base_class_name
-        self.class_name = method.class_name
-        self.defaults = {}
         self.definition_class_name = method.definition_class_name
         self.docstring = f"Proxy for {method.name:s}"
-        self.error_set = False
-        self.exception = None
         self.method = method
         self.myclass = myclass
-        self.name = method.name
         self.return_type = method.return_type
 
     def _prototype(self, out):
+        """Generates code with a prototype of the C/C++ type."""
         return_type = self.return_type.type.strip()
         name = self.get_name()
         class_name = self.definition_class_name
         out.write(f"static {return_type:s} {name:s}({class_name:s} self")
 
-        for arg in self.args:
-            tmp = arg.comment().strip()
+        for argument in self.args:
+            tmp = argument.comment().strip()
             if tmp:
                 out.write(f", {tmp:s}")
 
@@ -3593,18 +3650,18 @@ class ProxiedMethod(Method):
         out.write(self._DEFINITION_START_TEMPLATE)
         out.write(self.return_type.returned_python_definition())
 
-        for arg in self.args:
-            out.write(arg.local_definition())
-            out.write(f"PyObject *py_{arg.name:s} = NULL;\n")
+        for argument in self.args:
+            out.write(argument.local_definition())
+            out.write(f"PyObject *py_{argument.name:s} = NULL;\n")
 
         values_dict = {"name": self.name}
 
         out.write(self._DEFINITION_GIL_ENSURE_TEMPLATE.format(**values_dict))
 
-        for arg in self.args:
-            python_object_string = arg.to_python_object(
+        for argument in self.args:
+            python_object_string = argument.to_python_object(
                 BORROWED=True,
-                result=f"py_{arg.name:s}",
+                result=f"py_{argument.name:s}",
                 sense="proxied",
             )
             out.write(python_object_string)
@@ -3617,11 +3674,11 @@ class ProxiedMethod(Method):
             "    Py_result = PyObject_CallMethodObjArgs((PyObject *) "
             "((Object) self)->extension, method_name, "
         )
-        for arg in self.args:
-            out.write(f"py_{arg.name:s},")
+        for argument in self.args:
+            out.write(f"py_{argument.name:s},")
 
         # Sentinal
-        out.write("NULL);\n" "\n")
+        out.write("NULL);\n\n")
 
         self.error_set = True
         out.write(
@@ -3633,8 +3690,8 @@ class ProxiedMethod(Method):
             "    }\n"
             "\n"
         )
-        for arg in self.args:
-            out.write(arg.python_proxy_post_call())
+        for argument in self.args:
+            out.write(argument.python_proxy_post_call())
 
         # Now convert the Python value back to a value
         return_type = self.return_type.from_python_object(
@@ -3662,10 +3719,10 @@ class ProxiedMethod(Method):
             )
 
         # Decref all our Python objects:
-        for arg in self.args:
+        for argument in self.args:
             out.write(
-                f"    if(py_{arg.name:s} != NULL) {{\n"
-                f"        Py_DecRef(py_{arg.name:s});\n"
+                f"    if(py_{argument.name:s} != NULL) {{\n"
+                f"        Py_DecRef(py_{argument.name:s});\n"
                 f"    }}\n"
             )
 
@@ -3684,10 +3741,10 @@ class ProxiedMethod(Method):
                 "\n"
             )
             # Decref all our Python objects:
-            for arg in self.args:
+            for argument in self.args:
                 out.write(
-                    f"    if(py_{arg.name:s} != NULL) {{\n"
-                    f"        Py_DecRef(py_{arg.name:s});\n"
+                    f"    if(py_{argument.name:s} != NULL) {{\n"
+                    f"        Py_DecRef(py_{argument.name:s});\n"
                     f"    }}\n"
                 )
 
@@ -3698,7 +3755,7 @@ class ProxiedMethod(Method):
                 f"    {error_condition:s}\n"
             )
 
-        out.write("}\n" "\n")
+        out.write("}\n\n")
 
     def error_condition(self):
         """Generates code to handle the C/C++ type in an error conditition."""
@@ -3706,9 +3763,11 @@ class ProxiedMethod(Method):
         return self.return_type.error_value.format(**values_dict)
 
     def get_name(self):
+        """Retrieves the name."""
         return f"Proxied{self.myclass.class_name:s}_{self.name:s}"
 
     def prototype(self, out):
+        """Generates code with a prototype of the C/C++ type."""
         self._prototype(out)
         out.write(";\n")
 
@@ -3717,17 +3776,15 @@ class ProxiedMethod(Method):
         name = self.get_name()
         if name in self.myclass.module.function_definitions:
             return
-        else:
-            self.myclass.module.function_definitions.add(name)
+
+        self.myclass.module.function_definitions.add(name)
 
         self._prototype(out)
         self._write_definition(out)
 
 
 class StructConstructor(ConstructorMethod):
-    """A constructor for struct wrappers - basically just allocate
-    memory for the struct.
-    """
+    """Contructor method for a struct wrapper code generator."""
 
     _DEFINITION_TEMPLATE = """\
 static int py{class_name:s}_init(py{class_name:s} *self, PyObject *args, PyObject *kwds) {{
@@ -3771,6 +3828,7 @@ static void {class_name:s}_dealloc(py{class_name:s} *self) {{
 """
 
     def prototype(self, out):
+        """Generates code with a prototype of the C/C++ type."""
         return Method.prototype(self, out)
 
     def write_definition(self, out):
@@ -3792,6 +3850,7 @@ static void {class_name:s}_dealloc(py{class_name:s} *self) {{
 
 
 class EmptyConstructor(ConstructorMethod):
+    """Empty contructor method code generator."""
 
     _DEFINITION_TEMPLATE = """\
 static int py{class_name:s}_init(py{class_name:s} *self, PyObject *args, PyObject *kwds) {{
@@ -3804,6 +3863,7 @@ static int py{class_name:s}_init(py{class_name:s} *self, PyObject *args, PyObjec
 """
 
     def prototype(self, out):
+        """Generates code with a prototype of the C/C++ type."""
         return Method.prototype(self, out)
 
     def write_definition(self, out):
@@ -3813,6 +3873,7 @@ static int py{class_name:s}_init(py{class_name:s} *self, PyObject *args, PyObjec
 
 
 class ClassGenerator(BaseCodeGenerator):
+    """Class code generator."""
 
     _NUMERIC_PROTOCOL_TEMPLATE = """\
 static PyNumberMethods {class:s}_as_number = {{
@@ -3956,21 +4017,18 @@ typedef struct {{
 
     def __init__(self, class_name, base_class_name, module):
         """Initializes the code generator."""
+        super().__init__()
+        self.active = True
+        self.attributes = GetattrMethod(class_name, base_class_name, self)
+        self.base_class_name = base_class_name
         self.class_name = class_name
-        self.methods = []
-        # self.methods = [DefinitionMethod(
-        #     class_name, base_class_name, "_definition", [], "",
-        #     myclass=self)]
-        self.module = module
         self.constructor = EmptyConstructor(
             class_name, base_class_name, "Con", [], "", myclass=self
         )
-
-        self.base_class_name = base_class_name
-        self.attributes = GetattrMethod(self.class_name, self.base_class_name, self)
-        self.modifier = set()
-        self.active = True
         self.iterator = None
+        self.methods = []
+        self.modifier = set()
+        self.module = module
 
     def _get_methods_string(self):
         string_parts = []
@@ -3981,6 +4039,7 @@ typedef struct {{
         return "".join(string_parts)
 
     def add_attribute(self, attr_name, attr_type, modifier, *args, **kwargs):
+        """Add an attribute and register it with the type dispatcher."""
         try:
             if not self.module.classes[attr_type].is_active():
                 return
@@ -4003,6 +4062,7 @@ typedef struct {{
         self.attributes.add_attribute(type_class)
 
     def add_constructor(self, method_name, args, return_type, docstring):
+        """Add a constructor method."""
         if method_name.startswith("Con"):
             self.constructor = ConstructorMethod(
                 self.class_name,
@@ -4015,7 +4075,7 @@ typedef struct {{
             self.constructor.docstring = docstring
 
     def clone(self, new_class_name):
-        """Clones the class - usefull when implementing class extensions."""
+        """Clone the code generator."""
         result = ClassGenerator(new_class_name, self.class_name, self.module)
         result.constructor = self.constructor.clone(new_class_name)
         result.methods = [method.clone(new_class_name) for method in self.methods]
@@ -4024,6 +4084,7 @@ typedef struct {{
         return result
 
     def code(self, out):
+        """Generates code."""
         if not self.constructor:
             raise RuntimeError(f"No constructor found for class {self.class_name:s}")
 
@@ -4056,18 +4117,17 @@ typedef struct {{
         return result
 
     def initialize(self):
-        values_dict = {"class_name": self.class_name}
-
-        # Release fetch_add publishes the entry: an acquire-load reader
-        # that sees the bumped count is guaranteed to see the writes above.
+        """Generates initializiation code of the C/C++ type."""
+        # Release fetch_add publishes the entry: an acquire-load reader that sees the
+        # bumped count is guaranteed to see the writes above.
         result = (
-            "{{\n"
-            "    int idx = TOTAL_CCLASSES.load(std::memory_order_relaxed);\n"
-            "    python_wrappers[idx].class_ref = (Object)&__{class_name:s};\n"
-            "    python_wrappers[idx].python_type = &{class_name:s}_Type;\n"
-        ).format(**values_dict)
+            f"{{\n"
+            f"    int idx = TOTAL_CCLASSES.load(std::memory_order_relaxed);\n"
+            f"    python_wrappers[idx].class_ref = (Object)&__{self.class_name:s};\n"
+            f"    python_wrappers[idx].python_type = &{self.class_name:s}_Type;\n"
+        )
+        func_name = f"py{self.class_name:s}_initialize_proxies"
 
-        func_name = "py{class_name:s}_initialize_proxies".format(**values_dict)
         if func_name in self.module.function_definitions:
             result += (
                 f"    python_wrappers[idx].initialize_proxies = (void (*)"
@@ -4095,7 +4155,9 @@ typedef struct {{
         return True
 
     def numeric_protocol(self, out):
+        """Generates code."""
         args = {"class": self.class_name}
+
         for data_type, func in [
             ("nonzero", self.numeric_protocol_nonzero),
             ("int", self.numeric_protocol_int),
@@ -4109,25 +4171,21 @@ typedef struct {{
 
         out.write(self._NUMERIC_PROTOCOL_TEMPLATE.format(**args))
 
-        return "&{class:s}_as_number".format(**args)
+        return f"&{self.class_name:s}_as_number"
 
     def numeric_protocol_int(self):
-        pass
+        """Generates code."""
 
     def numeric_protocol_nonzero(self):
-        values_dict = {"class_name": self.class_name}
-
+        """Generates code."""
         return (
-            "static int {class_name:s}_nonzero(py{class_name:s} *v) {{\n"
-            "    return v->base != 0;\n"
-            "}}\n"
-        ).format(**values_dict)
+            f"static int {self.class_name:s}_nonzero(py{self.class_name:s} *v) {{\n"
+            f"    return v->base != 0;\n"
+            f"}}\n"
+        )
 
     def prepare(self):
-        """This method is called just before we need to write the
-        output and allows us to do any last minute fixups.
-        """
-        pass
+        """Prepare code generation."""
 
     def prototypes(self, out):
         """Write prototype suitable for .h file"""
@@ -4152,40 +4210,47 @@ typedef struct {{
             method.proxied.prototype(out)
 
     def PyGetSetDef(self, out):
+        """Generates code of PyGetSetDef for the C/C++ type."""
         out.write(
-            "static PyGetSetDef {0:s}_get_set_definitions[] = {{\n".format(
-                self.class_name
-            )
+            f"static PyGetSetDef {self.class_name:s}_get_set_definitions[] = {{\n"
         )
         if self.attributes:
             self.attributes.PyGetSetDef(out)
 
-        out.write("    {NULL, NULL, NULL, NULL, NULL}  /* Sentinel */\n" "};\n" "\n")
+        out.write("""\
+    {NULL, NULL, NULL, NULL, NULL}  /* Sentinel */
+};
+
+""")
 
     def PyMethodDef(self, out):
+        """Generates code of PyMethodDef for the C/C++ type."""
         out.write(f"static PyMethodDef {self.class_name:s}_methods[] = {{\n")
 
         for method in self.methods:
             method.PyMethodDef(out)
 
-        out.write("    {NULL, NULL, 0, NULL}  /* Sentinel */\n" "};\n" "\n")
+        out.write("""\
+    {NULL, NULL, 0, NULL}  /* Sentinel */
+};
+
+""")
 
     def PyTypeObject(self, out):
-        docstring = "{0:s}: {1:s}".format(
-            self.class_name, self.format_as_docstring(self.docstring)
-        )
+        """Generates code of PyTypeObject for the C/C++ type."""
+        docstring = self.format_as_docstring(self.docstring)
         args = {
             "class": self.class_name,
-            "module": self.module.name,
+            "docstring": f"{self.class_name:s}: {docstring:s}",
+            "getattr_func": 0,
             "iterator": 0,
             "iternext": 0,
-            "tp_str": 0,
-            "tp_eq": 0,
-            "getattr_func": 0,
-            "docstring": docstring,
-            "tp_flags": "Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE",
-            "tp_traverse": 0,
+            "module": self.module.name,
             "tp_clear": 0,
+            "tp_eq": 0,
+            "tp_flags": "Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE",
+            "tp_str": 0,
+            "tp_traverse": 0,
         }
         # Enums use a different struct layout (PyObject_HEAD + value only)
         # and override their dealloc/init, so they don't need GC support.
@@ -4214,13 +4279,14 @@ typedef struct {{
         out.write(self._PY_TUPLE_OBJECT_TEMPLATE.format(**args))
 
     def struct(self, out):
+        """Generates code."""
         values_dict = {"class_name": self.class_name}
 
         out.write(self._STRUCT_TEMPLATE.format(**values_dict))
 
 
 class StructGenerator(ClassGenerator):
-    """A wrapper generator for structs."""
+    """Struct code generator."""
 
     _STRUCT_TEMPLATE = """
 typedef struct {{
@@ -4237,14 +4303,9 @@ typedef struct {{
 
     def __init__(self, class_name, module):
         """Initializes the code generator."""
-        self.class_name = class_name
-        self.methods = []
-        self.module = module
-        self.base_class_name = None
+        super().__init__(class_name, None, module)
         self.active = False
-        self.modifier = set()
         self.constructor = None
-        self.attributes = GetattrMethod(self.class_name, self.base_class_name, self)
 
     def get_string(self):
         """Retrieves a string representation."""
@@ -4257,27 +4318,32 @@ typedef struct {{
         )
 
     def initialize(self):
+        """Generates initializiation code of the C/C++ type."""
         return ""
 
     def prepare(self):
-        # This is needed for late stage initialization - sometimes
-        # our class_name is not know until now.
+        """Prepare code generation."""
+        # This is needed for late stage initialization - sometimes our class_name is
+        # not know until now.
         if not self.constructor:
             self.constructor = StructConstructor(
                 self.class_name, self.base_class_name, "Con", [], "void", myclass=self
             )
-
             self.attributes.rename_class_name(self.class_name)
+
+            # pylint: disable=protected-access
             for x in self.attributes._attributes:
                 x[1].attributes.add("FOREIGN")
 
     def struct(self, out):
+        """Generates code."""
         values_dict = {"class_name": self.class_name}
 
         out.write(self._STRUCT_TEMPLATE.format(**values_dict))
 
 
 class EnumConstructor(ConstructorMethod):
+    """Contructor method for an enum code generator."""
 
     _DEFINITION_TEMPLATE = """\
 {{
@@ -4312,6 +4378,7 @@ static void {class_name:s}_dealloc(py{class_name:s} *self) {{
 """
 
     def prototype(self, out):
+        """Generates code with a prototype of the C/C++ type."""
         return Method.prototype(self, out)
 
     def write_definition(self, out):
@@ -4332,6 +4399,7 @@ static void {class_name:s}_dealloc(py{class_name:s} *self) {{
 
 
 class Enum(StructGenerator):
+    """Enum code generator."""
 
     _STRUCT_ATTRIBUTE_TEMPLATE = """\
     integer_object = PyLong_FromLong({value:s});
@@ -4386,9 +4454,11 @@ int {class_name:s}_init_type(
         return result
 
     def initialize(self):
+        """Generates initializiation code of the C/C++ type."""
         return "\n"
 
     def numeric_protocol_int(self):
+        """Generates code."""
         method_name = f"{self.class_name:s}_int"
         type_name = f"py{self.class_name:s}"
 
@@ -4400,15 +4470,17 @@ int {class_name:s}_init_type(
         )
 
     def numeric_protocol_nonzero(self):
-        pass
+        """Generates code."""
 
     def prepare(self):
+        """Prepare code generation."""
         self.constructor = EnumConstructor(
             self.class_name, self.base_class_name, "Con", [], "void", myclass=self
         )
         StructGenerator.prepare(self)
 
     def PyGetSetDef(self, out):
+        """Generates code of PyGetSetDef for the C/C++ type."""
         out.write(
             f"static PyGetSetDef {self.class_name:s}_get_set_definitions[] = {{\n"
             f"    {{NULL, NULL, NULL, NULL, NULL}}  /* Sentinel */\n"
@@ -4417,6 +4489,7 @@ int {class_name:s}_init_type(
         )
 
     def PyMethodDef(self, out):
+        """Generates code of PyMethodDef for the C/C++ type."""
         out.write(
             f"static PyMethodDef {self.class_name:s}_methods[] = {{\n"
             f"    {{NULL, NULL, 0, NULL}}  /* Sentinel */\n"
@@ -4425,6 +4498,7 @@ int {class_name:s}_init_type(
         )
 
     def struct(self, out):
+        """Generates code."""
         values_dict = {"class_name": self.class_name}
 
         out.write(self._STRUCT_START_TEMPLATE.format(**values_dict))
@@ -4440,10 +4514,16 @@ int {class_name:s}_init_type(
                 # out cleanly so PyType_Ready never sees a half-initialized enum.
                 out.write(self._STRUCT_ATTRIBUTE_TEMPLATE.format(**values_dict))
 
-        out.write(("    return( 1 );\n" "}\n" "\n"))
+        out.write("""\
+    return( 1 );
+}
+
+""")
 
 
 class EnumType(Integer):
+    """Enum type code generator."""
+
     buildstr = "i"
 
     def __init__(self, name, data_type, *args, **kwargs):
@@ -4453,12 +4533,11 @@ class EnumType(Integer):
 
     def definition(self, default=None, **unused_kwargs):
         """Generates code to define the C/C++ type."""
-        # Force the enum to be an int just in case the compiler chooses
-        # a random size.
+        # Force the enum to be an int just in case the compiler chooses a random size.
         if default:
             return f"    int {self.name:s} = {default:s};\n"
-        else:
-            return f"    int UNUSED {self.name:s} = 0;\n"
+
+        return f"    int UNUSED {self.name:s} = 0;\n"
 
     def to_python_object(self, name=None, result="Py_result", **unused_kwargs):
         """Generates code to a Python object into a C/C++ type."""
@@ -4552,8 +4631,8 @@ class HeaderParser(lexer.SelfFeederMixIn):
         # Struct ended with typedef
         ["STRUCT", r"}\s+([0-9A-Za-z_]+);", "POP_STATE,TYPEDEF_STRUCT_END", None],
         ["STRUCT", "}", "POP_STATE,STRUCT_END", None],
-        # Handle recursive struct or union definition (At the moment
-        # we cant handle them at all)
+        # Handle recursive struct or union definition. At the moment we cannot handle
+        # them at all.
         [
             "(RECURSIVE_)?STRUCT",
             r"(struct|union)\s+([_A-Za-z0-9]+)?\s*{",
@@ -4573,20 +4652,18 @@ class HeaderParser(lexer.SelfFeederMixIn):
         ["INITIAL", r"BIND_STRUCT\(([0-9A-Za-z_ \*]+)\)", "BIND_STRUCT", None],
         # A simple typedef of one type for another type:
         ["INITIAL", r"typedef ([A-Za-z_0-9]+) +([^;]+);", "SIMPLE_TYPEDEF", None],
-        # Handle proxied directives
-        ["INITIAL", r"PXXROXY_CCLASS\(([A-Za-z0-9_]+)\)", "PROXY_CCLASS", None],
     ]
 
     def __init__(self, name, verbose=0, base=""):
         """Initializes the lexer."""
-        self.module = Module(name)
-        self.base = base
         super().__init__(verbose=verbose)
+        self.base = base
         self.current_class = None
-        self.current_method = None
         self.current_comment = ""
-        self.current_struct = None
         self.current_enum = None
+        self.current_method = None
+        self.current_struct = None
+        self.module = Module(name)
 
         file_object = io.BytesIO(
             b"// Base object\n" b"CCLASS(Object, Obj)\n" b"END_CCLASS\n"
@@ -4621,13 +4698,13 @@ class HeaderParser(lexer.SelfFeederMixIn):
     # The following methods are state handlers that have a calling convention.
     # pylint: disable=invalid-name
 
-    def BIND_STRUCT(self, token, match):
+    def BIND_STRUCT(self, unused_token, match):
         """Handle a BIND_STRUCT state."""
         struct_name = match.group(1)
         self.module.active_structs.add(struct_name)
         self.module.active_structs.add(f"{struct_name:s} *")
 
-    def CCLASS_ATTRIBUTE(self, token, match):
+    def CCLASS_ATTRIBUTE(self, unused_token, match):
         """Handle a CCLASS_ATTRIBUTE state."""
         attribute_modifier = match.group(1) or ""
         attribute_type = match.group(2).strip()
@@ -4636,7 +4713,7 @@ class HeaderParser(lexer.SelfFeederMixIn):
             attribute_name, attribute_type, attribute_modifier
         )
 
-    def CCLASS_START(self, token, match):
+    def CCLASS_START(self, unused_token, match):
         """Handle a CCLASS_START state."""
         class_name = match.group(2).strip()
         base_class_name = match.group(3).strip()
@@ -4655,21 +4732,21 @@ class HeaderParser(lexer.SelfFeederMixIn):
         self.current_class.modifier.add(match.group(1))
         self.module.add_class(self.current_class, Wrapper)
 
-        type_dispatcher[f"{class_name:s} *"] = PointerWrapper
+        TYPE_DISPATCHER[f"{class_name:s} *"] = PointerWrapper
 
-    def CLEAR_COMMENT(self, token, match):
+    def CLEAR_COMMENT(self, unused_token, unused_match):
         """Handle a CLEAR_COMMENT state."""
         self.current_comment = ""
 
-    def COMMENT(self, token, match):
+    def COMMENT(self, unused_token, match):
         """Handle a COMMENT state."""
         self.current_comment += match.group(1) + "\n"
 
-    def COMMENT_END(self, token, match):
+    def COMMENT_END(self, unused_token, match):
         """Handle a COMMENT_END state."""
         self.current_comment += match.group(1)
 
-    def DEFINE(self, token, match):
+    def DEFINE(self, unused_token, match):
         """Handle a DEFINE state."""
         line = match.group(0)
         line = line.split("/*")[0]
@@ -4687,11 +4764,11 @@ class HeaderParser(lexer.SelfFeederMixIn):
         ):
             self.module.add_constant(name, data_type=data_type)
 
-    def END_CCLASS(self, token, match):
+    def END_CCLASS(self, unused_token, unused_match):
         """Handle a END_CCLASS state."""
         self.current_class = None
 
-    def ENUM_END(self, token, match):
+    def ENUM_END(self, unused_token, unused_match):
         """Handle a ENUM_END state."""
         self.module.classes[self.current_enum.name] = self.current_enum
 
@@ -4702,26 +4779,26 @@ class HeaderParser(lexer.SelfFeederMixIn):
         for attr in self.current_enum.values:
             self.module.add_constant(attr, data_type="integer")
 
-        # type_dispatcher[self.current_enum.name] = Integer
-        type_dispatcher[self.current_enum.name] = EnumType
+        # TYPE_DISPATCHER[self.current_enum.name] = Integer
+        TYPE_DISPATCHER[self.current_enum.name] = EnumType
         self.current_enum = None
 
-    def ENUM_START(self, token, match):
+    def ENUM_START(self, unused_token, match):
         """Handle a ENUM_START state."""
         self.current_enum = Enum(match.group(1).strip(), self.module)
 
-    def ENUM_VALUE(self, token, match):
+    def ENUM_VALUE(self, unused_token, match):
         """Handle a ENUM_VALUE state."""
         self.current_enum.values.append(match.group(1).strip())
 
-    def METHOD_ARG(self, token, match):
+    def METHOD_ARG(self, unused_token, match):
         """Handle a METHOD_ARG state."""
-        name = match.group(2).strip()
-        type = match.group(1).strip()
+        arg_name = match.group(2).strip()
+        arg_type = match.group(1).strip()
         if self.current_method:
-            self.current_method.add_arg(type, name)
+            self.current_method.add_arg(arg_type, arg_name)
 
-    def METHOD_END(self, token, match):
+    def METHOD_END(self, unused_token, unused_match):
         """Handle a METHOD_END state."""
         if not self.current_method:
             return
@@ -4729,21 +4806,19 @@ class HeaderParser(lexer.SelfFeederMixIn):
         if isinstance(self.current_method, ConstructorMethod):
             self.current_class.constructor = self.current_method
         else:
-            found = False
-            for i in range(len(self.current_class.methods)):
-                # Try to replace existing methods with this new method
-                method = self.current_class.methods[i]
+            for index, method in enumerate(self.current_class.methods):
+                # Try to replace existing methods with this new method.
                 if method.name == self.current_method.name:
-                    self.current_class.methods[i] = self.current_method
+                    self.current_class.methods[index] = self.current_method
                     self.current_method = None
                     return
 
-            # Method does not exist, just add to the end
+            # Method does not exist, just add to the end.
             self.current_class.methods.append(self.current_method)
 
         self.current_method = None
 
-    def METHOD_START(self, token, match):
+    def METHOD_START(self, unused_token, match):
         """Handle a METHOD_START state."""
         return_type = match.group(2).strip()
         method_name = match.group(5).strip()
@@ -4778,40 +4853,15 @@ class HeaderParser(lexer.SelfFeederMixIn):
         self.current_method.docstring = self.current_comment
         self.current_method.modifier = modifier
 
-    def PROXY_CCLASS(self, token, match):
-        """Handle a PROXY_CCLASS state."""
-        base_class_name = match.group(1).strip()
-
-        try:
-            proxied_class = self.module.classes[base_class_name]
-        except KeyError:
-            raise RuntimeError(
-                f"Need to create a proxy for {base_class_name:s} but it has not been "
-                f"defined (yet). You must place the PROXIED_CCLASS() instruction after "
-                f"the class definition"
-            )
-        current_class = ProxyClassGenerator(
-            f"Proxied{base_class_name:s}", base_class_name, self.module
-        )
-        # self.current_class.constructor.args += proxied_class.constructor.args
-        current_class.docstring = self.current_comment
-
-        # Create proxies for all these methods
-        for method in proxied_class.methods:
-            if method.name[0] != "_":
-                current_class.methods.append(ProxiedMethod(method, current_class))
-
-        self.module.add_class(current_class, Wrapper)
-
-    def SIMPLE_TYPEDEF(self, token, match):
+    def SIMPLE_TYPEDEF(self, unused_token, match):
         """Handle a SIMPLE_TYPEDEF state."""
         # We basically add a new type as a copy of the old
         # type
         old, new = match.group(1).strip(), match.group(2).strip()
-        if old in type_dispatcher:
-            type_dispatcher[new] = type_dispatcher[old]
+        if old in TYPE_DISPATCHER:
+            TYPE_DISPATCHER[new] = TYPE_DISPATCHER[old]
 
-    def STRUCT_ATTRIBUTE(self, token, match):
+    def STRUCT_ATTRIBUTE(self, unused_token, match):
         """Handle a STRUCT_ATTRIBUTE state."""
         name = match.group(2).strip()
         data_type = match.group(1).strip()
@@ -4824,19 +4874,19 @@ class HeaderParser(lexer.SelfFeederMixIn):
         else:
             self.current_struct.add_attribute(name, data_type, "")
 
-    def STRUCT_ATTRIBUTE_PTR(self, token, match):
+    def STRUCT_ATTRIBUTE_PTR(self, unused_token, match):
         """Handle a STRUCT_ATTRIBUTE_PTR state."""
         attribute_type = match.group(1).strip()
         attribute_name = match.group(2).strip()
         self.current_struct.add_attribute(attribute_name, f"{attribute_type:s} *", "")
 
-    def STRUCT_END(self, token, match):
+    def STRUCT_END(self, unused_token, unused_match):
         """Handle a STRUCT_END state."""
         self.module.add_class(self.current_struct, StructWrapper)
-        type_dispatcher[f"{self.current_struct.class_name:s} *"] = PointerStructWrapper
+        TYPE_DISPATCHER[f"{self.current_struct.class_name:s} *"] = PointerStructWrapper
         self.current_struct = None
 
-    def STRUCT_START(self, token, match):
+    def STRUCT_START(self, unused_token, match):
         """Handle a STRUCT_START state."""
         self.current_struct = StructGenerator(match.group(2).strip(), self.module)
         self.current_struct.docstring = self.current_comment
@@ -4847,7 +4897,7 @@ class HeaderParser(lexer.SelfFeederMixIn):
         self.current_enum.name = self.current_enum.class_name = match.group(1)
         self.ENUM_END(token, match)
 
-    def TYPEDEF_ENUM_START(self, token, match):
+    def TYPEDEF_ENUM_START(self, unused_token, unused_match):
         """Handle a TYPEDEF_ENUM_START state."""
         self.current_enum = Enum(None, self.module)
 
@@ -4857,24 +4907,26 @@ class HeaderParser(lexer.SelfFeederMixIn):
 
         self.STRUCT_END(token, match)
 
-    def TYPEDEF_STRUCT_START(self, token, match):
+    def TYPEDEF_STRUCT_START(self, unused_token, unused_match):
         """Handle a TYPEDEF_STRUCT_START state."""
         self.current_struct = StructGenerator(None, self.module)
         self.current_struct.docstring = self.current_comment
 
 
 if __name__ == "__main__":
-    verbose = 1 if DEBUG > 0 else 0
+    verbose_level = 1 if DEBUG > 0 else 0
 
-    parser = HeaderParser("pytsk3", verbose=verbose)
+    parser = HeaderParser("pytsk3", verbose=verbose_level)
 
     for arg in sys.argv[1:]:
-        parser.parse_fd(open(arg, "rb"))
+        with open(arg, "rb") as fd:
+            parser.parse_fd(fd)
 
-    if verbose > 0:
+    if verbose_level > 0:
         parser.log("second parse")
 
     for arg in sys.argv[1:]:
-        parser.parse_fd(open(arg, "rb"))
+        with open(arg, "rb") as fd:
+            parser.parse_fd(fd)
 
     parser.generate_code(sys.stdout)
