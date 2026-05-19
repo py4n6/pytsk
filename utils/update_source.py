@@ -90,7 +90,7 @@ class SourceUpdater:
         parser.parse_filenames(header_files)
 
         with open("pytsk3.cpp", "w", encoding="utf8") as file_object:
-            parser.write(file_object)
+            parser.generate_code(file_object)
 
     def _print_configure_summary(self, output):
         """Prints the configure summary."""
@@ -120,6 +120,8 @@ class SourceUpdater:
     def _run_shell_command(self, command):
         """Runs a command."""
         arguments = shlex.split(f"sh {command:s}")
+
+        # pylint: disable=consider-using-with
         process = subprocess.Popen(
             arguments,
             cwd="sleuthkit",

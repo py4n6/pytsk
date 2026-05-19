@@ -13,6 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+"""Build back-end for pytsk."""
 
 import glob
 import os
@@ -25,6 +26,9 @@ from setuptools._distutils import log
 from setuptools._distutils._modified import newer_group
 from setuptools._distutils.ccompiler import new_compiler
 from setuptools.command.build_ext import build_ext
+
+# This file does not follow the naming convention specified in .pylintrc.
+# pylint: disable=invalid-name
 
 
 class custom_build_ext(build_ext):
@@ -103,6 +107,8 @@ class custom_build_ext(build_ext):
     def _run_shell_command(self, command):
         """Runs a command."""
         arguments = shlex.split(f"sh {command:s}")
+
+        # pylint: disable=consider-using-with
         process = subprocess.Popen(
             arguments,
             cwd="sleuthkit",
@@ -141,27 +147,27 @@ class custom_build_ext(build_ext):
 
     # Override build_extension to not have clang on Mac OS fail with:
     # invalid argument '-std=c++14' not allowed with 'C'
-    def build_extension(self, extension):
+    def build_extension(self, ext):
         """Builds the extension."""
-        sources = extension.sources
+        sources = ext.sources
         if sources is None or not isinstance(sources, (list, tuple)):
             raise errors.SetupError(
-                f"in 'ext_modules' option (extension '{extension.name:s}'), 'sources' "
+                f"in 'ext_modules' option (extension '{ext.name:s}'), 'sources' "
                 f"must be present and must be a list of source filenames"
             )
         sources = sorted(sources)
 
-        extension_path = self.get_ext_fullpath(extension.name)
-        depends = extension.sources + extension.depends
+        extension_path = self.get_ext_fullpath(ext.name)
+        depends = ext.sources + ext.depends
         if not (self.force or newer_group(depends, extension_path, "newer")):
-            log.debug("skipping '%s' extension (up-to-date)", extension.name)
+            log.debug("skipping '%s' extension (up-to-date)", ext.name)
             return
 
-        log.info("building '%s' extension", extension.name)
+        log.info("building '%s' extension", ext.name)
 
         c_sources = []
         cxx_sources = []
-        for source in extension.sources:
+        for source in ext.sources:
             if source.endswith(".c"):
                 c_sources.append(source)
             else:
@@ -169,51 +175,52 @@ class custom_build_ext(build_ext):
 
         objects = []
         for lang, sources in (("c", c_sources), ("c++", cxx_sources)):
-            extra_args = extension.extra_compile_args or []
+            extra_args = ext.extra_compile_args or []
             if lang == "c++":
                 if self.compiler.compiler_type == "msvc":
                     extra_args.append("/EHsc")
                 else:
                     extra_args.append("-std=c++14")
 
-            macros = extension.define_macros[:]
-            for undef in extension.undef_macros:
+            macros = ext.define_macros[:]
+            for undef in ext.undef_macros:
                 macros.append((undef,))
 
             compiled_objects = self.compiler.compile(
                 sources,
                 output_dir=self.build_temp,
                 macros=macros,
-                include_dirs=extension.include_dirs,
+                include_dirs=ext.include_dirs,
                 debug=self.debug,
                 extra_postargs=extra_args,
-                depends=extension.depends,
+                depends=ext.depends,
             )
             objects.extend(compiled_objects)
 
+        # pylint: disable=attribute-defined-outside-init
         self._built_objects = objects[:]
-        if extension.extra_objects:
-            objects.extend(extension.extra_objects)
+        if ext.extra_objects:
+            objects.extend(ext.extra_objects)
 
-        extra_args = extension.extra_link_args or []
+        extra_args = ext.extra_link_args or []
         # When MinGW32 is used statically link libgcc and libstdc++.
         if self.compiler.compiler_type == "mingw32":
             extra_args.extend(["-static-libgcc", "-static-libstdc++"])
 
-        if extension.extra_objects:
-            objects.extend(extension.extra_objects)
-        extra_args = extension.extra_link_args or []
+        if ext.extra_objects:
+            objects.extend(ext.extra_objects)
+        extra_args = ext.extra_link_args or []
 
-        language = extension.language or self.compiler.detect_language(sources)
+        language = ext.language or self.compiler.detect_language(sources)
 
         self.compiler.link_shared_object(
             objects,
             extension_path,
-            libraries=self.get_libraries(extension),
-            library_dirs=extension.library_dirs,
-            runtime_library_dirs=extension.runtime_library_dirs,
+            libraries=self.get_libraries(ext),
+            library_dirs=ext.library_dirs,
+            runtime_library_dirs=ext.runtime_library_dirs,
             extra_postargs=extra_args,
-            export_symbols=self.get_export_symbols(extension),
+            export_symbols=self.get_export_symbols(ext),
             debug=self.debug,
             build_temp=self.build_temp,
             target_lang=language,
