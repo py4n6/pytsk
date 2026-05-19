@@ -231,33 +231,10 @@ VERSION = "20260519"
 FREE = "aff4_free"
 INCREF = "aff4_incref"
 CURRENT_ERROR_FUNCTION = "aff4_get_current_error"
-CONSTANTS_BLACKLIST = ["TSK3_H_"]
+CONSTANTS_DENYLIST = ["TSK3_H_"]
 
 # Some constants.
 DOCSTRING_RE = re.compile("[ ]*\n[ \t]+[*][ ]?")
-
-
-def dispatch(name, data_type, *args, **kwargs):
-    """Retrieves a specific code generator from the type dispatcher."""
-    if not data_type:
-        return PVoid(name, "void *")
-
-    match = re.match("struct ([a-zA-Z0-9]+)_t *", data_type)
-    if match:
-        data_type = match.group(1)
-
-    type_components = data_type.split()
-    attributes = set()
-
-    if type_components[0] in method_attributes:
-        attributes.add(type_components.pop(0))
-
-    data_type = " ".join(type_components)
-    result = TYPE_DISPATCHER[data_type](name, data_type, *args, **kwargs)
-
-    result.attributes = attributes
-
-    return result
 
 
 class BaseCodeGenerator:
@@ -820,30 +797,25 @@ PyObject * PyInit_{module:s}(void) {{
     TOTAL_CCLASSES.store(0, std::memory_order_relaxed);
 """
 
-    public_api = None
-    public_header = None
-
     def __init__(self, name):
         """Initializes the code generator."""
         super().__init__()
         self.active_structs = set()
         self.classes = {}
-        self.constants_blacklist = CONSTANTS_BLACKLIST
+        self.constants_denylist = CONSTANTS_DENYLIST
         self.constants = set()
         self.files = []
         self.function_definitions = set()
         self.headers = ""
+        self.init_string = ""
         self.name = name
+        self.public_api = None
 
-    init_string = ""
-
-    def add_class(self, cls, handler):
+    def add_class(self, cls, type_class):
         """Add a class and register it with the type dispatcher."""
         self.classes[cls.class_name] = cls
 
-        # Make a wrapper in the type dispatcher so we can handle
-        # passing this class from/to Python
-        TYPE_DISPATCHER[cls.class_name] = handler
+        TypeDispatcher.register(cls.class_name, type_class)
 
     def add_constant(self, constant, data_type="numeric"):
         """This will be called to add #define constant macros."""
@@ -1075,12 +1047,10 @@ if(check_error()) {
 }
 """
 
+    BUILDSTR = "O"
+
     # TODO: clean up active, currently used as both class and instance variable.
     active = True
-
-    interface = None
-    buildstr = "O"
-    sense = "IN"
 
     def __init__(self, name, data_type, *unused_args, **kwargs):
         """Initializes the code generator."""
@@ -1088,7 +1058,9 @@ if(check_error()) {
         self.additional_args = kwargs
         self.attributes = set()
         self.error_value = "return 0;"
+        self.interface = None
         self.name = name
+        self.sense = "IN"
         self.type = data_type
 
     def assign(self, call, unused_method, target=None, **unused_kwargs):
@@ -1215,13 +1187,13 @@ class String(Type):
     }}
 """
 
-    interface = "string"
-    buildstr = "s"
+    BUILDSTR = "s"
 
     def __init__(self, name, data_type, *args, **kwargs):
         """Initializes the code generator."""
         super().__init__(name, data_type, *args, **kwargs)
         self.error_value = "return NULL;"
+        self.interface = "string"
         self.length = f"strlen({name:s})"
 
     def byref(self):
@@ -1256,7 +1228,10 @@ class String(Type):
 class ZString(String):
     """Null terminated string type code generator."""
 
-    interface = "null_terminated_string"
+    def __init__(self, name, data_type, *args, **kwargs):
+        """Initializes the code generator."""
+        super().__init__(name, data_type, *args, **kwargs)
+        self.interface = "null_terminated_string"
 
     def definition(self, default=None, **kwargs):
         """Generates code to define the C/C++ type."""
@@ -1296,14 +1271,14 @@ class Char_and_Length(Type):
     }}
 """
 
-    interface = "char_and_length"
-    buildstr = "s#"
+    BUILDSTR = "s#"
 
     def __init__(self, name, data_type, length, length_type, *args, **kwargs):
         """Initializes the code generator."""
         super().__init__(name, data_type, *args, **kwargs)
         self.data_type = data_type
         self.error_value = "return NULL;"
+        self.interface = "char_and_length"
         self.length = length
         self.length_type = length_type
         self.name = name
@@ -1339,15 +1314,15 @@ class Char_and_Length(Type):
 class Integer(Type):
     """Signed integer type code generator."""
 
-    interface = "integer"
-    buildstr = "i"
-    int_type = "int"
+    BUILDSTR = "i"
+    INT_TYPE = "int"
 
     def __init__(self, name, data_type, *args, **kwargs):
         """Initializes the code generator."""
         super().__init__(name, data_type, *args, **kwargs)
-        self.type = self.int_type
+        self.interface = "integer"
         self.original_type = data_type
+        self.type = self.INT_TYPE
 
     def comment(self):
         """Generates code with a comment about the C/C++ type."""
@@ -1360,12 +1335,17 @@ class Integer(Type):
             f"    {destination:s} = PyLong_AsLongMask({source:s});\n"
         )
 
-    def to_python_object(self, name=None, result="Py_result", **kwargs):
+    def to_python_object(
+        self, name=None, result="Py_result", sense="IN", **unused_kwargs
+    ):
         """Generates code to a Python object into a C/C++ type."""
         name = name or self.name
 
-        code = f"    PyErr_Clear();\n" f"    {result:s} = PyLong_FromLong({name:s});\n"
-        if kwargs.get("sense") == "proxied":
+        code = f"""\
+    PyErr_Clear();
+    {result:s} = PyLong_FromLong({name:s});
+"""
+        if sense == "proxied":
             code += (
                 f"    if({result:s} == NULL) {{\n"
                 f"        goto on_error;\n"
@@ -1385,8 +1365,8 @@ class IntegerUnsigned(Integer):
     }}
 """
 
-    buildstr = "I"
-    int_type = "unsigned int"
+    BUILDSTR = "I"
+    INT_TYPE = "unsigned int"
 
     def from_python_object(self, source, destination, unused_method, **unused_kwargs):
         """Generates code to convert a C/C++ type into a Python object."""
@@ -1396,7 +1376,7 @@ class IntegerUnsigned(Integer):
         )
 
     def to_python_object(
-        self, name=None, result="Py_result", sense="in", **unused_kwargs
+        self, name=None, result="Py_result", sense="IN", **unused_kwargs
     ):
         """Generates code to a Python object into a C/C++ type."""
         name = name or self.name
@@ -1425,37 +1405,37 @@ class IntegerUnsigned(Integer):
 class Integer8(Integer):
     """8-bit signed integer type code generator."""
 
-    int_type = "int8_t"
+    INT_TYPE = "int8_t"
 
 
 class Integer8Unsigned(IntegerUnsigned):
     """8-bit unsigned integer type code generator."""
 
-    int_type = "uint8_t"
+    INT_TYPE = "uint8_t"
 
 
 class Integer16(Integer):
     """16-bit signed integer type code generator."""
 
-    int_type = "int16_t"
+    INT_TYPE = "int16_t"
 
 
 class Integer16Unsigned(IntegerUnsigned):
     """16-bit unsigned integer type code generator."""
 
-    int_type = "uint16_t"
+    INT_TYPE = "uint16_t"
 
 
 class Integer32(Integer):
     """32-bit signed integer type code generator."""
 
-    int_type = "int32_t"
+    INT_TYPE = "int32_t"
 
 
 class Integer32Unsigned(IntegerUnsigned):
     """32-bit unsigned integer type code generator."""
 
-    int_type = "uint32_t"
+    INT_TYPE = "uint32_t"
 
 
 class Integer64(Integer):
@@ -1479,8 +1459,8 @@ class Integer64(Integer):
 #endif
 """
 
-    buildstr = "L"
-    int_type = "int64_t"
+    BUILDSTR = "L"
+    INT_TYPE = "int64_t"
 
     def from_python_object(self, source, destination, unused_method, **unused_kwargs):
         """Generates code to convert a C/C++ type into a Python object."""
@@ -1489,7 +1469,7 @@ class Integer64(Integer):
         return self._FROM_PYTHON_OBJECT_TEMPLATE.format(**values_dict)
 
     def to_python_object(
-        self, name=None, result="Py_result", sense="in", **unused_kwargs
+        self, name=None, result="Py_result", sense="IN", **unused_kwargs
     ):
         """Generates code to a Python object into a C/C++ type."""
         values_dict = {"name": name or self.name, "result": result}
@@ -1526,8 +1506,8 @@ class Integer64Unsigned(Integer):
 #endif
 """
 
-    buildstr = "K"
-    int_type = "uint64_t"
+    BUILDSTR = "K"
+    INT_TYPE = "uint64_t"
 
     def from_python_object(self, source, destination, unused_method, **unused_kwargs):
         """Generates code to convert a C/C++ type into a Python object."""
@@ -1538,7 +1518,7 @@ class Integer64Unsigned(Integer):
         return self._FROM_PYTHON_OBJECT_TEMPLATE.format(**values_dict)
 
     def to_python_object(
-        self, name=None, result="Py_result", sense="in", **unused_kwargs
+        self, name=None, result="Py_result", sense="IN", **unused_kwargs
     ):
         """Generates code to a Python object into a C/C++ type."""
         values_dict = {"name": name or self.name, "result": result}
@@ -1557,8 +1537,8 @@ class Integer64Unsigned(Integer):
 class Long(Integer):
     """Long type code generator."""
 
-    buildstr = "l"
-    int_type = "long"
+    BUILDSTR = "l"
+    INT_TYPE = "long"
 
     def from_python_object(self, source, destination, unused_method, **unused_kwargs):
         """Generates code to convert a C/C++ type into a Python object."""
@@ -1569,7 +1549,7 @@ class Long(Integer):
         ).format(**values_dict)
 
     def to_python_object(
-        self, name=None, result="Py_result", sense="in", **unused_kwargs
+        self, name=None, result="Py_result", sense="IN", **unused_kwargs
     ):
         """Generates code to a Python object into a C/C++ type."""
         name = name or self.name
@@ -1583,8 +1563,8 @@ class Long(Integer):
 class LongUnsigned(Integer):
     """Unsigned long type code generator."""
 
-    buildstr = "k"
-    int_type = "unsigned long"
+    BUILDSTR = "k"
+    INT_TYPE = "unsigned long"
 
     def from_python_object(self, source, destination, unused_method, **unused_kwargs):
         """Generates code to convert a C/C++ type into a Python object."""
@@ -1594,7 +1574,7 @@ class LongUnsigned(Integer):
         )
 
     def to_python_object(
-        self, name=None, result="Py_result", sense="in", **unused_kwargs
+        self, name=None, result="Py_result", sense="IN", **unused_kwargs
     ):
         """Generates code to a Python object into a C/C++ type."""
         name = name or self.name
@@ -1629,8 +1609,12 @@ class Char(Integer):
 }}
 """
 
-    buildstr = "s"
-    interface = "small_integer"
+    BUILDSTR = "s"
+
+    def __init__(self, name, data_type, *args, **kwargs):
+        """Initializes the code generator."""
+        super().__init__(name, data_type, *args, **kwargs)
+        self.interface = "small_integer"
 
     def byref(self):
         """Generates code to reference the C/C++ type."""
@@ -1652,6 +1636,7 @@ class Char(Integer):
 
         return self._PRE_CALL_TEMPLATE.format(**values_dict)
 
+    # pylint: disable=arguments-differ
     def to_python_object(self, name=None, result="Py_result", **unused_kwargs):
         """Generates code to a Python object into a C/C++ type."""
         values_dict = {"name": name or self.name, "result": result}
@@ -1663,15 +1648,22 @@ class Char(Integer):
 class StringOut(String):
     """Code generator that handles string pushed out through OUT."""
 
-    sense = "OUT"
+    def __init__(self, name, data_type, *args, **kwargs):
+        """Initializes the code generator."""
+        super().__init__(name, data_type, *args, **kwargs)
+        self.sense = "OUT"
 
 
 class IntegerOut(Integer):
     """Code generator that handles integers pushed out through OUT int *result."""
 
-    sense = "OUT_DONE"
-    buildstr = ""
-    int_type = "int *"
+    BUILDSTR = ""
+    INT_TYPE = "int *"
+
+    def __init__(self, name, data_type, *args, **kwargs):
+        """Initializes the code generator."""
+        super().__init__(name, data_type, *args, **kwargs)
+        self.sense = "OUT_DONE"
 
     def byref(self):
         """Generates code to reference the C/C++ type."""
@@ -1688,15 +1680,20 @@ class IntegerOut(Integer):
         bare_type = self.type.split()[0]
         type_definition = Type.definition(self, default=f"&{storage:s}")
 
-        return f"{bare_type:s} {storage:s} = 0;\n" f"{type_definition:s}\n"
+        return f"""\
+{bare_type:s} {storage:s} = 0;
+{type_definition:s}
+"""
 
     def passthru_call(self):
+        """Returns how we should call the function when simply passing args directly"""
         return self.name
 
     def python_name(self):
         """Retrieves the Python name of the C/C++ type."""
         return None
 
+    # pylint: disable=arguments-differ
     def to_python_object(self, name=None, result="Py_result", **unused_kwargs):
         """Generates code to a Python object into a C/C++ type."""
         name = name or self.name
@@ -1707,15 +1704,13 @@ class IntegerOut(Integer):
 class PInteger32UnsignedOut(IntegerOut):
     """Code generator that handles uint32_t* pushed out through OUT."""
 
-    buildstr = ""
-    int_type = "uint32_t *"
+    INT_TYPE = "uint32_t *"
 
 
 class PInteger64UnsignedOut(IntegerOut):
     """Code generator that handles uint64_t* pushed out through OUT."""
 
-    buildstr = ""
-    int_type = "uint64_t *"
+    INT_TYPE = "uint64_t *"
 
 
 class Char_and_Length_OUT(Char_and_Length):
@@ -1773,8 +1768,12 @@ class Char_and_Length_OUT(Char_and_Length):
     {result:s} = tmp_{name:s};
 """
 
-    sense = "OUT_DONE"
-    buildstr = "l"
+    BUILDSTR = "l"
+
+    def __init__(self, name, data_type, length, length_type, *args, **kwargs):
+        """Initializes the code generator."""
+        super().__init__(name, data_type, length, length_type, *args, **kwargs)
+        self.sense = "OUT_DONE"
 
     def byref(self):
         """Generates code to reference the C/C++ type."""
@@ -1812,7 +1811,7 @@ class Char_and_Length_OUT(Char_and_Length):
         return self._PYTHON_PROXY_POST_CALL_TEMPLATE.format(**values_dict)
 
     # pylint: disable=arguments-renamed
-    def to_python_object(self, name=None, result="Py_result", sense="in", **kwargs):
+    def to_python_object(self, name=None, result="Py_result", sense="IN", **kwargs):
         """Generates code to a Python object into a C/C++ type."""
         if "results" in kwargs:
             kwargs["results"].pop(0)
@@ -1862,8 +1861,6 @@ Py_DecRef({source:s});
     talloc_free({name:s});
 """
 
-    bare_type = "TDB_DATA"
-
     def byref(self):
         """Generates code to reference the C/C++ type."""
         return f"{self.name:s}.dptr, &{self.name:s}.dsize"
@@ -1880,7 +1877,7 @@ Py_DecRef({source:s});
         """Generates code to convert a C/C++ type into a Python object."""
         method.error_set = True
         values_dict = {
-            "bare_type": self.bare_type,
+            "bare_type": "TDB_DATA",
             "destination": destination,
             "source": source,
         }
@@ -1946,13 +1943,13 @@ Py_DecRef({source:s});
 class Void(Type):
     """Void code generator."""
 
-    buildstr = ""
-    original_type = ""
+    BUILDSTR = ""
 
     def __init__(self, name, data_type, *args, **kwargs):
         """Initializes the code generator."""
         super().__init__(name, data_type, *args, **kwargs)
         self.error_value = "return;"
+        self.original_type = ""
 
     def assign(self, call, unused_method, target=None, **unused_kwargs):
         """Generates code to assign the C/C++ type."""
@@ -2025,8 +2022,12 @@ class StringArray(String):
 }}
 """
 
-    interface = "array"
-    buildstr = "O"
+    BUILDSTR = "O"
+
+    def __init__(self, name, data_type, *args, **kwargs):
+        """Initializes the code generator."""
+        super().__init__(name, data_type, *args, **kwargs)
+        self.interface = "array"
 
     def byref(self):
         """Generates code to reference the C/C++ type."""
@@ -2145,13 +2146,12 @@ class Wrapper(Type):
     }}
 """
 
-    sense = "IN"
-
     def __init__(self, name, data_type, *args, **kwargs):
         """Initializes the code generator."""
         super().__init__(name, data_type, *args, **kwargs)
         self.error_value = "return NULL;"
         self.original_type = None
+        self.sense = "IN"
 
     def assign(self, call, method, target=None, **unused_kwargs):
         """Generates code to assign the C/C++ type."""
@@ -2195,10 +2195,10 @@ class Wrapper(Type):
         """Generates code to use the C/C++ type as an argument to a function call."""
         return f"{self.name:s}"
 
-    def definition(self, default="NULL", sense="in", **unused_kwargs):
+    def definition(self, default="NULL", sense="IN", **unused_kwargs):
         """Generates code to define the C/C++ type."""
         result = f"    Gen_wrapper wrapped_{self.name:s} UNUSED = {default:s};\n"
-        if sense == "in" and not "OUT" in self.attributes:
+        if sense == "IN" and not "OUT" in self.attributes:
             result += f"    {self.type:s} UNUSED {self.name:s};\n"
 
         return result
@@ -2229,7 +2229,7 @@ class Wrapper(Type):
         return f"{self.type:s} {self.name:s} = {default:s};\n"
 
     def to_python_object(
-        self, name=None, result="Py_result", sense="in", **unused_kwargs
+        self, name=None, result="Py_result", sense="IN", **unused_kwargs
     ):
         """Generates code to a Python object into a C/C++ type."""
         name = name or self.name
@@ -2273,10 +2273,10 @@ if(!wrapped_{name:s} || (PyObject *)wrapped_{name:s}==Py_None) {{
         """Generates code with a comment about the C/C++ type."""
         return f"{self.type:s} *{self.name:s}"
 
-    def definition(self, default="NULL", sense="in", **unused_kwargs):
+    def definition(self, default="NULL", sense="IN", **unused_kwargs):
         """Generates code to define the C/C++ type."""
         result = f"    Gen_wrapper wrapped_{self.name:s} = {default:s};\n"
-        if sense == "in" and not "OUT" in self.attributes:
+        if sense == "IN" and not "OUT" in self.attributes:
             result += f"    {self.type:s} *{self.name:s};\n"
 
         return result
@@ -2411,10 +2411,10 @@ class StructWrapper(Wrapper):
         """Generates code to reference the C/C++ type."""
         return f"&{self.name:s}"
 
-    def definition(self, default="NULL", sense="in", **unused_kwargs):
+    def definition(self, default="NULL", sense="IN", **unused_kwargs):
         """Generates code to define the C/C++ type."""
         result = f"    Gen_wrapper wrapped_{self.name:s} = {default:s};\n"
-        if sense == "in" and not "OUT" in self.attributes:
+        if sense == "IN" and not "OUT" in self.attributes:
             result += f"    {self.original_type:s} *{self.name:s} = NULL;\n"
 
         return result
@@ -2449,8 +2449,12 @@ class PointerStructWrapper(StructWrapper):
 class Timeval(Type):
     """struct timeval code generator."""
 
-    interface = "numeric"
-    buildstr = "f"
+    BUILDSTR = "f"
+
+    def __init__(self, name, data_type, *args, **kwargs):
+        """Initializes the code generator."""
+        super().__init__(name, data_type, *args, **kwargs)
+        self.interface = "numeric"
 
     def byref(self):
         """Generates code to reference the C/C++ type."""
@@ -2487,13 +2491,13 @@ class Timeval(Type):
 class PyObject(Type):
     """Python object code generator."""
 
-    interface = "opaque"
-    buildstr = "O"
+    BUILDSTR = "O"
 
     def __init__(self, name, data_type, *args, **kwargs):
         """Initializes the code generator."""
         super().__init__(name, data_type, *args, **kwargs)
         self.default = None
+        self.interface = "opaque"
 
     def byref(self):
         """Generates code to reference the C/C++ type."""
@@ -2503,48 +2507,6 @@ class PyObject(Type):
         """Generates code to define the C/C++ type."""
         self.default = default
         return f"PyObject *{self.name:s} = {self.default:s};\n"
-
-
-TYPE_DISPATCHER = {
-    "char": Char,
-    "char *": String,
-    "char **": StringArray,
-    "IN char *": String,
-    "int16_t": Integer16,
-    "int32_t": Integer32,
-    "int64_t": Integer64,
-    "int8_t": Integer8,
-    "int": Integer,
-    "IN unsigned char *": String,
-    "long int": Integer,
-    "long": Long,
-    "off_t": Integer64,
-    "OUT char *": StringOut,
-    "OUT uint32_t *": PInteger32UnsignedOut,
-    "OUT uint64_t *": PInteger64UnsignedOut,
-    "OUT unsigned char *": StringOut,
-    "PyObject *": PyObject,
-    "size_t": Integer64Unsigned,
-    "ssize_t": Integer64,
-    "struct timeval": Timeval,
-    "TDB_DATA": TDB_DATA,
-    "TDB_DATA *": TDB_DATA_P,
-    "time_t": Integer64,
-    "TSK_INUM_T": Integer,
-    "uint16_t": Integer16Unsigned,
-    "uint32_t": Integer32Unsigned,
-    "uint64_t": Integer64Unsigned,
-    "uint8_t": Integer8Unsigned,
-    "unsigned char *": String,
-    "unsigned int": Integer,
-    "unsigned long int": LongUnsigned,
-    "unsigned long": LongUnsigned,
-    "void *": PVoid,
-    "void": Void,
-    "ZString": ZString,
-}
-
-method_attributes = ["BORROWED", "DESTRUCTOR", "IGNORE"]
 
 
 class ResultException(BaseCodeGenerator):
@@ -2625,7 +2587,7 @@ class Method(BaseCodeGenerator):
             self.add_arg(arg_type, arg_name)
 
         try:
-            self.return_type = dispatch("func_return", return_type)
+            self.return_type = TypeDispatcher.dispatch("func_return", return_type)
             self.return_type.attributes.add("OUT")
             self.return_type.original_type = return_type
         except KeyError:
@@ -2645,32 +2607,34 @@ class Method(BaseCodeGenerator):
         )
 
     def add_arg(self, data_type, name):
-        """Add an argument and register it with the type dispatcher."""
+        """Add an argument."""
         try:
-            t = TYPE_DISPATCHER[data_type](name, data_type)
+            code_generator = TypeDispatcher.get_code_generator(name, data_type)
         except KeyError:
-            # Sometimes types must be typedefed in advance
+            # Sometimes types must be typedefed in advance.
             try:
-                m = self.typedefed_re.match(data_type)
-                original_type = m.group(0)
-                data_type = m.group(1)
+                match = self.typedefed_re.match(data_type)
+
+                original_type = match.group(0)
+                data_type = match.group(1)
                 self.log(f"Trying {data_type:s} for {original_type:s}")
-                t = TYPE_DISPATCHER[data_type](name, data_type)
-            except (KeyError, AttributeError):
+
+                code_generator = TypeDispatcher.get_code_generator(name, data_type)
+
+            except (AttributeError, KeyError):
                 self.log(
                     f"Unable to handle type {self.class_name:s}.{self.name:s} "
                     f"{data_type:s}"
                 )
                 return
 
-        # Here we collapse char * + int type interfaces into a
-        # coherent string like interface.
+        # Here we collapse char * + int type interfaces into a coherent string like
+        # interface.
         try:
             previous = self.args[-1]
-            if t.interface == "integer" and previous.interface == "string":
+            if code_generator.interface == "integer" and previous.interface == "string":
 
-                # We make a distinction between IN variables and OUT
-                # variables
+                # We make a distinction between IN variables and OUT variables.
                 if previous.sense == "OUT":
                     cls = Char_and_Length_OUT
                 else:
@@ -2684,7 +2648,7 @@ class Method(BaseCodeGenerator):
         except IndexError:
             pass
 
-        self.args.append(t)
+        self.args.append(code_generator)
 
     def clone(self, new_class_name):
         """Clone the code generator."""
@@ -2925,14 +2889,14 @@ class Method(BaseCodeGenerator):
         parse_line = ""
         for argument in self.args:
             python_name = argument.python_name()
-            if argument.buildstr and python_name not in self.defaults:
-                parse_line += argument.buildstr
+            if argument.BUILDSTR and python_name not in self.defaults:
+                parse_line += argument.BUILDSTR
 
         optional_args = ""
         for argument in self.args:
             python_name = argument.python_name()
-            if argument.buildstr and python_name in self.defaults:
-                optional_args += argument.buildstr
+            if argument.BUILDSTR and python_name in self.defaults:
+                optional_args += argument.BUILDSTR
 
         if optional_args:
             parse_line += "|" + optional_args
@@ -3425,16 +3389,11 @@ static PyObject *py{class_name:s}_getattr(py{class_name:s} *self, PyObject *pyna
     def get_attributes(self):
         """Retrieves the attributes."""
         for class_name, attr in self._attributes:
-            try:
-                # If its not an active struct, skip it
-                if (
-                    not TYPE_DISPATCHER[attr.type].active
-                    and not attr.type in self.myclass.module.active_structs
-                ):
-                    continue
-
-            except KeyError:
-                pass
+            if (
+                not TypeDispatcher.is_active(attr.type)
+                and not attr.type in self.myclass.module.active_structs
+            ):
+                continue
 
             yield class_name, attr
 
@@ -3546,7 +3505,7 @@ static PyObject *py{class_name:s}_getattr(py{class_name:s} *self, PyObject *pyna
                 "name": attr.name,
                 "python_obj": attr.to_python_object(),
                 "python_assign": attr.assign(call, self, borrowed=True),
-                "python_def": attr.definition(sense="out"),
+                "python_def": attr.definition(sense="OUT"),
             }
             out.write(self._DEFINITION_GETTERS_TEMPLATE.format(**values_dict))
 
@@ -4049,7 +4008,9 @@ typedef struct {{
         try:
             # All attribute references are always borrowed - that
             # means we dont want to free them after accessing them
-            type_class = dispatch(attr_name, f"BORROWED {attr_type:s}", *args, **kwargs)
+            type_class = TypeDispatcher.dispatch(
+                attr_name, f"BORROWED {attr_type:s}", *args, **kwargs
+            )
         except KeyError:
             # TODO: fix that self.class_name is None.
             self.log(
@@ -4524,7 +4485,7 @@ int {class_name:s}_init_type(
 class EnumType(Integer):
     """Enum type code generator."""
 
-    buildstr = "i"
+    BUILDSTR = "i"
 
     def __init__(self, name, data_type, *args, **kwargs):
         """Initializes the code generator."""
@@ -4539,6 +4500,7 @@ class EnumType(Integer):
 
         return f"    int UNUSED {self.name:s} = 0;\n"
 
+    # pylint: disable=arguments-differ
     def to_python_object(self, name=None, result="Py_result", **unused_kwargs):
         """Generates code to a Python object into a C/C++ type."""
         name = name or self.name
@@ -4550,6 +4512,116 @@ class EnumType(Integer):
         method.error_set = True
 
         return ""
+
+
+class TypeDispatcher:
+    """Type dispatcher."""
+
+    _METHOD_ATTRIBUTES = ["BORROWED", "DESTRUCTOR", "IGNORE"]
+
+    _TYPES = {}
+
+    @classmethod
+    def is_active(cls, data_type):
+        """Detemines if a specific type is active."""
+        type_class = cls._TYPES.get(data_type)
+        return type_class and type_class.active
+
+    @classmethod
+    def dispatch(cls, name, data_type, *args, **kwargs):
+        """Retrieves a specific code generator."""
+        if not data_type:
+            return PVoid(name, "void *")
+
+        match = re.match("struct ([a-zA-Z0-9]+)_t *", data_type)
+        if match:
+            data_type = match.group(1)
+
+        type_components = data_type.split()
+        attributes = set()
+
+        if type_components[0] in cls._METHOD_ATTRIBUTES:
+            attributes.add(type_components.pop(0))
+
+        data_type = " ".join(type_components)
+        type_class = cls._TYPES[data_type]
+
+        code_generator = type_class(name, data_type, *args, **kwargs)
+        code_generator.attributes = attributes
+        return code_generator
+
+    @classmethod
+    def get_code_generator(cls, name, data_type):
+        """Retrieves a specific code generator.
+
+        Args:
+            name (str): name.
+            data_type (str): data type.
+
+        Raises:
+          KeyError: if the type does not exist.
+        """
+        type_class = cls._TYPES[data_type]
+        return type_class(name, data_type)
+
+    @classmethod
+    def register(cls, data_type, type_class):
+        """Registers a code generator type."""
+        cls._TYPES[data_type] = type_class
+
+    @classmethod
+    def register_alias(cls, data_type, alias):
+        """Registers an alias (typedef) if the type exists."""
+        if data_type in cls._TYPES:
+            cls._TYPES[alias] = cls._TYPES[data_type]
+
+    @classmethod
+    def register_types(cls, types):
+        """Registers code generator types."""
+        for data_type, type_class in types.items():
+            cls.register(data_type, type_class)
+
+
+TypeDispatcher.register_types(
+    {
+        "char": Char,
+        "char *": String,
+        "char **": StringArray,
+        "IN char *": String,
+        "int16_t": Integer16,
+        "int32_t": Integer32,
+        "int64_t": Integer64,
+        "int8_t": Integer8,
+        "int": Integer,
+        "IN unsigned char *": String,
+        "long int": Integer,
+        "long": Long,
+        "off_t": Integer64,
+        "OUT char *": StringOut,
+        "OUT uint32_t *": PInteger32UnsignedOut,
+        "OUT uint64_t *": PInteger64UnsignedOut,
+        "OUT unsigned char *": StringOut,
+        "PyObject *": PyObject,
+        "size_t": Integer64Unsigned,
+        "ssize_t": Integer64,
+        "struct timeval": Timeval,
+        "TDB_DATA": TDB_DATA,
+        "TDB_DATA *": TDB_DATA_P,
+        "time_t": Integer64,
+        "TSK_INUM_T": Integer,
+        "uint16_t": Integer16Unsigned,
+        "uint32_t": Integer32Unsigned,
+        "uint64_t": Integer64Unsigned,
+        "uint8_t": Integer8Unsigned,
+        "unsigned char *": String,
+        "unsigned int": Integer,
+        "unsigned long int": LongUnsigned,
+        "unsigned long": LongUnsigned,
+        "void *": PVoid,
+        "void": Void,
+        "ZString": ZString,
+    }
+)
 
 
 class HeaderParser(lexer.SelfFeederMixIn):
@@ -4732,7 +4804,7 @@ class HeaderParser(lexer.SelfFeederMixIn):
         self.current_class.modifier.add(match.group(1))
         self.module.add_class(self.current_class, Wrapper)
 
-        TYPE_DISPATCHER[f"{class_name:s} *"] = PointerWrapper
+        TypeDispatcher.register(f"{class_name:s} *", PointerWrapper)
 
     def CLEAR_COMMENT(self, unused_token, unused_match):
         """Handle a CLEAR_COMMENT state."""
@@ -4760,7 +4832,7 @@ class HeaderParser(lexer.SelfFeederMixIn):
             len(name) > 3
             and name[0] != "_"
             and name == name.upper()
-            and name not in self.module.constants_blacklist
+            and name not in self.module.constants_denylist
         ):
             self.module.add_constant(name, data_type=data_type)
 
@@ -4772,15 +4844,15 @@ class HeaderParser(lexer.SelfFeederMixIn):
         """Handle a ENUM_END state."""
         self.module.classes[self.current_enum.name] = self.current_enum
 
-        # For now we just treat enums as an integer, and also add
-        # them to the constant table. In future it would be nice to
-        # have them as a proper Python object so we can override
-        # __unicode__, __str__ and __int__.
+        # For now we just treat enums as an integer, and also add them to the constant
+        # table. In future it would be nice to have them as a proper Python object so
+        # we can override the "__unicode__", "__str__" and "__int__" methods.
+
         for attr in self.current_enum.values:
             self.module.add_constant(attr, data_type="integer")
 
-        # TYPE_DISPATCHER[self.current_enum.name] = Integer
-        TYPE_DISPATCHER[self.current_enum.name] = EnumType
+        TypeDispatcher.register(self.current_enum.name, EnumType)
+
         self.current_enum = None
 
     def ENUM_START(self, unused_token, match):
@@ -4855,11 +4927,7 @@ class HeaderParser(lexer.SelfFeederMixIn):
 
     def SIMPLE_TYPEDEF(self, unused_token, match):
         """Handle a SIMPLE_TYPEDEF state."""
-        # We basically add a new type as a copy of the old
-        # type
-        old, new = match.group(1).strip(), match.group(2).strip()
-        if old in TYPE_DISPATCHER:
-            TYPE_DISPATCHER[new] = TYPE_DISPATCHER[old]
+        TypeDispatcher.register_alias(match.group(1).strip(), match.group(2).strip())
 
     def STRUCT_ATTRIBUTE(self, unused_token, match):
         """Handle a STRUCT_ATTRIBUTE state."""
@@ -4883,7 +4951,9 @@ class HeaderParser(lexer.SelfFeederMixIn):
     def STRUCT_END(self, unused_token, unused_match):
         """Handle a STRUCT_END state."""
         self.module.add_class(self.current_struct, StructWrapper)
-        TYPE_DISPATCHER[f"{self.current_struct.class_name:s} *"] = PointerStructWrapper
+        TypeDispatcher.register(
+            f"{self.current_struct.class_name:s} *", PointerStructWrapper
+        )
         self.current_struct = None
 
     def STRUCT_START(self, unused_token, match):
