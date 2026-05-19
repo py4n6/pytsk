@@ -36,10 +36,12 @@ class FileObjectImageInfo(pytsk3.Img_Info):
         # pytsk3.Img_Info does not let you set attributes after initialization.
         self._file_object = file_object
         self._file_size = file_size
+
         # Guards the seek+read pair on _file_object. Created before the
         # parent __init__ because pytsk3 may begin proxying read() calls
         # as soon as the constructor returns from Python's perspective.
         self._read_lock = threading.Lock()
+
         # Using the old parent class invocation style otherwise some versions
         # of pylint complain also setting type to RAW to make sure Img_Info
         # does not do detection.
@@ -49,19 +51,19 @@ class FileObjectImageInfo(pytsk3.Img_Info):
     # interface.
 
     def close(self):
-        """Closes the volume IO object."""
+        """Closes the image."""
         with self._read_lock:
             self._file_object = None
 
     def read(self, offset, size):
-        """Reads a byte string from the image object at the specified offset.
+        """Reads data from the image object at the specified offset.
 
         Args:
-          offset: offset where to start reading.
-          size: number of bytes to read.
+          offset (int): offset where to start reading.
+          size (int): number of bytes to read.
 
         Returns:
-          A byte string containing the data read.
+          bytes: data read.
         """
         with self._read_lock:
             file_object = self._file_object
