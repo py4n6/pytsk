@@ -1,6 +1,10 @@
 # Build Python wheels from source using cibuildwheel.
 name: build_wheels
-on: [push, pull_request]
+on:
+  pull_request:
+  push:
+  release:
+    types: [published]
 permissions: read-all
 jobs:
   build_sdist:
