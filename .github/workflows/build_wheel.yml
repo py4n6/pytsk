@@ -5,6 +5,8 @@ on:
   push:
   release:
     types: [published]
+  # Allow trigger via API
+  workflow_dispatch:
 permissions: read-all
 jobs:
   build_sdist:
