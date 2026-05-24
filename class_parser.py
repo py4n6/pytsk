@@ -225,7 +225,7 @@ import lexer
 DEBUG = False
 
 # The pytsk3 version.
-VERSION = "20260519"
+VERSION = "20260524"
 
 # These functions are used to manage library memory.
 FREE = "aff4_free"
@@ -544,14 +544,11 @@ static int check_method_override(PyObject *self, PyTypeObject *type, const char 
  * Pre-3.12 support has been retained for Python 3.10 and 3.11 compatibility.
  */
 void pytsk_fetch_error(void) {{
-#if PY_VERSION_HEX >= 0x030C0000
-    PyObject *raised_exception = NULL;
-#else
+#if PY_VERSION_HEX < 0x030C0000
     PyObject *exception_traceback = NULL;
     PyObject *exception_type = NULL;
-    PyObject *exception_value = NULL;
 #endif
-    PyObject *exception_repr = NULL;
+    PyObject *exception_value = NULL;
     PyObject *string_object = NULL;
     char *str_c = NULL;
     char *error_str = NULL;
@@ -562,17 +559,15 @@ void pytsk_fetch_error(void) {{
     /* Fetch the exception state and convert it to a string.
      */
 #if PY_VERSION_HEX >= 0x030C0000
-    raised_exception = PyErr_GetRaisedException();
-    exception_repr = raised_exception;
+    exception_value = PyErr_GetRaisedException();
 #else
     PyErr_Fetch(&exception_type, &exception_value, &exception_traceback);
-    exception_repr = exception_value;
 #endif
 
     /* NULL on the legacy path means PyErr_SetNone(type) raised without a value, e.g.
      * KeyboardInterrupt); on the modern path means no exception was actually set.
      */
-    if(exception_repr == NULL) {{
+    if(exception_value == NULL) {{
         if(error_str != NULL) {{
             const char *placeholder = "Python exception raised without value";
             size_t placeholder_len = strlen(placeholder);
@@ -584,13 +579,13 @@ void pytsk_fetch_error(void) {{
         }}
         *error_type = ERuntimeError;
 #if PY_VERSION_HEX >= 0x030C0000
-        PyErr_SetRaisedException(raised_exception);
+        PyErr_SetRaisedException(exception_value);
 #else
         PyErr_Restore(exception_type, exception_value, exception_traceback);
 #endif
         return;
     }}
-    string_object = PyObject_Repr(exception_repr);
+    string_object = PyObject_Repr(exception_value);
 
     if(string_object != NULL) {{
         utf8_string_object = PyUnicode_AsUTF8String(string_object);
@@ -620,7 +615,7 @@ void pytsk_fetch_error(void) {{
         *error_type = ERuntimeError;
     }}
 #if PY_VERSION_HEX >= 0x030C0000
-    PyErr_SetRaisedException(raised_exception);
+    PyErr_SetRaisedException(exception_value);
 #else
     PyErr_Restore(exception_type, exception_value, exception_traceback);
 #endif
@@ -777,14 +772,15 @@ PyObject * PyInit_{module:s}(void) {{
     }}
 
 #ifdef Py_GIL_DISABLED
-    /* Declare this module safe for free-threaded Python
-     * Without this call, CPython force-enables
-     * the GIL for our module at import time on
-     * free-threaded builds, which would serialize every
-     * pytsk3 call and defeat the point of free-threading.
-     * The symbol is only declared when Py_GIL_DISABLED is set
+    /* Declare this module safe for free-threaded Python. Without this call, CPython
+     * force-enables the GIL for our module at import time on free-threaded builds,
+     * which would serialize every pytsk3 call and defeat the point of free-threading.
+     * The symbol is only declared when Py_GIL_DISABLED is set.
      */
-    PyUnstable_Module_SetGIL(module, Py_MOD_GIL_NOT_USED);
+    if( PyUnstable_Module_SetGIL(module, Py_MOD_GIL_NOT_USED) != 0) {{
+        Py_DecRef(module);
+        return(NULL);
+    }}
 #endif
 
     d = PyModule_GetDict(module);
@@ -1022,6 +1018,8 @@ PyObject * PyInit_{module:s}(void) {{
             "\n"
             "on_error:\n"
             "	PyGILState_Release(gil_state);\n"
+            "\n"
+            "   Py_DecRef(module);\n"
             "\n"
             "	return NULL;\n"
             "}\n"
