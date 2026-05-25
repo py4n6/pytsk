@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pytsk3"
-version = "20260519"
+version = "20260524"
 description = "Python bindings for the SleuthKit"
 authors = [
     { name = "Michael Cohen", email = "scudette@gmail.com" },
