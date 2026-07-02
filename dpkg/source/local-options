@@ -1,0 +1,5 @@
+extend-diff-ignore = "(^|/)\.git($|/)"
+extend-diff-ignore = "(^|/)\.github($|/)"
+extend-diff-ignore = "(^|/)\.pylintrc$"
+extend-diff-ignore = "(^|/)sleuthkit($|/)"
+extend-diff-ignore = "(^|/)tox\.ini$"
