@@ -119,10 +119,11 @@ CCLASS(Img_Info, Object)
 
      /* Open an image using the Sleuthkit.
       *
+      * DEFAULT(sector_size) = 0;
       * DEFAULT(type) = TSK_IMG_TYPE_DETECT;
       * DEFAULT(url) = "";
       */
-     Img_Info METHOD(Img_Info, Con, ZString url, TSK_IMG_TYPE_ENUM type);
+     Img_Info METHOD(Img_Info, Con, ZString url, TSK_IMG_TYPE_ENUM type, unsigned int sector_size);
 
      /* Read a random buffer from the image */
      uint64_t METHOD(Img_Info, read, TSK_OFF_T off, OUT char *buf, size_t len);

@@ -87,7 +87,7 @@ static int Img_Info_dest(Img_Info self) {
 
 /* Img_Info constructor
  */
-static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type) {
+static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type, unsigned int sector_size) {
 
     if(self == NULL) {
         RaiseError(EInvalidParameter, "Invalid parameter: self.");
@@ -110,7 +110,7 @@ static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type) {
 
     if(urn != NULL && urn[0] != 0) {
 #ifdef TSK_VERSION_NUM
-        self->img = (Extended_TSK_IMG_INFO *) tsk_img_open_utf8(1, (const char **) &urn, type, 0);
+        self->img = (Extended_TSK_IMG_INFO *) tsk_img_open_utf8(1, (const char **) &urn, type, sector_size);
 #else
         self->img = (Extended_TSK_IMG_INFO *) tsk_img_open_utf8(1, (const char **) &urn, type);
 #endif
@@ -129,19 +129,20 @@ static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type) {
             RaiseError(ENoMemory, "Unable to allocate image.");
             return NULL;
         }
-
         self->img->container = self;
 
 #if defined( TSK_MULTITHREAD_LIB )
         tsk_init_lock(&(self->img->base.cache_lock));
 #endif
-
         self->img->base.read = IMG_INFO_read;
         self->img->base.close = IMG_INFO_close;
         self->img->base.size = CALL(self, get_size);
 
 #ifdef TSK_VERSION_NUM
-        self->img->base.sector_size = 512;
+	if( sector_size == 0 ) {
+		sector_size = 512;
+	}
+        self->img->base.sector_size = sector_size;
 #endif
 #if defined( TSK_VERSION_NUM ) && ( TSK_VERSION_NUM >= 0x040103ff )
         self->img->base.itype = TSK_IMG_TYPE_EXTERNAL;
