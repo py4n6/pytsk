@@ -139,6 +139,9 @@ static Img_Info Img_Info_Con(Img_Info self, char *urn, TSK_IMG_TYPE_ENUM type, u
         self->img->base.size = CALL(self, get_size);
 
 #ifdef TSK_VERSION_NUM
+	if( sector_size == 0 ) {
+		sector_size = 512;
+	}
         self->img->base.sector_size = sector_size;
 #endif
 #if defined( TSK_VERSION_NUM ) && ( TSK_VERSION_NUM >= 0x040103ff )
