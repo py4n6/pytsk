@@ -43,9 +43,10 @@ jobs:
       run: |
         python utils/update_source.py
     - name: Build Python wheels
-      uses: pypa/cibuildwheel@v3.4.1
+      uses: pypa/cibuildwheel@v4.0.0
       env:
         CIBW_BEFORE_BUILD_LINUX: python utils/update_source.py
+        CIBW_ENABLE: ${{ github.event_name == 'release' && github.event.action == 'published' && '' || 'cpython-prerelease' }}
         CIBW_TEST_COMMAND: python run_tests.py
         CIBW_TEST_SOURCES: run_tests.py test_data tests
       with:
@@ -74,8 +75,9 @@ jobs:
       run: |
         python utils/update_source.py
     - name: Build Python wheels
-      uses: pypa/cibuildwheel@v3.4.1
+      uses: pypa/cibuildwheel@v4.0.0
       env:
+        CIBW_ENABLE: ${{ github.event_name == 'release' && github.event.action == 'published' && '' || 'cpython-prerelease' }}
         CIBW_TEST_COMMAND: python run_tests.py
         CIBW_TEST_SOURCES: run_tests.py test_data tests
       with:
@@ -99,8 +101,9 @@ jobs:
       run: |
         python utils/update_source.py
     - name: Build Python wheels
-      uses: pypa/cibuildwheel@v3.4.1
+      uses: pypa/cibuildwheel@v4.0.0
       env:
+        CIBW_ENABLE: ${{ github.event_name == 'release' && github.event.action == 'published' && '' || 'cpython-prerelease' }}
         CIBW_TEST_COMMAND: python run_tests.py
         CIBW_TEST_SOURCES: run_tests.py test_data tests
       with:
