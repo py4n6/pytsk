@@ -1,25 +1,38 @@
 # Check source.
 name: lint
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 on:
   pull_request:
   push:
-permissions: read-all
+permissions:
+  contents: read
 jobs:
   black:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
     - name: Check format of Python code
-      uses: psf/black@stable
+      uses: psf/black@258e7dbf348bc23cb70b8cdf693481c04634ebcc # v26.10.1
       with:
         options: "--check"
         src: "."
   pylint:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-    - uses: actions/checkout@v6
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v6
+    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      with:
+        persist-credentials: false
+    - name: Set up Python
+      uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      with:
+        python-version: '3.14'
+        cache: 'pip'
     - name: Install tox
       run: |
         python -m pip install tox
